@@ -18,7 +18,7 @@ use borsh::{BorshSerialize, BorshDeserialize};
 /// 3. Once that special resource is modified, the other user transactions can read the consensus
 ///    info by calling into the read method of that resource, which would thus give users the
 ///    information such as the current leader.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BlockMetadata {
     id: HashValue,
     epoch: u64,

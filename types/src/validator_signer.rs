@@ -17,7 +17,7 @@ use std::convert::TryFrom;
 #[derive(Debug)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(Clone))]
 pub struct ValidatorSigner {
-    author: AccountAddress,
+    pub author: AccountAddress,
     private_key: bls12381::PrivateKey,
 }
 
