@@ -24,7 +24,7 @@ mod set_failpoints;
 mod state;
 #[cfg(test)]
 pub mod tests;
-mod transactions;
+pub mod transactions;
 mod view_function;
 
 /// API categories for the OpenAPI spec

@@ -66,7 +66,7 @@ use anyhow::{bail, ensure, Result};
 use aptos_config::config::{
     PrunerConfig, RocksdbConfig, RocksdbConfigs, NO_OP_STORAGE_PRUNER_CONFIG,
 };
-#[cfg(any(test, feature = "fuzzing"))]
+// #[cfg(any(test, feature = "fuzzing"))]
 use aptos_config::config::{
     BUFFERED_STATE_TARGET_ITEMS, DEFAULT_MAX_NUM_NODES_PER_LRU_CACHE_SHARD,
 };
@@ -495,7 +495,6 @@ impl AptosDB {
         Ok(())
     }
 
-    #[cfg(any(test, feature = "fuzzing"))]
     fn new_without_pruner<P: AsRef<Path> + Clone>(
         db_root_path: P,
         readonly: bool,
@@ -518,6 +517,16 @@ impl AptosDB {
     /// This opens db in non-readonly mode, without the pruner.
     #[cfg(any(test, feature = "fuzzing"))]
     pub fn new_for_test<P: AsRef<Path> + Clone>(db_root_path: P) -> Self {
+        Self::new_without_pruner(
+            db_root_path,
+            false,
+            BUFFERED_STATE_TARGET_ITEMS,
+            DEFAULT_MAX_NUM_NODES_PER_LRU_CACHE_SHARD,
+            false,
+        )
+    }
+
+    pub fn new_for_sov<P: AsRef<Path> + Clone>(db_root_path: P) -> Self {
         Self::new_without_pruner(
             db_root_path,
             false,

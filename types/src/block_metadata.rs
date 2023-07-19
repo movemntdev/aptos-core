@@ -5,6 +5,7 @@
 use aptos_crypto::HashValue;
 use move_core_types::{account_address::AccountAddress, value::MoveValue};
 use serde::{Deserialize, Serialize};
+use borsh::{BorshSerialize, BorshDeserialize};
 
 /// Struct that will be persisted on chain to store the information of the current block.
 ///
@@ -17,7 +18,7 @@ use serde::{Deserialize, Serialize};
 /// 3. Once that special resource is modified, the other user transactions can read the consensus
 ///    info by calling into the read method of that resource, which would thus give users the
 ///    information such as the current leader.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct BlockMetadata {
     id: HashValue,
     epoch: u64,

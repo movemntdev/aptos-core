@@ -34,6 +34,7 @@ use std::{
     fmt,
     fmt::{Debug, Display, Formatter},
 };
+use borsh::{BorshSerialize, BorshDeserialize};
 
 pub mod analyzed_transaction;
 pub mod authenticator;
@@ -61,6 +62,7 @@ pub type AtomicVersion = AtomicU64;
 /// RawTransaction is the portion of a transaction that a client signs.
 #[derive(
     Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize, CryptoHasher, BCSCryptoHash,
+    BorshDeserialize, BorshSerialize
 )]
 pub struct RawTransaction {
     /// Sender's address.
@@ -508,7 +510,7 @@ impl WriteSetPayload {
 /// **IMPORTANT:** The signature of a `SignedTransaction` is not guaranteed to be verified. For a
 /// transaction whose signature is statically guaranteed to be verified, see
 /// [`SignatureCheckedTransaction`].
-#[derive(Clone, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct SignedTransaction {
     /// The raw transaction
     raw_txn: RawTransaction,
@@ -519,6 +521,7 @@ pub struct SignedTransaction {
     /// A cached size of the raw transaction bytes.
     /// Prevents serializing the same transaction multiple times to determine size.
     #[serde(skip)]
+    #[borsh_skip]
     size: OnceCell<usize>,
 }
 

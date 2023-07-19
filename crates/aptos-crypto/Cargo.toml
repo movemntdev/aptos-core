@@ -43,6 +43,7 @@ static_assertions = { workspace = true }
 thiserror = { workspace = true }
 tiny-keccak = { workspace = true }
 x25519-dalek = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
 
 [dev-dependencies]
 ark-bls12-381 = { workspace = true }

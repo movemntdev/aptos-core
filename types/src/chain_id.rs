@@ -4,6 +4,7 @@
 use anyhow::{ensure, format_err, Error, Result};
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
 use std::{convert::TryFrom, fmt, str::FromStr};
+use borsh::{BorshDeserialize, BorshSerialize};
 
 /// A registry of named chain IDs
 /// Its main purpose is to improve human readability of reserved chain IDs in config files and CLI
@@ -73,7 +74,7 @@ impl FromStr for NamedChain {
 
 /// Note: u7 in a u8 is uleb-compatible, and any usage of this should be aware
 /// that this field maybe updated to be uleb64 in the future
-#[derive(Clone, Copy, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Copy, Deserialize, Eq, Hash, PartialEq, Serialize, BorshDeserialize, BorshSerialize)]
 pub struct ChainId(u8);
 
 impl ChainId {
