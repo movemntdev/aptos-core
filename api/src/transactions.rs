@@ -171,6 +171,24 @@ impl TransactionsApi {
         self.list(&accept_type, page)
     }
 
+    /// Raw transactions for integration with M1.
+    pub async fn get_transactions_raw(
+        &self,
+        accept_type: AcceptType,
+        start: Option<U64>,
+        limit: Option<u16>,
+    ) -> BasicResultWith404<Vec<Transaction>> {
+        fail_point_poem("endpoint_get_transactions")?;
+        self.context
+            .check_api_output_enabled("Get transactions", &accept_type)?;
+        let page = Page::new(
+            start.map(|v| v.0),
+            limit,
+            self.context.max_transactions_page_size(),
+        );
+        self.list(&accept_type, page)
+    }
+
     /// Get transaction by hash
     ///
     /// Look up a transaction by its hash. This is the same hash that is returned

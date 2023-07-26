@@ -35,6 +35,7 @@ use poem_openapi::{
 use std::{convert::TryInto, sync::Arc};
 
 /// API for retrieving individual state
+#[derive(Clone)] // for M1 integration
 pub struct StateApi {
     pub context: Arc<Context>,
 }
