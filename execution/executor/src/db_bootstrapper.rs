@@ -136,12 +136,9 @@ pub fn calculate_genesis<V: VMExecutor>(
         get_state_epoch(&base_state_view)?
     };
 
-    let (mut output, _, _) = ChunkOutput::by_transaction_execution::<V>(
-        vec![genesis_txn.clone()].into(),
-        base_state_view,
-        None,
-    )?
-    .apply_to_ledger(&executed_trees, None)?;
+    let (mut output, _, _) =
+        ChunkOutput::by_transaction_execution::<V>(vec![genesis_txn.clone()], base_state_view)?
+            .apply_to_ledger(&executed_trees)?;
     ensure!(
         !output.to_commit.is_empty(),
         "Genesis txn execution failed."

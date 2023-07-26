@@ -163,8 +163,7 @@ Updates the wall clock time by consensus. Requires VM privilege and will be invo
 Gets the current time in microseconds.
 
 
-<pre><code>#[view]
-<b>public</b> <b>fun</b> <a href="timestamp.md#0x1_timestamp_now_microseconds">now_microseconds</a>(): u64
+<pre><code><b>public</b> <b>fun</b> <a href="timestamp.md#0x1_timestamp_now_microseconds">now_microseconds</a>(): u64
 </code></pre>
 
 
@@ -189,8 +188,7 @@ Gets the current time in microseconds.
 Gets the current time in seconds.
 
 
-<pre><code>#[view]
-<b>public</b> <b>fun</b> <a href="timestamp.md#0x1_timestamp_now_seconds">now_seconds</a>(): u64
+<pre><code><b>public</b> <b>fun</b> <a href="timestamp.md#0x1_timestamp_now_seconds">now_seconds</a>(): u64
 </code></pre>
 
 

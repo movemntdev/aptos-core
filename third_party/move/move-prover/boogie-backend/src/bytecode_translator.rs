@@ -6,16 +6,15 @@
 
 use crate::{
     boogie_helpers::{
-        boogie_address, boogie_address_blob, boogie_bv_type, boogie_byte_blob,
-        boogie_constant_blob, boogie_debug_track_abort, boogie_debug_track_local,
-        boogie_debug_track_return, boogie_equality_for_type, boogie_field_sel, boogie_field_update,
-        boogie_function_bv_name, boogie_function_name, boogie_make_vec_from_strings,
-        boogie_modifies_memory_name, boogie_num_literal, boogie_num_type_base,
-        boogie_num_type_string_capital, boogie_reflection_type_info, boogie_reflection_type_name,
-        boogie_resource_memory_name, boogie_struct_name, boogie_temp, boogie_temp_from_suffix,
-        boogie_type, boogie_type_param, boogie_type_suffix, boogie_type_suffix_bv,
-        boogie_type_suffix_for_struct, boogie_well_formed_check, boogie_well_formed_expr_bv,
-        TypeIdentToken,
+        boogie_address_blob, boogie_bv_type, boogie_byte_blob, boogie_constant_blob,
+        boogie_debug_track_abort, boogie_debug_track_local, boogie_debug_track_return,
+        boogie_equality_for_type, boogie_field_sel, boogie_field_update, boogie_function_bv_name,
+        boogie_function_name, boogie_make_vec_from_strings, boogie_modifies_memory_name,
+        boogie_num_literal, boogie_num_type_base, boogie_num_type_string_capital,
+        boogie_reflection_type_info, boogie_reflection_type_name, boogie_resource_memory_name,
+        boogie_struct_name, boogie_temp, boogie_temp_from_suffix, boogie_type, boogie_type_param,
+        boogie_type_suffix, boogie_type_suffix_bv, boogie_type_suffix_for_struct,
+        boogie_well_formed_check, boogie_well_formed_expr_bv, TypeIdentToken,
     },
     options::BoogieOptions,
     spec_translator::SpecTranslator,
@@ -248,7 +247,7 @@ impl<'env> BoogieTranslator<'env> {
             spec_translator.translate_spec_funs(&module_env, mono_info.as_ref());
 
             for ref struct_env in module_env.get_structs() {
-                if struct_env.is_intrinsic() {
+                if struct_env.is_native_or_intrinsic() {
                     continue;
                 }
                 for type_inst in mono_info
@@ -270,7 +269,7 @@ impl<'env> BoogieTranslator<'env> {
             }
 
             for ref fun_env in module_env.get_functions() {
-                if fun_env.is_native_or_intrinsic() || fun_env.is_inline() {
+                if fun_env.is_native_or_intrinsic() {
                     continue;
                 }
                 for (variant, ref fun_target) in self.targets.get_targets(fun_env) {
@@ -465,7 +464,7 @@ impl<'env> StructTranslator<'env> {
             "", // not inlined!
             &format!("$IsValid'{}'(s: {}): bool", suffix, struct_name),
             || {
-                if struct_env.is_intrinsic() || struct_env.get_field_count() == 0 {
+                if struct_env.is_native_or_intrinsic() {
                     emitln!(writer, "true")
                 } else {
                     let mut sep = "";
@@ -762,7 +761,10 @@ impl<'env> FunctionTranslator<'env> {
 
         // Print instantiation information
         if !instantiation.is_empty() {
-            let display_ctxt = TypeDisplayContext::new(env);
+            let display_ctxt = TypeDisplayContext::WithEnv {
+                env,
+                type_param_names: None,
+            };
             emitln!(
                 writer,
                 "// function instantiation <{}>",
@@ -957,10 +959,7 @@ impl<'env> FunctionTranslator<'env> {
         emitln!(
             writer,
             "// {} {}",
-            bytecode
-                .display(fun_target, &BTreeMap::default())
-                .to_string()
-                .replace('\n', "\n// "),
+            bytecode.display(fun_target, &BTreeMap::default()),
             loc.display(env)
         );
 
@@ -1105,10 +1104,10 @@ impl<'env> FunctionTranslator<'env> {
                     Constant::U64(num) => boogie_num_literal(&num.to_string(), 64, bv_flag),
                     Constant::U128(num) => boogie_num_literal(&num.to_string(), 128, bv_flag),
                     Constant::U256(num) => boogie_num_literal(&num.to_string(), 256, bv_flag),
-                    Constant::Address(val) => boogie_address(env, val),
+                    Constant::Address(val) => val.to_string(),
                     Constant::ByteArray(val) => boogie_byte_blob(options, val, bv_flag),
-                    Constant::AddressArray(val) => boogie_address_blob(env, options, val),
-                    Constant::Vector(val) => boogie_constant_blob(env, options, val),
+                    Constant::AddressArray(val) => boogie_address_blob(options, val),
+                    Constant::Vector(val) => boogie_constant_blob(options, val),
                     Constant::U16(num) => boogie_num_literal(&num.to_string(), 16, bv_flag),
                     Constant::U32(num) => boogie_num_literal(&num.to_string(), 32, bv_flag),
                 };
@@ -2582,7 +2581,7 @@ impl<'env> FunctionTranslator<'env> {
                         need(ty, bv_flag, 1)
                     },
                     TraceReturn(idx) => {
-                        let ty = &self.inst(&fun_target.get_return_type(*idx));
+                        let ty = &self.inst(fun_target.get_return_type(*idx));
                         let bv_flag = self.bv_flag_from_map(idx, ret_oper_map);
                         need(ty, bv_flag, 1)
                     },

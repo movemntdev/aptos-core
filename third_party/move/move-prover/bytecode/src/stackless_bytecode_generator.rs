@@ -9,7 +9,6 @@ use crate::{
         Bytecode::{self},
         Constant, Label, Operation, PropKind,
     },
-    COMPILED_MODULE_AVAILABLE,
 };
 use itertools::Itertools;
 use move_binary_format::{
@@ -24,12 +23,12 @@ use move_core_types::{
     value::MoveValue,
 };
 use move_model::{
-    ast::{Address, ConditionKind, ExpData, PropertyValue, TempIndex, Value},
+    ast::{ConditionKind, ExpData, PropertyValue, TempIndex, Value},
     model::{FunId, FunctionEnv, Loc, ModuleId, StructId},
     pragmas::CONDITION_UNROLL_PROP,
-    ty::{PrimitiveType, ReferenceKind, Type},
+    ty::{PrimitiveType, Type},
 };
-use num::ToPrimitive;
+use num::{BigUint, ToPrimitive};
 use std::{
     borrow::BorrowMut,
     collections::{BTreeMap, BTreeSet},
@@ -52,15 +51,12 @@ pub struct StacklessBytecodeGenerator<'a> {
 
 impl<'a> StacklessBytecodeGenerator<'a> {
     pub fn new(func_env: &'a FunctionEnv<'a>) -> Self {
-        let local_types = (0..func_env.get_local_count().expect(COMPILED_MODULE_AVAILABLE))
-            .map(|i| func_env.get_local_type(i).expect(COMPILED_MODULE_AVAILABLE))
+        let local_types = (0..func_env.get_local_count())
+            .map(|i| func_env.get_local_type(i))
             .collect_vec();
         StacklessBytecodeGenerator {
             func_env,
-            module: func_env
-                .module_env
-                .get_verified_module()
-                .expect(COMPILED_MODULE_AVAILABLE),
+            module: func_env.module_env.get_verified_module(),
             temp_count: local_types.len(),
             temp_stack: vec![],
             local_types,
@@ -73,10 +69,7 @@ impl<'a> StacklessBytecodeGenerator<'a> {
     }
 
     pub fn generate_function(mut self) -> FunctionData {
-        let original_code = self
-            .func_env
-            .get_bytecode()
-            .expect(COMPILED_MODULE_AVAILABLE);
+        let original_code = self.func_env.get_bytecode();
         let mut label_map = BTreeMap::new();
 
         // Generate labels.
@@ -130,29 +123,13 @@ impl<'a> StacklessBytecodeGenerator<'a> {
             fallthrough_labels: _,
         } = self;
 
-        let name_to_index = (0..func_env
-            .get_local_count()
-            .expect("compiled module available"))
-            .map(|idx| {
-                (
-                    func_env
-                        .get_local_name(idx)
-                        .expect("compiled module available"),
-                    idx,
-                )
-            })
-            .collect();
-
         FunctionData::new(
             func_env,
             code,
             local_types,
-            func_env.get_result_type(),
+            func_env.get_return_types(),
             location_table,
-            name_to_index,
-            func_env
-                .get_acquires_global_resources()
-                .expect(COMPILED_MODULE_AVAILABLE),
+            func_env.get_acquires_global_resources(),
             loop_unrolling,
             loop_invariants,
         )
@@ -160,10 +137,7 @@ impl<'a> StacklessBytecodeGenerator<'a> {
 
     /// Create a new attribute id and populate location table.
     fn new_loc_attr(&mut self, code_offset: CodeOffset) -> AttrId {
-        let loc = self
-            .func_env
-            .get_bytecode_loc(code_offset)
-            .expect(COMPILED_MODULE_AVAILABLE);
+        let loc = self.func_env.get_bytecode_loc(code_offset);
         let attr = AttrId::new(self.location_table.len());
         self.location_table.insert(attr, loc);
         attr
@@ -188,7 +162,6 @@ impl<'a> StacklessBytecodeGenerator<'a> {
         self.func_env
             .module_env
             .get_type_actuals(Some(type_params_index))
-            .expect("compiled module")
     }
 
     #[allow(clippy::cognitive_complexity)]
@@ -379,12 +352,11 @@ impl<'a> StacklessBytecodeGenerator<'a> {
             MoveBytecode::FreezeRef => {
                 let mutable_ref_index = self.temp_stack.pop().unwrap();
                 let mutable_ref_sig = self.local_types[mutable_ref_index].clone();
-                if let Type::Reference(kind, signature) = mutable_ref_sig {
-                    if kind == ReferenceKind::Mutable {
+                if let Type::Reference(is_mut, signature) = mutable_ref_sig {
+                    if is_mut {
                         let immutable_ref_index = self.temp_count;
                         self.temp_stack.push(immutable_ref_index);
-                        self.local_types
-                            .push(Type::Reference(ReferenceKind::Immutable, signature));
+                        self.local_types.push(Type::Reference(false, signature));
                         self.code.push(mk_call(
                             Operation::FreezeRef,
                             vec![immutable_ref_index],
@@ -415,10 +387,8 @@ impl<'a> StacklessBytecodeGenerator<'a> {
                 ));
                 self.temp_count += 1;
                 let is_mut = matches!(bytecode, MoveBytecode::MutBorrowField(..));
-                self.local_types.push(Type::Reference(
-                    ReferenceKind::from_is_mut(is_mut),
-                    Box::new(field_type),
-                ));
+                self.local_types
+                    .push(Type::Reference(is_mut, Box::new(field_type)));
             },
 
             MoveBytecode::ImmBorrowFieldGeneric(field_inst_index)
@@ -444,10 +414,8 @@ impl<'a> StacklessBytecodeGenerator<'a> {
                 ));
                 self.temp_count += 1;
                 let is_mut = matches!(bytecode, MoveBytecode::MutBorrowFieldGeneric(..));
-                self.local_types.push(Type::Reference(
-                    ReferenceKind::from_is_mut(is_mut),
-                    Box::new(field_type),
-                ));
+                self.local_types
+                    .push(Type::Reference(is_mut, Box::new(field_type)));
             },
 
             MoveBytecode::LdU8(number) => {
@@ -567,16 +535,11 @@ impl<'a> StacklessBytecodeGenerator<'a> {
             MoveBytecode::LdConst(idx) => {
                 let temp_index = self.temp_count;
                 self.temp_stack.push(temp_index);
-                let constant = self
-                    .func_env
-                    .module_env
-                    .get_constant(*idx)
-                    .expect(COMPILED_MODULE_AVAILABLE);
+                let constant = self.func_env.module_env.get_constant(*idx);
                 let ty = self
                     .func_env
                     .module_env
-                    .globalize_signature(&constant.type_)
-                    .expect(COMPILED_MODULE_AVAILABLE);
+                    .globalize_signature(&constant.type_);
                 let value = Self::translate_value(
                     &ty,
                     &self.func_env.module_env.get_constant_value(constant),
@@ -605,10 +568,7 @@ impl<'a> StacklessBytecodeGenerator<'a> {
             },
 
             MoveBytecode::CopyLoc(idx) => {
-                let signature = self
-                    .func_env
-                    .get_local_type(*idx as usize)
-                    .expect(COMPILED_MODULE_AVAILABLE);
+                let signature = self.func_env.get_local_type(*idx as usize);
                 let temp_index = self.temp_count;
                 self.temp_stack.push(temp_index);
                 self.local_types.push(signature); // same type as the value copied
@@ -622,10 +582,7 @@ impl<'a> StacklessBytecodeGenerator<'a> {
             },
 
             MoveBytecode::MoveLoc(idx) => {
-                let signature = self
-                    .func_env
-                    .get_local_type(*idx as usize)
-                    .expect(COMPILED_MODULE_AVAILABLE);
+                let signature = self.func_env.get_local_type(*idx as usize);
                 let temp_index = self.temp_count;
                 self.temp_stack.push(temp_index);
                 self.local_types.push(signature); // same type as the value copied
@@ -639,14 +596,11 @@ impl<'a> StacklessBytecodeGenerator<'a> {
             },
 
             MoveBytecode::MutBorrowLoc(idx) => {
-                let signature = self
-                    .func_env
-                    .get_local_type(*idx as usize)
-                    .expect(COMPILED_MODULE_AVAILABLE);
+                let signature = self.func_env.get_local_type(*idx as usize);
                 let temp_index = self.temp_count;
                 self.temp_stack.push(temp_index);
                 self.local_types
-                    .push(Type::Reference(ReferenceKind::Mutable, Box::new(signature)));
+                    .push(Type::Reference(true, Box::new(signature)));
                 self.code.push(mk_unary(
                     Operation::BorrowLoc,
                     temp_index,
@@ -656,16 +610,11 @@ impl<'a> StacklessBytecodeGenerator<'a> {
             },
 
             MoveBytecode::ImmBorrowLoc(idx) => {
-                let signature = self
-                    .func_env
-                    .get_local_type(*idx as usize)
-                    .expect(COMPILED_MODULE_AVAILABLE);
+                let signature = self.func_env.get_local_type(*idx as usize);
                 let temp_index = self.temp_count;
                 self.temp_stack.push(temp_index);
-                self.local_types.push(Type::Reference(
-                    ReferenceKind::Immutable,
-                    Box::new(signature),
-                ));
+                self.local_types
+                    .push(Type::Reference(false, Box::new(signature)));
                 self.code.push(mk_unary(
                     Operation::BorrowLoc,
                     temp_index,
@@ -689,19 +638,14 @@ impl<'a> StacklessBytecodeGenerator<'a> {
                     let return_type = self
                         .func_env
                         .module_env
-                        .globalize_signature(return_type_view.as_inner())
-                        .expect(COMPILED_MODULE_AVAILABLE);
+                        .globalize_signature(return_type_view.as_inner());
                     return_temp_indices.push(return_temp_index);
                     self.temp_stack.push(return_temp_index);
                     self.local_types.push(return_type);
                     self.temp_count += 1;
                 }
                 arg_temp_indices.reverse();
-                let callee_env = self
-                    .func_env
-                    .module_env
-                    .get_used_function(*idx)
-                    .expect(COMPILED_MODULE_AVAILABLE);
+                let callee_env = self.func_env.module_env.get_used_function(*idx);
                 self.code.push(mk_call(
                     Operation::Function(
                         callee_env.module_env.get_id(),
@@ -732,7 +676,6 @@ impl<'a> StacklessBytecodeGenerator<'a> {
                         .func_env
                         .module_env
                         .globalize_signature(return_type_view.as_inner())
-                        .expect(COMPILED_MODULE_AVAILABLE)
                         .instantiate(&type_sigs);
                     return_temp_indices.push(return_temp_index);
                     self.temp_stack.push(return_temp_index);
@@ -743,8 +686,7 @@ impl<'a> StacklessBytecodeGenerator<'a> {
                 let callee_env = self
                     .func_env
                     .module_env
-                    .get_used_function(func_instantiation.handle)
-                    .expect(COMPILED_MODULE_AVAILABLE);
+                    .get_used_function(func_instantiation.handle);
                 self.code.push(mk_call(
                     Operation::Function(
                         callee_env.module_env.get_id(),
@@ -1125,7 +1067,7 @@ impl<'a> StacklessBytecodeGenerator<'a> {
                 let operand_index = self.temp_stack.pop().unwrap();
                 let temp_index = self.temp_count;
                 self.local_types.push(Type::Reference(
-                    ReferenceKind::from_is_mut(is_mut),
+                    is_mut,
                     Box::new(Type::Struct(
                         struct_env.module_env.get_id(),
                         struct_env.get_id(),
@@ -1158,7 +1100,7 @@ impl<'a> StacklessBytecodeGenerator<'a> {
                 let temp_index = self.temp_count;
                 let actuals = self.get_type_params(struct_instantiation.type_parameters);
                 self.local_types.push(Type::Reference(
-                    ReferenceKind::from_is_mut(is_mut),
+                    is_mut,
                     Box::new(Type::Struct(
                         struct_env.module_env.get_id(),
                         struct_env.get_id(),
@@ -1291,10 +1233,8 @@ impl<'a> StacklessBytecodeGenerator<'a> {
                 let operand2_index = self.temp_stack.pop().unwrap();
                 let operand1_index = self.temp_stack.pop().unwrap();
                 let temp_index = self.temp_count;
-                self.local_types.push(Type::Reference(
-                    ReferenceKind::from_is_mut(is_mut),
-                    Box::new(ty.clone()),
-                ));
+                self.local_types
+                    .push(Type::Reference(is_mut, Box::new(ty.clone())));
                 self.temp_count += 1;
                 self.temp_stack.push(temp_index);
                 let vec_fun = if is_mut { "borrow_mut" } else { "borrow" };
@@ -1365,7 +1305,7 @@ impl<'a> StacklessBytecodeGenerator<'a> {
                 if !operands.is_empty() {
                     let mut_ref_index = self.temp_count;
                     self.local_types.push(Type::Reference(
-                        ReferenceKind::Mutable,
+                        true,
                         Box::new(Type::Vector(Box::new(ty.clone()))),
                     ));
                     self.temp_count += 1;
@@ -1396,7 +1336,7 @@ impl<'a> StacklessBytecodeGenerator<'a> {
                 if !temps.is_empty() {
                     let mut_ref_index = self.temp_count;
                     self.local_types.push(Type::Reference(
-                        ReferenceKind::Mutable,
+                        true,
                         Box::new(Type::Vector(Box::new(ty.clone()))),
                     ));
                     self.temp_count += 1;
@@ -1446,7 +1386,7 @@ impl<'a> StacklessBytecodeGenerator<'a> {
                             Constant::Address(a) => a,
                             _ => panic!("Expected address, but found: {:?}", inner),
                         })
-                        .collect::<Vec<_>>();
+                        .collect::<Vec<BigUint>>();
                     Constant::AddressArray(b)
                 },
                 _ => {
@@ -1465,7 +1405,7 @@ impl<'a> StacklessBytecodeGenerator<'a> {
             (Type::Primitive(PrimitiveType::U128), MoveValue::U128(b)) => Constant::U128(*b),
             (Type::Primitive(PrimitiveType::U256), MoveValue::U256(b)) => Constant::U256(b.into()),
             (Type::Primitive(PrimitiveType::Address), MoveValue::Address(a)) => {
-                Constant::Address(Address::Numerical(*a))
+                Constant::Address(move_model::addr_to_big_uint(a))
             },
             _ => panic!("Unexpected (and possibly invalid) constant type: {:?}", ty),
         }

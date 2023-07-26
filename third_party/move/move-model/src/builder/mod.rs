@@ -2,8 +2,7 @@
 // Copyright (c) The Move Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-mod builtins;
-mod exp_builder;
-mod macros;
+mod exp_translator;
 pub(crate) mod model_builder;
 pub(crate) mod module_builder;
+mod spec_builtins;

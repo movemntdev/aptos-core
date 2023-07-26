@@ -9,7 +9,6 @@ macro_rules! define_gas_parameters_extract_key_at_version {
     ({ $($ver: pat => $key: literal),+ }, $cur_ver: expr) => {
         match $cur_ver {
             $($ver => Some($key)),+,
-            #[allow(unreachable_patterns)]
             _ => None,
         }
     }
@@ -20,7 +19,7 @@ macro_rules! define_gas_parameters {
         $params_name: ident,
         $prefix: literal,
         [$(
-            [$name: ident: $ty: ty, $key_bindings: tt, $initial: expr $(, $tn: ident)? $(,)?]
+            [$name: ident: $ty: ty, $key_bindings: tt, $initial: expr $(,)?]
         ),* $(,)?]
     ) => {
         #[derive(Debug, Clone)]
@@ -30,17 +29,16 @@ macro_rules! define_gas_parameters {
 
         impl $crate::gas_meter::FromOnChainGasSchedule for $params_name {
             #[allow(unused_variables)]
-            fn from_on_chain_gas_schedule(gas_schedule: &std::collections::BTreeMap<String, u64>, feature_version: u64) -> Result<Self, String> {
+            fn from_on_chain_gas_schedule(gas_schedule: &std::collections::BTreeMap<String, u64>, feature_version: u64) -> Option<Self> {
                 let mut params = $params_name::zeros();
 
                 $(
                     if let Some(key) = $crate::params::define_gas_parameters_extract_key_at_version!($key_bindings, feature_version) {
-                        let name = format!("{}.{}", $prefix, key);
-                        params.$name = gas_schedule.get(&name).cloned().ok_or_else(|| format!("Gas parameter {} does not exist. Feature version: {}.", name, feature_version))?.into();
+                        params.$name = gas_schedule.get(&format!("{}.{}", $prefix, key)).cloned()?.into();
                     }
                 )*
 
-                Ok(params)
+                Some(params)
             }
         }
 
@@ -75,15 +73,6 @@ macro_rules! define_gas_parameters {
             }
         }
 
-        pub mod gas_params {
-            $(
-                $(
-                    /// Marker type representing the corresponding gas parameter.
-                    #[allow(non_camel_case_types)]
-                    pub enum $tn {}
-                )?
-            )*
-        }
 
         #[test]
         fn keys_should_be_unique_for_all_versions() {

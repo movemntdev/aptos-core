@@ -28,7 +28,6 @@ impl BlockTree {
         }
     }
 
-    #[cfg(test)]
     pub fn size(&self) -> usize {
         self.block_lookup.inner.lock().0.len()
     }
@@ -104,11 +103,7 @@ fn test_branch() {
     // if assertion fails.
     let num_blocks = block_tree.size();
     assert_eq!(num_blocks, 12);
-    block_tree
-        .prune(&gen_ledger_info(id(9), false))
-        .unwrap()
-        .recv()
-        .unwrap();
+    block_tree.prune(&gen_ledger_info(id(9), false)).unwrap();
     let num_blocks = block_tree.size();
     assert_eq!(num_blocks, 3);
     assert_eq!(block_tree.root_block().id, id(9));
@@ -118,7 +113,7 @@ fn test_branch() {
 fn test_reconfig_id_update() {
     let block_tree = create_tree();
     let ledger_info = gen_ledger_info(id(1), true);
-    block_tree.prune(&ledger_info).unwrap().recv().unwrap();
+    block_tree.prune(&ledger_info).unwrap();
     let num_blocks = block_tree.size();
     // reconfig suffix blocks are ditched
     assert_eq!(num_blocks, 1);

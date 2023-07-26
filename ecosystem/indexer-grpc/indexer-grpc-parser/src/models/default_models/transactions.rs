@@ -19,7 +19,7 @@ use crate::{
         util::{get_clean_payload, get_clean_writeset, standardize_address, u64_to_bigdecimal},
     },
 };
-use aptos_protos::transaction::v1::{
+use aptos_protos::transaction::testing1::v1::{
     transaction::{TransactionType, TxnData},
     Transaction as TransactionPB, TransactionInfo,
 };
@@ -194,7 +194,7 @@ impl Transaction {
                         payload_cleaned,
                         version,
                         transaction_type,
-                        genesis_txn.events.len() as i64,
+                        0,
                         block_height,
                         epoch,
                     ),
@@ -216,7 +216,7 @@ impl Transaction {
                         None,
                         version,
                         transaction_type,
-                        block_metadata_txn.events.len() as i64,
+                        0,
                         block_height,
                         epoch,
                     ),

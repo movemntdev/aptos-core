@@ -6,10 +6,10 @@
 use super::transactions::Transaction;
 use crate::{schema::signatures, utils::util::standardize_address};
 use anyhow::{Context, Result};
-use aptos_protos::transaction::v1::{
+use aptos_protos::transaction::testing1::v1::{
     account_signature::Signature as AccountSignatureEnum, signature::Signature as SignatureEnum,
     AccountSignature as ProtoAccountSignature, Ed25519Signature as Ed25519SignaturePB,
-    FeePayerSignature as ProtoFeePayerSignature, MultiAgentSignature as ProtoMultiAgentSignature,
+    MultiAgentSignature as ProtoMultiAgentSignature,
     MultiEd25519Signature as ProtoMultiEd25519Signature, Signature as TransactionSignaturePB,
 };
 use field_count::FieldCount;
@@ -73,12 +73,6 @@ impl Signature {
                 transaction_version,
                 transaction_block_height,
             ),
-            SignatureEnum::FeePayer(sig) => Self::parse_fee_payer_signature(
-                sig,
-                sender,
-                transaction_version,
-                transaction_block_height,
-            ),
         }
     }
 
@@ -87,7 +81,6 @@ impl Signature {
             SignatureEnum::Ed25519(_) => String::from("ed25519_signature"),
             SignatureEnum::MultiEd25519(_) => String::from("multi_ed25519_signature"),
             SignatureEnum::MultiAgent(_) => String::from("multi_agent_signature"),
-            SignatureEnum::FeePayer(_) => String::from("fee_payer_signature"),
         }
     }
 
@@ -195,50 +188,6 @@ impl Signature {
                 Some(&address.to_string()),
             ));
         }
-        Ok(signatures)
-    }
-
-    fn parse_fee_payer_signature(
-        s: &ProtoFeePayerSignature,
-        sender: &String,
-        transaction_version: i64,
-        transaction_block_height: i64,
-    ) -> Result<Vec<Self>> {
-        let mut signatures = Vec::default();
-        // process sender signature
-        signatures.append(&mut Self::parse_multi_agent_signature_helper(
-            s.sender.as_ref().unwrap(),
-            sender,
-            transaction_version,
-            transaction_block_height,
-            true,
-            0,
-            None,
-        ));
-        for (index, address) in s.secondary_signer_addresses.iter().enumerate() {
-            let secondary_sig = s.secondary_signers.get(index).context(format!(
-                "Failed to parse index {} for multi agent secondary signers",
-                index
-            ))?;
-            signatures.append(&mut Self::parse_multi_agent_signature_helper(
-                secondary_sig,
-                sender,
-                transaction_version,
-                transaction_block_height,
-                false,
-                index as i64,
-                Some(&address.to_string()),
-            ));
-        }
-        signatures.append(&mut Self::parse_multi_agent_signature_helper(
-            s.fee_payer_signer.as_ref().unwrap(),
-            sender,
-            transaction_version,
-            transaction_block_height,
-            true,
-            (s.secondary_signer_addresses.len() + 1) as i64,
-            Some(&s.fee_payer_address.to_string()),
-        ));
         Ok(signatures)
     }
 

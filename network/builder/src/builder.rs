@@ -207,7 +207,6 @@ impl NetworkBuilder {
             config.ping_interval_ms,
             config.ping_timeout_ms,
             config.ping_failures_tolerated,
-            config.max_parallel_deserialization_tasks,
         );
 
         // Always add a connectivity manager to keep track of known peers
@@ -416,13 +415,10 @@ impl NetworkBuilder {
         ping_interval_ms: u64,
         ping_timeout_ms: u64,
         ping_failures_tolerated: u64,
-        max_parallel_deserialization_tasks: Option<usize>,
     ) -> &mut Self {
         // Initialize and start HealthChecker.
-        let (hc_network_tx, hc_network_rx) = self.add_client_and_service(
-            &health_checker::health_checker_network_config(),
-            max_parallel_deserialization_tasks,
-        );
+        let (hc_network_tx, hc_network_rx) =
+            self.add_client_and_service(&health_checker::health_checker_network_config());
         self.health_checker_builder = Some(HealthCheckerBuilder::new(
             self.network_context(),
             self.time_service.clone(),
@@ -446,14 +442,10 @@ impl NetworkBuilder {
     pub fn add_client_and_service<SenderT: NewNetworkSender, EventsT: NewNetworkEvents>(
         &mut self,
         config: &NetworkApplicationConfig,
-        max_parallel_deserialization_tasks: Option<usize>,
     ) -> (SenderT, EventsT) {
         (
             self.add_client(&config.network_client_config),
-            self.add_service(
-                &config.network_service_config,
-                max_parallel_deserialization_tasks,
-            ),
+            self.add_service(&config.network_service_config),
         )
     }
 
@@ -467,18 +459,10 @@ impl NetworkBuilder {
     /// Register a new service application with the network. Return the service
     /// interface for handling network requests.
     // TODO(philiphayes): return new NetworkService (name TBD) interface?
-    fn add_service<EventsT: NewNetworkEvents>(
-        &mut self,
-        config: &NetworkServiceConfig,
-        max_parallel_deserialization_tasks: Option<usize>,
-    ) -> EventsT {
+    fn add_service<EventsT: NewNetworkEvents>(&mut self, config: &NetworkServiceConfig) -> EventsT {
         let (peer_mgr_reqs_rx, connection_notifs_rx) =
             self.peer_manager_builder.add_service(config);
-        EventsT::new(
-            peer_mgr_reqs_rx,
-            connection_notifs_rx,
-            max_parallel_deserialization_tasks,
-        )
+        EventsT::new(peer_mgr_reqs_rx, connection_notifs_rx)
     }
 }
 

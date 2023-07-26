@@ -19,7 +19,7 @@ use crate::{
     },
 };
 use aptos_protos::{
-    transaction::v1::UserTransaction as UserTransactionPB, util::timestamp::Timestamp,
+    transaction::testing1::v1::UserTransaction as UserTransactionPB, util::timestamp::Timestamp,
 };
 use bigdecimal::BigDecimal;
 use field_count::FieldCount;

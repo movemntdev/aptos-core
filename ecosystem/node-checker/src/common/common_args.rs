@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::Result;
-use clap::{Parser, ValueEnum};
+use clap::{ArgEnum, Parser};
 use std::path::PathBuf;
 
-#[derive(ValueEnum, Clone, Debug)]
+#[derive(ArgEnum, Clone, Debug)]
 pub enum OutputFormat {
     Json,
     Yaml,
@@ -19,7 +19,7 @@ pub struct OutputArgs {
     pub output_path: Option<PathBuf>,
 
     /// What format to output the spec in.
-    #[clap(short, long, value_enum, ignore_case = true, default_value_t = OutputFormat::Yaml)]
+    #[clap(short, long, arg_enum, default_value = "yaml")]
     pub format: OutputFormat,
 }
 

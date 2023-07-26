@@ -220,8 +220,8 @@ mod tests {
         block_metadata::BlockMetadata,
         chain_id::ChainId,
         transaction::{
-            ChangeSet, RawTransaction, Script, SignedTransaction, Transaction, TransactionPayload,
-            WriteSetPayload,
+            ChangeSet, NoOpChangeSetChecker, RawTransaction, Script, SignedTransaction,
+            Transaction, TransactionPayload, WriteSetPayload,
         },
         write_set::WriteSetMut,
     };
@@ -382,12 +382,16 @@ mod tests {
     }
 
     fn create_genesis_transaction() -> Transaction {
-        Transaction::GenesisTransaction(WriteSetPayload::Direct(ChangeSet::new(
-            WriteSetMut::new(vec![])
-                .freeze()
-                .expect("freeze cannot fail"),
-            vec![],
-        )))
+        Transaction::GenesisTransaction(WriteSetPayload::Direct(
+            ChangeSet::new(
+                WriteSetMut::new(vec![])
+                    .freeze()
+                    .expect("freeze cannot fail"),
+                vec![],
+                &NoOpChangeSetChecker,
+            )
+            .unwrap(),
+        ))
     }
 
     fn create_runtime() -> Runtime {

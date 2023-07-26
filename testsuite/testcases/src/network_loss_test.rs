@@ -42,7 +42,7 @@ impl NetworkLoadTest for NetworkLossTest {
 }
 
 impl NetworkTest for NetworkLossTest {
-    fn run(&self, ctx: &mut NetworkContext<'_>) -> anyhow::Result<()> {
+    fn run<'t>(&self, ctx: &mut NetworkContext<'t>) -> anyhow::Result<()> {
         <dyn NetworkLoadTest>::run(self, ctx)
     }
 }

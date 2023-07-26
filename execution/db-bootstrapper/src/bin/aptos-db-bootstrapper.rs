@@ -12,34 +12,34 @@ use aptos_executor::db_bootstrapper::calculate_genesis;
 use aptos_storage_interface::DbReaderWriter;
 use aptos_types::{transaction::Transaction, waypoint::Waypoint};
 use aptos_vm::AptosVM;
-use clap::Parser;
 use std::{
     fs::File,
     io::Read,
     path::{Path, PathBuf},
 };
+use structopt::StructOpt;
 
-#[derive(Parser)]
-#[clap(
+#[derive(StructOpt)]
+#[structopt(
     name = "aptos-db-bootstrapper",
     about = "Calculate, verify and commit the genesis to local DB without a consensus among validators."
 )]
 struct Opt {
-    #[clap(value_parser)]
+    #[structopt(parse(from_os_str))]
     db_dir: PathBuf,
 
-    #[clap(short, long, value_parser)]
+    #[structopt(short, long, parse(from_os_str))]
     genesis_txn_file: PathBuf,
 
-    #[clap(short, long)]
+    #[structopt(short, long)]
     waypoint_to_verify: Option<Waypoint>,
 
-    #[clap(long, requires("waypoint_to_verify"))]
+    #[structopt(long, requires("waypoint-to-verify"))]
     commit: bool,
 }
 
 fn main() -> Result<()> {
-    let opt = Opt::parse();
+    let opt = Opt::from_args();
 
     let genesis_txn = load_genesis_txn(&opt.genesis_txn_file)
         .with_context(|| format_err!("Failed loading genesis txn."))?;
@@ -109,10 +109,4 @@ fn load_genesis_txn(path: &Path) -> Result<Transaction> {
     file.read_to_end(&mut buffer)?;
 
     Ok(bcs::from_bytes(&buffer)?)
-}
-
-#[test]
-fn verify_tool() {
-    use clap::CommandFactory;
-    Opt::command().debug_assert()
 }

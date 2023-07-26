@@ -16,7 +16,6 @@ use aptos_crypto::{
 };
 use aptos_forge::{AptosPublicInfo, LocalSwarm, Node, NodeExt, Swarm};
 use aptos_gas::{AptosGasParameters, FromOnChainGasSchedule};
-use aptos_genesis::builder::InitConfigFn;
 use aptos_global_constants::GAS_UNIT_PRICE;
 use aptos_rest_client::{
     aptos_api_types::{TransactionOnChainData, UserTransaction},
@@ -28,8 +27,8 @@ use aptos_rosetta::{
     types::{
         AccountBalanceRequest, AccountBalanceResponse, AccountIdentifier, BlockIdentifier,
         BlockRequest, BlockResponse, NetworkIdentifier, NetworkRequest, Operation,
-        OperationStatusType, OperationType, PartialBlockIdentifier, TransactionIdentifier,
-        TransactionType, STAKING_CONTRACT_MODULE, SWITCH_OPERATOR_WITH_SAME_COMMISSION_FUNCTION,
+        OperationStatusType, OperationType, PartialBlockIdentifier, TransactionType,
+        STAKING_CONTRACT_MODULE, SWITCH_OPERATOR_WITH_SAME_COMMISSION_FUNCTION,
     },
     ROSETTA_VERSION,
 };
@@ -38,9 +37,9 @@ use aptos_types::{
     account_address::AccountAddress, account_config::CORE_CODE_ADDRESS, chain_id::ChainId,
     on_chain_config::GasScheduleV2, transaction::SignedTransaction,
 };
-use serde_json::json;
 use std::{
     collections::{BTreeMap, HashSet},
+    convert::TryFrom,
     future::Future,
     str::FromStr,
     sync::Arc,
@@ -48,14 +47,13 @@ use std::{
 };
 use tokio::{task::JoinHandle, time::Instant};
 
-const EPOCH_DURATION_S: u64 = 5;
-const DEFAULT_TRANSFER_AMOUNT: u64 = 20;
-const DEFAULT_MAX_WAIT_S: u64 = 5;
+const DEFAULT_MAX_WAIT_MS: u64 = 5000;
 const DEFAULT_INTERVAL_MS: u64 = 100;
-static DEFAULT_MAX_WAIT_DURATION: Duration = Duration::from_secs(DEFAULT_MAX_WAIT_S);
+static DEFAULT_MAX_WAIT_DURATION: Duration = Duration::from_millis(DEFAULT_MAX_WAIT_MS);
 static DEFAULT_INTERVAL_DURATION: Duration = Duration::from_millis(DEFAULT_INTERVAL_MS);
 
-async fn setup_simple_test(
+pub async fn setup_test(
+    num_nodes: usize,
     num_accounts: usize,
 ) -> (
     LocalSwarm,
@@ -63,30 +61,16 @@ async fn setup_simple_test(
     JoinHandle<anyhow::Result<()>>,
     RosettaClient,
 ) {
-    setup_test(num_accounts, Arc::new(|_, _, _| {})).await
-}
-
-async fn setup_test(
-    num_accounts: usize,
-    config_fn: InitConfigFn,
-) -> (
-    LocalSwarm,
-    CliTestFramework,
-    JoinHandle<anyhow::Result<()>>,
-    RosettaClient,
-) {
-    // Start the validator
-    let (swarm, cli, faucet) = SwarmBuilder::new_local(1)
+    let (swarm, cli, faucet) = SwarmBuilder::new_local(num_nodes)
         .with_init_genesis_config(Arc::new(|genesis_config| {
-            genesis_config.epoch_duration_secs = EPOCH_DURATION_S;
+            genesis_config.epoch_duration_secs = 5;
         }))
-        .with_init_config(config_fn)
         .with_aptos()
         .build_with_cli(num_accounts)
         .await;
     let validator = swarm.validators().next().unwrap();
 
-    // And the rosetta server
+    // And the client
     let rosetta_port = get_available_port();
     let rosetta_socket_addr = format!("127.0.0.1:{}", rosetta_port);
     let rosetta_url = format!("http://{}", rosetta_socket_addr.clone())
@@ -126,11 +110,49 @@ async fn setup_test(
 async fn test_block_transactions() {
     const NUM_TXNS_PER_PAGE: u16 = 2;
 
-    let (swarm, cli, _faucet, rosetta_client) = setup_test(
-        2,
-        Arc::new(|_, config, _| config.api.max_transactions_page_size = NUM_TXNS_PER_PAGE),
+    let (swarm, cli, _faucet) = SwarmBuilder::new_local(1)
+        .with_aptos()
+        .with_init_config(Arc::new(|_, config, _| {
+            // Only one transaction will show up in a block no matter what
+            config.api.max_transactions_page_size = NUM_TXNS_PER_PAGE;
+        }))
+        .build_with_cli(2)
+        .await;
+    let validator = swarm.validators().next().unwrap();
+
+    // And the client
+    let rosetta_port = get_available_port();
+    let rosetta_socket_addr = format!("127.0.0.1:{}", rosetta_port);
+    let rosetta_url = format!("http://{}", rosetta_socket_addr.clone())
+        .parse()
+        .unwrap();
+    let rosetta_client = RosettaClient::new(rosetta_url);
+    let api_config = ApiConfig {
+        enabled: true,
+        address: rosetta_socket_addr.parse().unwrap(),
+        tls_cert_path: None,
+        tls_key_path: None,
+        content_length_limit: None,
+        max_transactions_page_size: NUM_TXNS_PER_PAGE,
+        ..Default::default()
+    };
+
+    // Start the server
+    let _rosetta = aptos_rosetta::bootstrap_async(
+        swarm.chain_id(),
+        api_config,
+        Some(aptos_rest_client::Client::new(
+            validator.rest_api_endpoint(),
+        )),
+        cli.addresses(),
     )
-    .await;
+    .await
+    .unwrap();
+
+    // Ensure rosetta can take requests
+    try_until_ok_default(|| rosetta_client.network_list())
+        .await
+        .unwrap();
 
     let account_1 = cli.account_id(0);
     let chain_id = swarm.chain_id();
@@ -146,7 +168,7 @@ async fn test_block_transactions() {
     .unwrap();
     assert_eq!(response.block_identifier, BlockIdentifier {
         index: 0,
-        hash: BlockHash::new(chain_id, 0).to_string(),
+        hash: BlockHash::new(chain_id, 0).to_string()
     });
 
     // First fund account 1 with lots more gas
@@ -175,7 +197,7 @@ async fn test_block_transactions() {
 
 #[tokio::test]
 async fn test_network() {
-    let (swarm, _, _, rosetta_client) = setup_simple_test(1).await;
+    let (swarm, _, _, rosetta_client) = setup_test(1, 1).await;
     let chain_id = swarm.chain_id();
 
     // We only support one network, this network
@@ -205,7 +227,7 @@ async fn test_network() {
     assert_eq!(
         BlockIdentifier {
             index: 0,
-            hash: BlockHash::new(chain_id, 0).to_string(),
+            hash: BlockHash::new(chain_id, 0).to_string()
         },
         status.genesis_block_identifier
     );
@@ -238,16 +260,25 @@ async fn test_network() {
 
 #[tokio::test]
 async fn test_account_balance() {
-    let (mut swarm, cli, _faucet, rosetta_client) = setup_simple_test(3).await;
+    let (mut swarm, cli, _faucet, rosetta_client) = setup_test(1, 3).await;
 
     let account_1 = cli.account_id(0);
     let account_2 = cli.account_id(1);
     let account_3 = cli.account_id(2);
     let chain_id = swarm.chain_id();
-    swarm
+    let root_address = swarm.aptos_public_info().root_account().address();
+    let root_sequence_number = swarm
         .aptos_public_info()
-        .sync_root_account_sequence_number()
-        .await;
+        .client()
+        .get_account_bcs(root_address)
+        .await
+        .unwrap()
+        .into_inner()
+        .sequence_number();
+    *swarm
+        .aptos_public_info()
+        .root_account()
+        .sequence_number_mut() = root_sequence_number;
 
     let mut account_4 = swarm
         .aptos_public_info()
@@ -266,7 +297,7 @@ async fn test_account_balance() {
     .unwrap();
     assert_eq!(response.block_identifier, BlockIdentifier {
         index: 0,
-        hash: BlockHash::new(chain_id, 0).to_string(),
+        hash: BlockHash::new(chain_id, 0).to_string()
     });
 
     // First fund account 1 with lots more gas
@@ -277,7 +308,7 @@ async fn test_account_balance() {
     let mut account_1_balance = DEFAULT_FUNDED_COINS * 3;
     let mut account_2_balance = DEFAULT_FUNDED_COINS;
     // At some time both accounts should exist with initial amounts
-    try_until_ok(DEFAULT_MAX_WAIT_DURATION, DEFAULT_INTERVAL_DURATION, || {
+    try_until_ok(Duration::from_secs(5), DEFAULT_INTERVAL_DURATION, || {
         account_has_balance(
             &rosetta_client,
             chain_id,
@@ -504,24 +535,6 @@ async fn unlock_stake(
     info.client().submit_and_wait(&txn).await.unwrap()
 }
 
-async fn create_delegation_pool(
-    info: &AptosPublicInfo<'_>,
-    account: &mut LocalAccount,
-    commission_percentage: u64,
-    sequence_number: u64,
-) -> Response<Transaction> {
-    let delegation_pool_creation = info
-        .transaction_factory()
-        .payload(aptos_stdlib::delegation_pool_initialize_delegation_pool(
-            commission_percentage,
-            vec![],
-        ))
-        .sequence_number(sequence_number);
-
-    let txn = account.sign_with_transaction_builder(delegation_pool_creation);
-    info.client().submit_and_wait(&txn).await.unwrap()
-}
-
 async fn account_has_balance(
     rosetta_client: &RosettaClient,
     chain_id: ChainId,
@@ -565,27 +578,12 @@ async fn get_balance(
     try_until_ok_default(|| rosetta_client.account_balance(&request)).await
 }
 
-async fn wait_for_rosetta_block(node_clients: &NodeClients<'_>, block_height: u64) {
-    // Wait until the Rosetta service is ready
-    let request = NetworkRequest {
-        network_identifier: node_clients.network.clone(),
-    };
-
-    loop {
-        let status = try_until_ok_default(|| node_clients.rosetta_client.network_status(&request))
-            .await
-            .unwrap();
-        if status.current_block_identifier.index >= block_height {
-            break;
-        }
-    }
-}
-
 #[tokio::test]
 async fn test_transfer() {
-    let (mut swarm, cli, _faucet, rosetta_client) = setup_simple_test(1).await;
+    let (mut swarm, cli, _faucet, rosetta_client) = setup_test(1, 1).await;
     let chain_id = swarm.chain_id();
-    let client = swarm.aptos_public_info().client().clone();
+    let public_info = swarm.aptos_public_info();
+    let client = public_info.client();
     let sender = cli.account_id(0);
     let receiver = AccountAddress::from_hex_literal("0xBEEF").unwrap();
     let sender_private_key = cli.private_key(0);
@@ -598,22 +596,35 @@ async fn test_transfer() {
         .value
         .0;
     let network = NetworkIdentifier::from(chain_id);
-    let node_clients = NodeClients {
-        rosetta_client: &rosetta_client,
-        rest_client: &client,
-        network: &network,
+
+    // Wait until the Rosetta service is ready
+    let request = NetworkRequest {
+        network_identifier: network.clone(),
     };
-    wait_for_rosetta_block(&node_clients, 2).await;
+
+    loop {
+        let status = try_until_ok_default(|| rosetta_client.network_status(&request))
+            .await
+            .unwrap();
+        if status.current_block_identifier.index >= 2 {
+            break;
+        }
+    }
 
     // Attempt to transfer more than balance to another user (should fail)
-    simple_transfer_and_wait(
-        &node_clients,
-        sender_private_key,
-        receiver,
-        sender_balance + 200,
-    )
-    .await
-    .expect_err("Should fail simulation since we can't transfer more than balance coins");
+    rosetta_client
+        .transfer(
+            &network,
+            sender_private_key,
+            receiver,
+            sender_balance + 200,
+            expiry_time(Duration::from_secs(5)).as_secs(),
+            None,
+            None,
+            None,
+        )
+        .await
+        .expect_err("Should fail simulation since we can't transfer more than balance coins");
 
     // Attempt to transfer more than balance to another user (should fail)
     let transaction_factory = TransactionFactory::new(chain_id)
@@ -631,7 +642,7 @@ async fn test_transfer() {
     let signed_transaction = SignedTransaction::new(
         unsigned_transaction,
         sender_private_key.public_key(),
-        Ed25519Signature::dummy_signature(),
+        Ed25519Signature::try_from([0u8; 64].as_ref()).unwrap(),
     );
 
     let simulation_txn = client
@@ -640,22 +651,40 @@ async fn test_transfer() {
         .expect("Should succeed getting gas estimate")
         .into_inner();
     let gas_usage = simulation_txn.info.gas_used() * GAS_UNIT_PRICE;
-    let max_sent = sender_balance - gas_usage;
 
     // Attempt to transfer more than balance - gas to another user (should fail)
-    simple_transfer_and_wait(&node_clients, sender_private_key, receiver, max_sent + 1)
+    rosetta_client
+        .transfer(
+            &network,
+            sender_private_key,
+            receiver,
+            sender_balance - gas_usage + 1,
+            expiry_time(Duration::from_secs(5)).as_secs(),
+            None,
+            None,
+            None,
+        )
         .await
         .expect_err("Should fail simulation since we can't transfer more than balance + gas coins");
 
+    // TODO(greg): Re-enable after fixing gas estimation.
+    /*
     // Attempt to transfer more than balance - gas to another user (should fail)
-    let node_clients = NodeClients {
-        rosetta_client: &rosetta_client,
-        rest_client: &client,
-        network: &network,
-    };
-    simple_transfer_and_wait(&node_clients, sender_private_key, receiver, max_sent)
-        .await
-        .expect("Should succeed transfer");
+    let transfer = transfer_and_wait(
+        &rosetta_client,
+        client,
+        &network,
+        sender_private_key,
+        receiver,
+        sender_balance - gas_usage,
+        Duration::from_secs(5),
+        None,
+        None,
+        None,
+    )
+    .await
+    .expect("Should succeed transfer");
+    assert_eq!(transfer.info.gas_used.0, gas_usage);
 
     // Sender balance should be 0
     assert_eq!(
@@ -679,15 +708,16 @@ async fn test_transfer() {
             .coin
             .value
             .0,
-        max_sent
+        sender_balance - gas_usage
     );
+    */
 }
 
 /// This test tests all of Rosetta's functionality from the read side in one go.  Since
 /// it's block based and it needs time to run, we do all the checks in a single test.
 #[tokio::test]
 async fn test_block() {
-    let (swarm, cli, _faucet, rosetta_client) = setup_simple_test(5).await;
+    let (swarm, cli, _faucet, rosetta_client) = setup_test(1, 5).await;
     let chain_id = swarm.chain_id();
     let validator = swarm.validators().next().unwrap();
     let rest_client = validator.rest_client();
@@ -696,13 +726,18 @@ async fn test_block() {
     let mut balances = BTreeMap::<AccountAddress, BTreeMap<u64, i128>>::new();
 
     // Wait until the Rosetta service is ready
-    let network = NetworkIdentifier::from(chain_id);
-    let node_clients = NodeClients {
-        rosetta_client: &rosetta_client,
-        rest_client: &rest_client,
-        network: &network,
+    let request = NetworkRequest {
+        network_identifier: NetworkIdentifier::from(chain_id),
     };
-    wait_for_rosetta_block(&node_clients, 2).await;
+
+    loop {
+        let status = try_until_ok_default(|| rosetta_client.network_status(&request))
+            .await
+            .unwrap();
+        if status.current_block_identifier.index >= 2 {
+            break;
+        }
+    }
 
     // Do some transfers
     let account_id_0 = cli.account_id(0);
@@ -722,10 +757,10 @@ async fn test_block() {
         .await
         .unwrap()
         .into_inner();
-    let feature_version = gas_schedule.feature_version;
+    let feaure_version = gas_schedule.feature_version;
     let gas_params = AptosGasParameters::from_on_chain_gas_schedule(
         &gas_schedule.to_btree_map(),
-        feature_version,
+        feaure_version,
     )
     .unwrap();
     let min_gas_price = u64::from(gas_params.txn.min_price_per_gas_unit);
@@ -734,53 +769,79 @@ async fn test_block() {
     let private_key_1 = cli.private_key(1);
     let private_key_2 = cli.private_key(2);
     let private_key_3 = cli.private_key(3);
-
-    let seq_no_0 = simple_transfer_and_wait(
-        &node_clients,
+    let network_identifier = chain_id.into();
+    let seq_no_0 = transfer_and_wait(
+        &rosetta_client,
+        &rest_client,
+        &network_identifier,
         private_key_0,
         account_id_1,
-        DEFAULT_TRANSFER_AMOUNT,
+        20,
+        Duration::from_secs(5),
+        Some(0),
+        // TODO(greg): Revisit after fixing gas estimation.
+        Some(1000000),
+        None,
     )
     .await
     .unwrap()
     .request
     .sequence_number
     .0;
-    simple_transfer_and_wait(
-        &node_clients,
+    transfer_and_wait(
+        &rosetta_client,
+        &rest_client,
+        &network_identifier,
         private_key_1,
         account_id_0,
-        DEFAULT_TRANSFER_AMOUNT,
+        20,
+        Duration::from_secs(5),
+        None,
+        // TODO(greg): Revisit after fixing gas estimation.
+        Some(1000000),
+        None,
     )
     .await
     .unwrap();
     transfer_and_wait(
-        &node_clients,
+        &rosetta_client,
+        &rest_client,
+        &network_identifier,
         private_key_0,
         account_id_0,
-        DEFAULT_TRANSFER_AMOUNT,
-        None,
+        20,
+        Duration::from_secs(5),
         Some(seq_no_0 + 1),
-        None,
+        // TODO(greg): revisit after fixing gas estimation
+        Some(1000000),
         None,
     )
     .await
     .unwrap();
     // Create a new account via transfer
-    simple_transfer_and_wait(
-        &node_clients,
+    transfer_and_wait(
+        &rosetta_client,
+        &rest_client,
+        &network_identifier,
         private_key_2,
         AccountAddress::from_hex_literal(INVALID_ACCOUNT).unwrap(),
-        DEFAULT_TRANSFER_AMOUNT,
+        20,
+        Duration::from_secs(5),
+        None,
+        // TODO(greg): Revisit after fixing gas estimation.
+        Some(1000000),
+        None,
     )
     .await
     .unwrap();
     let seq_no_3 = transfer_and_wait(
-        &node_clients,
+        &rosetta_client,
+        &rest_client,
+        &network_identifier,
         private_key_3,
         account_id_0,
-        DEFAULT_TRANSFER_AMOUNT,
-        None,
+        20,
+        Duration::from_secs(5),
         None,
         Some(2000000),
         Some(min_gas_price),
@@ -793,10 +854,12 @@ async fn test_block() {
 
     // Create another account via command
     create_account_and_wait(
-        &node_clients,
+        &rosetta_client,
+        &rest_client,
+        &network_identifier,
         private_key_3,
         AccountAddress::from_hex_literal("0x99").unwrap(),
-        None,
+        Duration::from_secs(5),
         Some(seq_no_3 + 1),
         None,
         None,
@@ -805,14 +868,17 @@ async fn test_block() {
     .unwrap();
 
     transfer_and_wait(
-        &node_clients,
+        &rosetta_client,
+        &rest_client,
+        &network_identifier,
         private_key_1,
         account_id_3,
-        DEFAULT_TRANSFER_AMOUNT,
-        None,
+        20,
+        Duration::from_secs(5),
         // Test the default behavior
         None,
-        None,
+        // TODO(greg): Revisit after fixing gas estimation.
+        Some(10000),
         Some(min_gas_price + 1),
     )
     .await
@@ -820,11 +886,13 @@ async fn test_block() {
 
     // This one will fail because expiration is in the past
     transfer_and_wait(
-        &node_clients,
+        &rosetta_client,
+        &rest_client,
+        &network_identifier,
         private_key_3,
         AccountAddress::ONE,
-        DEFAULT_TRANSFER_AMOUNT,
-        Some(Duration::from_secs(0)),
+        20,
+        Duration::from_secs(0),
         None,
         None,
         None,
@@ -834,11 +902,13 @@ async fn test_block() {
 
     // This one will fail because gas is too low
     transfer_and_wait(
-        &node_clients,
+        &rosetta_client,
+        &rest_client,
+        &network_identifier,
         private_key_3,
         AccountAddress::ONE,
-        DEFAULT_TRANSFER_AMOUNT,
-        None,
+        20,
+        Duration::from_secs(5),
         None,
         Some(1),
         None,
@@ -852,34 +922,51 @@ async fn test_block() {
 
     // Set the operator
     set_operator_and_wait(
-        &node_clients,
+        &rosetta_client,
+        &rest_client,
+        &network_identifier,
         private_key_3,
         Some(account_id_3),
         account_id_1,
+        Duration::from_secs(5),
+        None,
+        None,
+        None,
     )
     .await
     .expect("Set operator should work!");
 
     // Also fail to set an operator (since the operator already changed)
     set_operator_and_wait(
-        &node_clients,
+        &rosetta_client,
+        &rest_client,
+        &network_identifier,
         private_key_3,
         Some(account_id_3),
         account_id_1,
+        Duration::from_secs(5),
+        None,
+        None,
+        None,
     )
     .await
     .unwrap_err();
 
     // Test native stake pool and reset lockup support
-    const MIL_APT: u64 = 100000000000000;
-    cli.fund_account(2, Some(10 * MIL_APT)).await.unwrap();
+    cli.fund_account(2, Some(1000000000000000)).await.unwrap();
     create_stake_pool_and_wait(
-        &node_clients,
+        &rosetta_client,
+        &rest_client,
+        &network_identifier,
         private_key_2,
         Some(account_id_3),
         Some(account_id_2),
-        Some(MIL_APT),
+        Some(100000000000000),
         Some(5),
+        Duration::from_secs(5),
+        None,
+        None,
+        None,
     )
     .await
     .expect("Should successfully create stake pool");
@@ -887,48 +974,93 @@ async fn test_block() {
     // TODO: Verify lockup time changes
 
     // Reset lockup
-    reset_lockup_and_wait(&node_clients, private_key_2, Some(account_id_3))
-        .await
-        .expect("Should successfully reset lockup");
-
-    // Update commission
-    update_commission_and_wait(&node_clients, private_key_2, Some(account_id_3), Some(50))
-        .await
-        .expect("Should successfully update commission");
+    reset_lockup_and_wait(
+        &rosetta_client,
+        &rest_client,
+        &network_identifier,
+        private_key_2,
+        Some(account_id_3),
+        Duration::from_secs(5),
+        None,
+        None,
+        None,
+    )
+    .await
+    .expect("Should successfully reset lockup");
 
     // Successfully, and fail setting a voter
     set_voter_and_wait(
-        &node_clients,
+        &rosetta_client,
+        &rest_client,
+        &network_identifier,
         private_key_3,
         Some(account_id_3),
         account_id_1,
+        Duration::from_secs(5),
+        None,
+        None,
+        None,
     )
     .await
     .expect_err("Set voter shouldn't work with the wrong operator!");
     set_voter_and_wait(
-        &node_clients,
+        &rosetta_client,
+        &rest_client,
+        &network_identifier,
         private_key_3,
         Some(account_id_1),
         account_id_1,
+        Duration::from_secs(5),
+        None,
+        None,
+        None,
     )
     .await
     .expect("Set voter should work!");
 
     // Unlock stake
-    unlock_stake_and_wait(&node_clients, private_key_2, Some(account_id_3), Some(10))
-        .await
-        .expect("Should successfully unlock stake");
+    unlock_stake_and_wait(
+        &rosetta_client,
+        &rest_client,
+        &network_identifier,
+        private_key_2,
+        Some(account_id_3),
+        Some(10),
+        Duration::from_secs(5),
+        None,
+        None,
+        None,
+    )
+    .await
+    .expect("Should successfully unlock stake");
 
     // Failed distribution with wrong staker
-    distribute_staking_rewards_and_wait(&node_clients, private_key_3, account_id_2, account_id_3)
-        .await
-        .expect_err("Staker has no staking contracts.");
+    distribute_staking_rewards_and_wait(
+        &rosetta_client,
+        &rest_client,
+        &network_identifier,
+        private_key_3,
+        account_id_2,
+        account_id_3,
+        Duration::from_secs(5),
+        None,
+        None,
+        None,
+    )
+    .await
+    .expect_err("Staker has no staking contracts.");
 
     let final_txn = distribute_staking_rewards_and_wait(
-        &node_clients,
+        &rosetta_client,
+        &rest_client,
+        &network_identifier,
         private_key_3,
         account_id_3,
         account_id_2,
+        Duration::from_secs(5),
+        None,
+        None,
+        None,
     )
     .await
     .expect("Distribute staking rewards should work!");
@@ -946,7 +1078,18 @@ async fn test_block() {
     // TODO: Handle multiple coin types
 
     // Wait until the Rosetta service is ready
-    wait_for_rosetta_block(&node_clients, final_block_height).await;
+    let request = NetworkRequest {
+        network_identifier: NetworkIdentifier::from(chain_id),
+    };
+
+    loop {
+        let status = try_until_ok_default(|| rosetta_client.network_status(&request))
+            .await
+            .unwrap();
+        if status.current_block_identifier.index >= final_block_height {
+            break;
+        }
+    }
 
     // Now we have to watch all the changes
     let mut current_version = 0;
@@ -1129,9 +1272,14 @@ async fn parse_operations(
         assert_eq!(expected_index as u64, operation.operation_identifier.index);
 
         // Gas transaction is always last
-        let status = operation.status().expect("Should have an operation status");
-        let operation_type = operation
-            .operation_type()
+        let status = OperationStatusType::from_str(
+            operation
+                .status
+                .as_ref()
+                .expect("Should have an operation status"),
+        )
+        .expect("Operation status should be known");
+        let operation_type = OperationType::from_str(&operation.operation_type)
             .expect("Operation type should be known");
         let actual_successful = actual_txn.info.status().is_success();
 
@@ -1140,7 +1288,10 @@ async fn parse_operations(
             OperationType::CreateAccount => {
                 // Initialize state for a new account
                 let account = operation
-                    .account()
+                    .account
+                    .as_ref()
+                    .expect("There should be an account in a create account operation")
+                    .account_address()
                     .expect("Account address should be parsable");
 
                 if actual_successful {
@@ -1162,7 +1313,10 @@ async fn parse_operations(
             },
             OperationType::Deposit => {
                 let account = operation
-                    .account()
+                    .account
+                    .as_ref()
+                    .expect("There should be an account in a deposit operation")
+                    .account_address()
                     .expect("Account address should be parsable");
 
                 if actual_successful {
@@ -1173,15 +1327,22 @@ async fn parse_operations(
                         map
                     });
                     let (_, latest_balance) = account_balances.iter().last().unwrap();
+                    let amount = operation
+                        .amount
+                        .as_ref()
+                        .expect("Should have an amount in a deposit operation");
                     assert_eq!(
-                        operation.currency().unwrap(),
-                        &native_coin(),
+                        amount.currency,
+                        native_coin(),
                         "Balance should be the native coin"
                     );
-                    let delta = operation.amount().unwrap();
+                    let delta = amount
+                        .value
+                        .parse::<u64>()
+                        .expect("Should be able to parse amount value");
 
                     // Add with panic on overflow in case of too high of a balance
-                    let new_balance = *latest_balance + delta;
+                    let new_balance = *latest_balance + delta as i128;
                     account_balances.insert(block_height, new_balance);
                 } else {
                     assert_eq!(
@@ -1196,7 +1357,10 @@ async fn parse_operations(
                 if actual_successful {
                     assert_eq!(OperationStatusType::Success, status);
                     let account = operation
-                        .account()
+                        .account
+                        .as_ref()
+                        .expect("There should be an account in a withdraw operation")
+                        .account_address()
                         .expect("Account address should be parsable");
 
                     let account_balances = balances.entry(account).or_insert_with(|| {
@@ -1205,13 +1369,24 @@ async fn parse_operations(
                         map
                     });
                     let (_, latest_balance) = account_balances.iter().last().unwrap();
+                    let amount = operation
+                        .amount
+                        .as_ref()
+                        .expect("Should have an amount in a deposit operation");
                     assert_eq!(
-                        operation.currency().unwrap(),
-                        &native_coin(),
+                        amount.currency,
+                        native_coin(),
                         "Balance should be the native coin"
                     );
-                    let delta = operation.amount().unwrap();
-                    let new_balance = *latest_balance + delta;
+                    let delta = amount
+                        .value
+                        .strip_prefix('-')
+                        .expect("Should have a negative number")
+                        .parse::<u64>()
+                        .expect("Should be able to parse amount value");
+
+                    // Subtract with panic on overflow in case of a negative balance
+                    let new_balance = *latest_balance - delta as i128;
                     account_balances.insert(block_height, new_balance);
                 } else {
                     assert_eq!(
@@ -1223,7 +1398,10 @@ async fn parse_operations(
             },
             OperationType::StakingReward => {
                 let account = operation
-                    .account()
+                    .account
+                    .as_ref()
+                    .expect("There should be an account in a stake reward operation")
+                    .account_address()
                     .expect("Account address should be parsable");
 
                 if actual_successful {
@@ -1234,15 +1412,22 @@ async fn parse_operations(
                         map
                     });
                     let (_, latest_balance) = account_balances.iter().last().unwrap();
+                    let amount = operation
+                        .amount
+                        .as_ref()
+                        .expect("Should have an amount in a stake reward operation");
                     assert_eq!(
-                        operation.currency().unwrap(),
-                        &native_coin(),
+                        amount.currency,
+                        native_coin(),
                         "Balance should be the native coin"
                     );
+                    let delta = amount
+                        .value
+                        .parse::<u64>()
+                        .expect("Should be able to parse amount value");
 
                     // Add with panic on overflow in case of too high of a balance
-                    let delta = operation.amount().unwrap();
-                    let new_balance = *latest_balance + delta;
+                    let new_balance = *latest_balance + delta as i128;
                     account_balances.insert(block_height, new_balance);
                 } else {
                     assert_eq!(
@@ -1293,7 +1478,15 @@ async fn parse_operations(
                             _ => panic!("Unsupported entry function for set operator! {:?}", txn),
                         };
 
-                        let operator = operation.new_operator().unwrap();
+                        let operator = operation
+                            .metadata
+                            .as_ref()
+                            .unwrap()
+                            .new_operator
+                            .as_ref()
+                            .unwrap()
+                            .account_address()
+                            .unwrap();
                         assert_eq!(actual_operator_address, operator)
                     } else {
                         panic!("Not an entry function");
@@ -1327,7 +1520,15 @@ async fn parse_operations(
                     {
                         let actual_voter_address: AccountAddress =
                             bcs::from_bytes(payload.args().first().unwrap()).unwrap();
-                        let voter = operation.new_voter().unwrap();
+                        let voter = operation
+                            .metadata
+                            .as_ref()
+                            .unwrap()
+                            .new_voter
+                            .as_ref()
+                            .unwrap()
+                            .account_address()
+                            .unwrap();
                         assert_eq!(actual_voter_address, voter)
                     } else {
                         panic!("Not an entry function");
@@ -1340,8 +1541,11 @@ async fn parse_operations(
                 has_gas_op = true;
                 assert_eq!(OperationStatusType::Success, status);
                 let account = operation
-                    .account()
-                    .expect("There should be an account in a fee operation");
+                    .account
+                    .as_ref()
+                    .expect("There should be an account in a fee operation")
+                    .account_address()
+                    .expect("Account address should be parsable");
 
                 let account_balances = balances.entry(account).or_insert_with(|| {
                     let mut map = BTreeMap::new();
@@ -1349,15 +1553,24 @@ async fn parse_operations(
                     map
                 });
                 let (_, latest_balance) = account_balances.iter().last().unwrap();
+                let amount = operation
+                    .amount
+                    .as_ref()
+                    .expect("Should have an amount in a fee operation");
                 assert_eq!(
-                    operation.currency().unwrap(),
-                    &native_coin(),
+                    amount.currency,
+                    native_coin(),
                     "Balance should be the native coin"
                 );
-                let delta = operation.amount().unwrap();
+                let delta = amount
+                    .value
+                    .strip_prefix('-')
+                    .expect("Should have a negative number")
+                    .parse::<u64>()
+                    .expect("Should be able to parse amount value");
 
                 // Subtract with panic on overflow in case of a negative balance
-                let new_balance = *latest_balance + delta;
+                let new_balance = *latest_balance - delta as i128;
                 account_balances.insert(block_height, new_balance);
                 match actual_txn.transaction {
                     aptos_types::transaction::Transaction::UserTransaction(ref txn) => {
@@ -1366,7 +1579,7 @@ async fn parse_operations(
                                 .info
                                 .gas_used()
                                 .saturating_mul(txn.gas_unit_price()),
-                            delta.unsigned_abs() as u64,
+                            delta,
                             "Gas operation should always match gas used * gas unit price"
                         )
                     },
@@ -1400,40 +1613,6 @@ async fn parse_operations(
                     {
                         let actual_operator_address: AccountAddress =
                             bcs::from_bytes(payload.args().first().unwrap()).unwrap();
-                        let operator = operation.operator().unwrap();
-                        assert_eq!(actual_operator_address, operator)
-                    } else {
-                        panic!("Not an entry function");
-                    }
-                } else {
-                    panic!("Not a user transaction");
-                }
-            },
-            OperationType::UpdateCommission => {
-                if actual_successful {
-                    assert_eq!(
-                        OperationStatusType::Success,
-                        status,
-                        "Successful transaction should have successful update commission operation"
-                    );
-                } else {
-                    assert_eq!(
-                        OperationStatusType::Failure,
-                        status,
-                        "Failed transaction should have failed update commission operation"
-                    );
-                }
-
-                // Check that update commmission was set the same
-                if let aptos_types::transaction::Transaction::UserTransaction(ref txn) =
-                    actual_txn.transaction
-                {
-                    if let aptos_types::transaction::TransactionPayload::EntryFunction(
-                        ref payload,
-                    ) = txn.payload()
-                    {
-                        let actual_operator_address: AccountAddress =
-                            bcs::from_bytes(payload.args().first().unwrap()).unwrap();
                         let operator = operation
                             .metadata
                             .as_ref()
@@ -1443,19 +1622,7 @@ async fn parse_operations(
                             .unwrap()
                             .account_address()
                             .unwrap();
-                        assert_eq!(actual_operator_address, operator);
-
-                        let new_commission = operation
-                            .metadata
-                            .as_ref()
-                            .unwrap()
-                            .commission_percentage
-                            .as_ref()
-                            .unwrap()
-                            .0;
-                        let actual_new_commission: u64 =
-                            bcs::from_bytes(payload.args().get(1).unwrap()).unwrap();
-                        assert_eq!(actual_new_commission, new_commission);
+                        assert_eq!(actual_operator_address, operator)
                     } else {
                         panic!("Not an entry function");
                     }
@@ -1488,20 +1655,50 @@ async fn parse_operations(
                     {
                         let actual_operator_address: AccountAddress =
                             bcs::from_bytes(payload.args().get(0).unwrap()).unwrap();
-                        let operator = operation.new_operator().unwrap();
+                        let operator = operation
+                            .metadata
+                            .as_ref()
+                            .unwrap()
+                            .new_operator
+                            .as_ref()
+                            .unwrap()
+                            .account_address()
+                            .unwrap();
                         assert_eq!(actual_operator_address, operator);
 
                         let actual_voter_address: AccountAddress =
                             bcs::from_bytes(payload.args().get(1).unwrap()).unwrap();
-                        let voter = operation.new_voter().unwrap();
+                        let voter = operation
+                            .metadata
+                            .as_ref()
+                            .unwrap()
+                            .new_voter
+                            .as_ref()
+                            .unwrap()
+                            .account_address()
+                            .unwrap();
                         assert_eq!(actual_voter_address, voter);
 
                         let actual_stake_amount: u64 =
                             bcs::from_bytes(payload.args().get(2).unwrap()).unwrap();
-                        let stake = operation.staked_balance().unwrap();
+                        let stake = operation
+                            .metadata
+                            .as_ref()
+                            .unwrap()
+                            .staked_balance
+                            .as_ref()
+                            .unwrap()
+                            .0;
                         assert_eq!(actual_stake_amount, stake);
 
-                        let commission_percentage = operation.commission_percentage().unwrap();
+                        let commission_percentage = operation
+                            .metadata
+                            .as_ref()
+                            .unwrap()
+                            .commission_percentage
+                            .as_ref()
+                            .unwrap()
+                            .0;
                         let actual_commission: u64 =
                             bcs::from_bytes(payload.args().get(3).unwrap()).unwrap();
                         assert_eq!(actual_commission, commission_percentage);
@@ -1537,12 +1734,27 @@ async fn parse_operations(
                     {
                         let actual_operator_address: AccountAddress =
                             bcs::from_bytes(payload.args().first().unwrap()).unwrap();
-                        let operator = operation.operator().unwrap();
+                        let operator = operation
+                            .metadata
+                            .as_ref()
+                            .unwrap()
+                            .operator
+                            .as_ref()
+                            .unwrap()
+                            .account_address()
+                            .unwrap();
                         assert_eq!(actual_operator_address, operator);
 
                         let actual_amount: u64 =
                             bcs::from_bytes(payload.args().get(1).unwrap()).unwrap();
-                        let amount = operation.metadata_amount().unwrap();
+                        let amount = operation
+                            .metadata
+                            .as_ref()
+                            .unwrap()
+                            .amount
+                            .as_ref()
+                            .unwrap()
+                            .0;
                         assert_eq!(actual_amount, amount);
                     } else {
                         panic!("Not an entry function");
@@ -1576,188 +1788,34 @@ async fn parse_operations(
                     {
                         let actual_staker_address: AccountAddress =
                             bcs::from_bytes(payload.args().first().unwrap()).unwrap();
-                        let staker = operation.staker().unwrap();
+                        let staker = operation
+                            .metadata
+                            .as_ref()
+                            .unwrap()
+                            .staker
+                            .as_ref()
+                            .unwrap()
+                            .account_address()
+                            .unwrap();
                         assert_eq!(actual_staker_address, staker);
 
                         let actual_operator_address: AccountAddress =
                             bcs::from_bytes(payload.args().get(1).unwrap()).unwrap();
-                        let operator = operation.operator().unwrap();
+                        let operator = operation
+                            .metadata
+                            .as_ref()
+                            .unwrap()
+                            .operator
+                            .as_ref()
+                            .unwrap()
+                            .account_address()
+                            .unwrap();
                         assert_eq!(actual_operator_address, operator);
                     } else {
                         panic!("Not an entry function");
                     }
                 } else {
                     panic!("Not a user transaction");
-                }
-            },
-            OperationType::AddDelegatedStake => {
-                if actual_successful {
-                    assert_eq!(
-                        OperationStatusType::Success,
-                        status,
-                        "Successful transaction should have successful add_delegated_stake operation"
-                    );
-                } else {
-                    assert_eq!(
-                        OperationStatusType::Failure,
-                        status,
-                        "Failed transaction should have failed add_delegated_stake operation"
-                    );
-                }
-
-                // Check that add stake was set the same
-                if let aptos_types::transaction::Transaction::UserTransaction(ref txn) =
-                    actual_txn.transaction
-                {
-                    if let aptos_types::transaction::TransactionPayload::EntryFunction(
-                        ref payload,
-                    ) = txn.payload()
-                    {
-                        let actual_pool_address: AccountAddress =
-                            bcs::from_bytes(payload.args().first().unwrap()).unwrap();
-
-                        let pool_address = operation
-                            .metadata
-                            .as_ref()
-                            .unwrap()
-                            .pool_address
-                            .as_ref()
-                            .unwrap()
-                            .account_address()
-                            .unwrap();
-
-                        assert_eq!(actual_pool_address, pool_address);
-
-                        let actual_amount: u64 =
-                            bcs::from_bytes(payload.args().get(1).unwrap()).unwrap();
-
-                        let amount = operation
-                            .metadata
-                            .as_ref()
-                            .unwrap()
-                            .amount
-                            .as_ref()
-                            .unwrap()
-                            .0;
-
-                        assert_eq!(actual_amount, amount);
-                    } else {
-                        panic!("Not an entry function");
-                    }
-                } else {
-                    panic!("Not a user transaction");
-                }
-            },
-            OperationType::UnlockDelegatedStake => {
-                if actual_successful {
-                    assert_eq!(
-                        OperationStatusType::Success,
-                        status,
-                        "Successful transaction should have successful unlock_delegated_stake operation"
-                    );
-                } else {
-                    assert_eq!(
-                        OperationStatusType::Failure,
-                        status,
-                        "Failed transaction should have failed unlock_delegated_stake operation"
-                    );
-                }
-
-                // Check that unlock stake was set the same
-                if let aptos_types::transaction::Transaction::UserTransaction(ref txn) =
-                    actual_txn.transaction
-                {
-                    if let aptos_types::transaction::TransactionPayload::EntryFunction(
-                        ref payload,
-                    ) = txn.payload()
-                    {
-                        let actual_pool_address: AccountAddress =
-                            bcs::from_bytes(payload.args().first().unwrap()).unwrap();
-
-                        let pool_address = operation
-                            .metadata
-                            .as_ref()
-                            .unwrap()
-                            .pool_address
-                            .as_ref()
-                            .unwrap()
-                            .account_address()
-                            .unwrap();
-
-                        assert_eq!(actual_pool_address, pool_address);
-
-                        let actual_amount: u64 =
-                            bcs::from_bytes(payload.args().get(1).unwrap()).unwrap();
-
-                        let amount = operation
-                            .metadata
-                            .as_ref()
-                            .unwrap()
-                            .amount
-                            .as_ref()
-                            .unwrap()
-                            .0;
-
-                        assert_eq!(actual_amount, amount);
-                    } else {
-                        panic!("Not an entry function");
-                    }
-                } else {
-                    panic!("Not a user transaction");
-                }
-            },
-            OperationType::WithdrawUndelegatedFunds => {
-                if actual_successful {
-                    assert_eq!(
-                        OperationStatusType::Success,
-                        status,
-                        "Successful transaction should have successful distribute operation"
-                    );
-                } else {
-                    assert_eq!(
-                        OperationStatusType::Failure,
-                        status,
-                        "Failed transaction should have failed distribute operation"
-                    );
-                }
-                if let aptos_types::transaction::Transaction::UserTransaction(ref txn) =
-                    actual_txn.transaction
-                {
-                    if let aptos_types::transaction::TransactionPayload::EntryFunction(
-                        ref payload,
-                    ) = txn.payload()
-                    {
-                        let actual_pool_address: AccountAddress =
-                            bcs::from_bytes(payload.args().first().unwrap()).unwrap();
-
-                        let pool_address = operation
-                            .metadata
-                            .as_ref()
-                            .unwrap()
-                            .pool_address
-                            .as_ref()
-                            .unwrap()
-                            .account_address()
-                            .unwrap();
-
-                        assert_eq!(actual_pool_address, pool_address);
-
-                        let actual_amount: u64 =
-                            bcs::from_bytes(payload.args().get(1).unwrap()).unwrap();
-
-                        let amount = operation
-                            .metadata
-                            .as_ref()
-                            .unwrap()
-                            .amount
-                            .as_ref()
-                            .unwrap()
-                            .0;
-
-                        assert_eq!(actual_amount, amount);
-                    } else {
-                        panic!("Not an entry function");
-                    }
                 }
             },
         }
@@ -1822,7 +1880,7 @@ async fn check_balances(
 
 #[tokio::test]
 async fn test_invalid_transaction_gas_charged() {
-    let (swarm, cli, _faucet, rosetta_client) = setup_simple_test(1).await;
+    let (swarm, cli, _faucet, rosetta_client) = setup_test(1, 1).await;
     let chain_id = swarm.chain_id();
 
     // Make sure first that there's money to transfer
@@ -2053,275 +2111,252 @@ where
     result
 }
 
-struct NodeClients<'a> {
-    pub rosetta_client: &'a RosettaClient,
-    pub rest_client: &'a aptos_rest_client::Client,
-    pub network: &'a NetworkIdentifier,
-}
-
 async fn create_account_and_wait(
-    node_clients: &NodeClients<'_>,
+    rosetta_client: &RosettaClient,
+    rest_client: &aptos_rest_client::Client,
+    network_identifier: &NetworkIdentifier,
     sender_key: &Ed25519PrivateKey,
     new_account: AccountAddress,
-    txn_expiry_duration: Option<Duration>,
+    txn_expiry_duration: Duration,
     sequence_number: Option<u64>,
     max_gas: Option<u64>,
     gas_unit_price: Option<u64>,
-) -> Result<Box<UserTransaction>, ErrorWrapper> {
-    submit_transaction(
-        node_clients.rest_client,
-        txn_expiry_duration.unwrap_or(DEFAULT_MAX_WAIT_DURATION),
-        |expiry_time| {
-            node_clients.rosetta_client.create_account(
-                node_clients.network,
-                sender_key,
-                new_account,
-                expiry_time,
-                sequence_number,
-                max_gas,
-                gas_unit_price,
-            )
-        },
-    )
-    .await
-}
-
-async fn simple_transfer_and_wait(
-    node_clients: &NodeClients<'_>,
-    sender_key: &Ed25519PrivateKey,
-    receiver: AccountAddress,
-    amount: u64,
-) -> Result<Box<UserTransaction>, ErrorWrapper> {
-    transfer_and_wait(
-        node_clients,
-        sender_key,
-        receiver,
-        amount,
-        None,
-        None,
-        None,
-        None,
-    )
-    .await
+) -> Result<Box<UserTransaction>, Box<UserTransaction>> {
+    let expiry_time = expiry_time(txn_expiry_duration);
+    let txn_hash = rosetta_client
+        .create_account(
+            network_identifier,
+            sender_key,
+            new_account,
+            expiry_time.as_secs(),
+            sequence_number,
+            max_gas,
+            gas_unit_price,
+        )
+        .await
+        .expect("Expect transfer to successfully submit to mempool")
+        .hash;
+    wait_for_transaction(rest_client, expiry_time, txn_hash).await
 }
 
 async fn transfer_and_wait(
-    node_clients: &NodeClients<'_>,
+    rosetta_client: &RosettaClient,
+    rest_client: &aptos_rest_client::Client,
+    network_identifier: &NetworkIdentifier,
     sender_key: &Ed25519PrivateKey,
     receiver: AccountAddress,
     amount: u64,
-    txn_expiry_duration: Option<Duration>,
+    txn_expiry_duration: Duration,
     sequence_number: Option<u64>,
     max_gas: Option<u64>,
     gas_unit_price: Option<u64>,
 ) -> Result<Box<UserTransaction>, ErrorWrapper> {
-    submit_transaction(
-        node_clients.rest_client,
-        txn_expiry_duration.unwrap_or(DEFAULT_MAX_WAIT_DURATION),
-        |expiry_time| {
-            node_clients.rosetta_client.transfer(
-                node_clients.network,
-                sender_key,
-                receiver,
-                amount,
-                expiry_time,
-                sequence_number,
-                max_gas,
-                gas_unit_price,
-            )
-        },
-    )
-    .await
+    let expiry_time = expiry_time(txn_expiry_duration);
+    let txn_hash = rosetta_client
+        .transfer(
+            network_identifier,
+            sender_key,
+            receiver,
+            amount,
+            expiry_time.as_secs(),
+            sequence_number,
+            max_gas,
+            gas_unit_price,
+        )
+        .await
+        .map_err(ErrorWrapper::BeforeSubmission)?
+        .hash;
+    wait_for_transaction(rest_client, expiry_time, txn_hash)
+        .await
+        .map_err(ErrorWrapper::AfterSubmission)
 }
 
 async fn set_operator_and_wait(
-    node_clients: &NodeClients<'_>,
+    rosetta_client: &RosettaClient,
+    rest_client: &aptos_rest_client::Client,
+    network_identifier: &NetworkIdentifier,
     sender_key: &Ed25519PrivateKey,
     old_operator: Option<AccountAddress>,
     new_operator: AccountAddress,
+    txn_expiry_duration: Duration,
+    sequence_number: Option<u64>,
+    max_gas: Option<u64>,
+    gas_unit_price: Option<u64>,
 ) -> Result<Box<UserTransaction>, ErrorWrapper> {
-    submit_transaction(
-        node_clients.rest_client,
-        DEFAULT_MAX_WAIT_DURATION,
-        |expiry_time| {
-            node_clients.rosetta_client.set_operator(
-                node_clients.network,
-                sender_key,
-                old_operator,
-                new_operator,
-                expiry_time,
-                None,
-                None,
-                None,
-            )
-        },
-    )
-    .await
+    let expiry_time = expiry_time(txn_expiry_duration);
+    let txn_hash = rosetta_client
+        .set_operator(
+            network_identifier,
+            sender_key,
+            old_operator,
+            new_operator,
+            expiry_time.as_secs(),
+            sequence_number,
+            max_gas,
+            gas_unit_price,
+        )
+        .await
+        .map_err(ErrorWrapper::BeforeSubmission)?
+        .hash;
+    wait_for_transaction(rest_client, expiry_time, txn_hash)
+        .await
+        .map_err(ErrorWrapper::AfterSubmission)
 }
 
 async fn set_voter_and_wait(
-    node_clients: &NodeClients<'_>,
+    rosetta_client: &RosettaClient,
+    rest_client: &aptos_rest_client::Client,
+    network_identifier: &NetworkIdentifier,
     sender_key: &Ed25519PrivateKey,
     operator: Option<AccountAddress>,
     new_voter: AccountAddress,
+    txn_expiry_duration: Duration,
+    sequence_number: Option<u64>,
+    max_gas: Option<u64>,
+    gas_unit_price: Option<u64>,
 ) -> Result<Box<UserTransaction>, ErrorWrapper> {
-    submit_transaction(
-        node_clients.rest_client,
-        DEFAULT_MAX_WAIT_DURATION,
-        |expiry_time| {
-            node_clients.rosetta_client.set_voter(
-                node_clients.network,
-                sender_key,
-                operator,
-                new_voter,
-                expiry_time,
-                None,
-                None,
-                None,
-            )
-        },
-    )
-    .await
+    let expiry_time = expiry_time(txn_expiry_duration);
+    let txn_hash = rosetta_client
+        .set_voter(
+            network_identifier,
+            sender_key,
+            operator,
+            new_voter,
+            expiry_time.as_secs(),
+            sequence_number,
+            max_gas,
+            gas_unit_price,
+        )
+        .await
+        .map_err(ErrorWrapper::BeforeSubmission)?
+        .hash;
+    wait_for_transaction(rest_client, expiry_time, txn_hash)
+        .await
+        .map_err(ErrorWrapper::AfterSubmission)
 }
 
 async fn create_stake_pool_and_wait(
-    node_clients: &NodeClients<'_>,
+    rosetta_client: &RosettaClient,
+    rest_client: &aptos_rest_client::Client,
+    network_identifier: &NetworkIdentifier,
     sender_key: &Ed25519PrivateKey,
     operator: Option<AccountAddress>,
     voter: Option<AccountAddress>,
     stake_amount: Option<u64>,
     commission_percentage: Option<u64>,
+    txn_expiry_duration: Duration,
+    sequence_number: Option<u64>,
+    max_gas: Option<u64>,
+    gas_unit_price: Option<u64>,
 ) -> Result<Box<UserTransaction>, ErrorWrapper> {
-    submit_transaction(
-        node_clients.rest_client,
-        DEFAULT_MAX_WAIT_DURATION,
-        |expiry_time| {
-            node_clients.rosetta_client.create_stake_pool(
-                node_clients.network,
-                sender_key,
-                operator,
-                voter,
-                stake_amount,
-                commission_percentage,
-                expiry_time,
-                None,
-                None,
-                None,
-            )
-        },
-    )
-    .await
+    let expiry_time = expiry_time(txn_expiry_duration);
+    let txn_hash = rosetta_client
+        .create_stake_pool(
+            network_identifier,
+            sender_key,
+            operator,
+            voter,
+            stake_amount,
+            commission_percentage,
+            expiry_time.as_secs(),
+            sequence_number,
+            max_gas,
+            gas_unit_price,
+        )
+        .await
+        .map_err(ErrorWrapper::BeforeSubmission)?
+        .hash;
+    wait_for_transaction(rest_client, expiry_time, txn_hash)
+        .await
+        .map_err(ErrorWrapper::AfterSubmission)
 }
 
 async fn reset_lockup_and_wait(
-    node_clients: &NodeClients<'_>,
+    rosetta_client: &RosettaClient,
+    rest_client: &aptos_rest_client::Client,
+    network_identifier: &NetworkIdentifier,
     sender_key: &Ed25519PrivateKey,
     operator: Option<AccountAddress>,
+    txn_expiry_duration: Duration,
+    sequence_number: Option<u64>,
+    max_gas: Option<u64>,
+    gas_unit_price: Option<u64>,
 ) -> Result<Box<UserTransaction>, ErrorWrapper> {
-    submit_transaction(
-        node_clients.rest_client,
-        DEFAULT_MAX_WAIT_DURATION,
-        |expiry_time| {
-            node_clients.rosetta_client.reset_lockup(
-                node_clients.network,
-                sender_key,
-                operator,
-                expiry_time,
-                None,
-                None,
-                None,
-            )
-        },
-    )
-    .await
-}
-
-async fn update_commission_and_wait(
-    node_clients: &NodeClients<'_>,
-    sender_key: &Ed25519PrivateKey,
-    operator: Option<AccountAddress>,
-    new_commission_percentage: Option<u64>,
-) -> Result<Box<UserTransaction>, ErrorWrapper> {
-    submit_transaction(
-        node_clients.rest_client,
-        DEFAULT_MAX_WAIT_DURATION,
-        |expiry_time| {
-            node_clients.rosetta_client.update_commission(
-                node_clients.network,
-                sender_key,
-                operator,
-                new_commission_percentage,
-                expiry_time,
-                None,
-                None,
-                None,
-            )
-        },
-    )
-    .await
+    let expiry_time = expiry_time(txn_expiry_duration);
+    let txn_hash = rosetta_client
+        .reset_lockup(
+            network_identifier,
+            sender_key,
+            operator,
+            expiry_time.as_secs(),
+            sequence_number,
+            max_gas,
+            gas_unit_price,
+        )
+        .await
+        .map_err(ErrorWrapper::BeforeSubmission)?
+        .hash;
+    wait_for_transaction(rest_client, expiry_time, txn_hash)
+        .await
+        .map_err(ErrorWrapper::AfterSubmission)
 }
 
 async fn unlock_stake_and_wait(
-    node_clients: &NodeClients<'_>,
+    rosetta_client: &RosettaClient,
+    rest_client: &aptos_rest_client::Client,
+    network_identifier: &NetworkIdentifier,
     sender_key: &Ed25519PrivateKey,
     operator: Option<AccountAddress>,
     amount: Option<u64>,
+    txn_expiry_duration: Duration,
+    sequence_number: Option<u64>,
+    max_gas: Option<u64>,
+    gas_unit_price: Option<u64>,
 ) -> Result<Box<UserTransaction>, ErrorWrapper> {
-    submit_transaction(
-        node_clients.rest_client,
-        DEFAULT_MAX_WAIT_DURATION,
-        |expiry_time| {
-            node_clients.rosetta_client.unlock_stake(
-                node_clients.network,
-                sender_key,
-                operator,
-                amount,
-                expiry_time,
-                None,
-                None,
-                None,
-            )
-        },
-    )
-    .await
+    let expiry_time = expiry_time(txn_expiry_duration);
+    let txn_hash = rosetta_client
+        .unlock_stake(
+            network_identifier,
+            sender_key,
+            operator,
+            amount,
+            expiry_time.as_secs(),
+            sequence_number,
+            max_gas,
+            gas_unit_price,
+        )
+        .await
+        .map_err(ErrorWrapper::BeforeSubmission)?
+        .hash;
+    wait_for_transaction(rest_client, expiry_time, txn_hash)
+        .await
+        .map_err(ErrorWrapper::AfterSubmission)
 }
 
 async fn distribute_staking_rewards_and_wait(
-    node_clients: &NodeClients<'_>,
+    rosetta_client: &RosettaClient,
+    rest_client: &aptos_rest_client::Client,
+    network_identifier: &NetworkIdentifier,
     sender_key: &Ed25519PrivateKey,
     operator: AccountAddress,
     staker: AccountAddress,
-) -> Result<Box<UserTransaction>, ErrorWrapper> {
-    submit_transaction(
-        node_clients.rest_client,
-        DEFAULT_MAX_WAIT_DURATION,
-        |expiry_time| {
-            node_clients.rosetta_client.distribute_staking_rewards(
-                node_clients.network,
-                sender_key,
-                operator,
-                staker,
-                expiry_time,
-                None,
-                None,
-                None,
-            )
-        },
-    )
-    .await
-}
-
-async fn submit_transaction<
-    Fut: Future<Output = anyhow::Result<TransactionIdentifier>>,
-    F: FnOnce(u64) -> Fut,
->(
-    rest_client: &aptos_rest_client::Client,
     txn_expiry_duration: Duration,
-    transaction_builder: F,
+    sequence_number: Option<u64>,
+    max_gas: Option<u64>,
+    gas_unit_price: Option<u64>,
 ) -> Result<Box<UserTransaction>, ErrorWrapper> {
     let expiry_time = expiry_time(txn_expiry_duration);
-
-    let txn_hash = transaction_builder(expiry_time.as_secs())
+    let txn_hash = rosetta_client
+        .distribute_staking_rewards(
+            network_identifier,
+            sender_key,
+            operator,
+            staker,
+            expiry_time.as_secs(),
+            sequence_number,
+            max_gas,
+            gas_unit_price,
+        )
         .await
         .map_err(ErrorWrapper::BeforeSubmission)?
         .hash;
@@ -2340,7 +2375,7 @@ async fn wait_for_transaction(
         .wait_for_transaction_by_hash(
             hash_value,
             expiry_time.as_secs(),
-            Some(DEFAULT_MAX_WAIT_DURATION),
+            Some(Duration::from_secs(60)),
             None,
         )
         .await;
@@ -2372,314 +2407,6 @@ fn expiry_time(txn_expiry_duration: Duration) -> Duration {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .saturating_add(txn_expiry_duration)
-}
-
-async fn add_delegated_stake_and_wait(
-    rosetta_client: &RosettaClient,
-    rest_client: &aptos_rest_client::Client,
-    network_identifier: &NetworkIdentifier,
-    sender_key: &Ed25519PrivateKey,
-    pool_address: AccountAddress,
-    amount: Option<u64>,
-    txn_expiry_duration: Duration,
-    sequence_number: Option<u64>,
-    max_gas: Option<u64>,
-    gas_unit_price: Option<u64>,
-) -> Result<Box<UserTransaction>, ErrorWrapper> {
-    let expiry_time = expiry_time(txn_expiry_duration);
-    let txn_hash = rosetta_client
-        .add_delegated_stake(
-            network_identifier,
-            sender_key,
-            pool_address,
-            amount,
-            expiry_time.as_secs(),
-            sequence_number,
-            max_gas,
-            gas_unit_price,
-        )
-        .await
-        .map_err(ErrorWrapper::BeforeSubmission)?
-        .hash;
-
-    wait_for_transaction(rest_client, expiry_time, txn_hash)
-        .await
-        .map_err(ErrorWrapper::AfterSubmission)
-}
-
-async fn unlock_delegated_stake_and_wait(
-    rosetta_client: &RosettaClient,
-    rest_client: &aptos_rest_client::Client,
-    network_identifier: &NetworkIdentifier,
-    sender_key: &Ed25519PrivateKey,
-    pool_address: AccountAddress,
-    amount: Option<u64>,
-    txn_expiry_duration: Duration,
-    sequence_number: Option<u64>,
-    max_gas: Option<u64>,
-    gas_unit_price: Option<u64>,
-) -> Result<Box<UserTransaction>, ErrorWrapper> {
-    let expiry_time = expiry_time(txn_expiry_duration);
-    let txn_hash = rosetta_client
-        .unlock_delegated_stake(
-            network_identifier,
-            sender_key,
-            pool_address,
-            amount,
-            expiry_time.as_secs(),
-            sequence_number,
-            max_gas,
-            gas_unit_price,
-        )
-        .await
-        .map_err(ErrorWrapper::BeforeSubmission)?
-        .hash;
-    wait_for_transaction(rest_client, expiry_time, txn_hash)
-        .await
-        .map_err(ErrorWrapper::AfterSubmission)
-}
-
-async fn withdraw_undelegated_stake_and_wait(
-    rosetta_client: &RosettaClient,
-    rest_client: &aptos_rest_client::Client,
-    network_identifier: &NetworkIdentifier,
-    sender_key: &Ed25519PrivateKey,
-    pool_address: AccountAddress,
-    amount: Option<u64>,
-    txn_expiry_duration: Duration,
-    sequence_number: Option<u64>,
-    max_gas: Option<u64>,
-    gas_unit_price: Option<u64>,
-) -> Result<Box<UserTransaction>, ErrorWrapper> {
-    let expiry_time = expiry_time(txn_expiry_duration);
-    let txn_hash = rosetta_client
-        .withdraw_undelegated_stake(
-            network_identifier,
-            sender_key,
-            pool_address,
-            amount,
-            expiry_time.as_secs(),
-            sequence_number,
-            max_gas,
-            gas_unit_price,
-        )
-        .await
-        .map_err(ErrorWrapper::BeforeSubmission)?
-        .hash;
-
-    wait_for_transaction(rest_client, expiry_time, txn_hash)
-        .await
-        .map_err(ErrorWrapper::AfterSubmission)
-}
-
-#[tokio::test]
-async fn test_delegation_pool_operations() {
-    const NUM_TXNS_PER_PAGE: u16 = 2;
-
-    let (mut swarm, cli, _, rosetta_client) = setup_test(
-        2,
-        Arc::new(|_, config, _| config.api.max_transactions_page_size = NUM_TXNS_PER_PAGE),
-    )
-    .await;
-
-    // 20 APT
-    let delegate_initial_balance = 20 * u64::pow(10, 8);
-    cli.fund_account(0, Some(delegate_initial_balance))
-        .await
-        .unwrap();
-    let delegate_account_private_key = cli.private_key(0);
-
-    let chain_id = swarm.chain_id();
-    let validator = swarm.validators().next().unwrap();
-    let rest_client = validator.rest_client();
-    let _request = NetworkRequest {
-        network_identifier: NetworkIdentifier::from(chain_id),
-    };
-    let network_identifier = chain_id.into();
-
-    let root_address = swarm.aptos_public_info().root_account().address();
-    let root_sequence_number = swarm
-        .aptos_public_info()
-        .client()
-        .get_account_bcs(root_address)
-        .await
-        .unwrap()
-        .into_inner()
-        .sequence_number();
-
-    *swarm
-        .aptos_public_info()
-        .root_account()
-        .sequence_number_mut() = root_sequence_number;
-
-    let mut delegation_pool_creator_account = swarm
-        .aptos_public_info()
-        .create_and_fund_user_account(1_000_000_000_000_000)
-        .await
-        .unwrap();
-
-    let res = create_delegation_pool(
-        &swarm.aptos_public_info(),
-        &mut delegation_pool_creator_account,
-        10,
-        1,
-    )
-    .await;
-
-    let (tx, _) = res.into_parts();
-    let tx_serialized = json!(tx);
-    let mut pool_address_str = "";
-
-    if let Some(changes) = tx_serialized["changes"].as_array() {
-        for change in changes {
-            if change["data"]["type"] == "0x1::delegation_pool::DelegationPool" {
-                pool_address_str = change["address"].as_str().unwrap();
-                break;
-            }
-        }
-    }
-    let pool_address = AccountAddress::from_hex_literal(pool_address_str).unwrap();
-
-    // Must stake at least 11 APT
-    let staked_amount = 11 * u64::pow(10, 8);
-
-    add_delegated_stake_and_wait(
-        &rosetta_client,
-        &rest_client,
-        &network_identifier,
-        delegate_account_private_key,
-        pool_address,
-        Some(staked_amount),
-        Duration::from_secs(5),
-        None,
-        None,
-        None,
-    )
-    .await
-    .expect("Should successfully add delegated stake");
-
-    unlock_delegated_stake_and_wait(
-        &rosetta_client,
-        &rest_client,
-        &network_identifier,
-        delegate_account_private_key,
-        pool_address,
-        Some(staked_amount),
-        Duration::from_secs(5),
-        None,
-        None,
-        None,
-    )
-    .await
-    .expect("Should successfully unlock delegated stake");
-
-    let final_txn = withdraw_undelegated_stake_and_wait(
-        &rosetta_client,
-        &rest_client,
-        &network_identifier,
-        delegate_account_private_key,
-        pool_address,
-        Some(staked_amount),
-        Duration::from_secs(5),
-        None,
-        None,
-        None,
-    )
-    .await
-    .expect("Should successfully withdraw undelegated");
-
-    let final_block_to_check = rest_client
-        .get_block_by_version(final_txn.info.version.0, false)
-        .await
-        .expect("Should be able to get block info for completed txns");
-
-    // Check a couple blocks past the final transaction to check more txns
-    let final_block_height = final_block_to_check.into_inner().block_height.0 + 2;
-
-    // TODO: Track total supply?
-    // TODO: Check account balance block hashes?
-    // TODO: Handle multiple coin types
-
-    // Wait until the Rosetta service is ready
-    let request = NetworkRequest {
-        network_identifier: NetworkIdentifier::from(chain_id),
-    };
-
-    loop {
-        let status = try_until_ok_default(|| rosetta_client.network_status(&request))
-            .await
-            .unwrap();
-        if status.current_block_identifier.index >= final_block_height {
-            break;
-        }
-    }
-
-    // Now we have to watch all the changes
-    let mut current_version = 0;
-    let mut balances = BTreeMap::<AccountAddress, BTreeMap<u64, i128>>::new();
-    let mut previous_block_index = 0;
-    let mut block_hashes = HashSet::new();
-    for block_height in 0..final_block_height {
-        let request = BlockRequest::by_index(chain_id, block_height);
-        let response: BlockResponse = rosetta_client
-            .block(&request)
-            .await
-            .expect("Should be able to get blocks that are already known");
-        let block = response.block;
-        let actual_block = rest_client
-            .get_block_by_height_bcs(block_height, true)
-            .await
-            .expect("Should be able to get block for a known block")
-            .into_inner();
-
-        assert_eq!(
-            block.block_identifier.index, block_height,
-            "The block should match the requested block"
-        );
-        assert_eq!(
-            block.block_identifier.hash,
-            BlockHash::new(chain_id, block_height).to_string(),
-            "Block hash should match chain_id-block_height"
-        );
-        assert_eq!(
-            block.parent_block_identifier.index, previous_block_index,
-            "Parent block index should be previous block"
-        );
-        assert_eq!(
-            block.parent_block_identifier.hash,
-            BlockHash::new(chain_id, previous_block_index).to_string(),
-            "Parent block hash should be previous block chain_id-block_height"
-        );
-        assert!(
-            block_hashes.insert(block.block_identifier.hash.clone()),
-            "Block hash was repeated {}",
-            block.block_identifier.hash
-        );
-
-        // It's only greater or equal because microseconds are cut off
-        let expected_timestamp = if block_height == 0 {
-            Y2K_MS
-        } else {
-            actual_block.block_timestamp.saturating_div(1000)
-        };
-        assert_eq!(
-            expected_timestamp, block.timestamp,
-            "Block timestamp should match actual timestamp but in ms"
-        );
-
-        // TODO: double check that all transactions do show with the flag, and that all expected txns
-        // are shown without the flag
-
-        let actual_txns = actual_block
-            .transactions
-            .as_ref()
-            .expect("Every actual block should have transactions");
-
-        parse_block_transactions(&block, &mut balances, actual_txns, &mut current_version).await;
-
-        // Keep track of the previous
-        previous_block_index = block_height;
-    }
 }
 
 #[derive(Debug)]

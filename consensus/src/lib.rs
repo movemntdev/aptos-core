@@ -17,7 +17,6 @@ extern crate core;
 
 mod block_storage;
 mod consensusdb;
-mod dag;
 mod epoch_manager;
 mod error;
 mod experimental;
@@ -50,9 +49,7 @@ pub mod counters;
 pub mod network_interface;
 mod payload_manager;
 mod sender_aware_shuffler;
-mod transaction_deduper;
 mod transaction_shuffler;
-mod txn_hash_and_authenticator_deduper;
 
 use aptos_metrics_core::IntGauge;
 pub use consensusdb::create_checkpoint;

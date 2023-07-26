@@ -13,17 +13,22 @@ pub struct Options {
     /// Directories where to lookup dependencies.
     #[clap(
         short,
-        num_args = 0..
+        takes_value(true),
+        multiple_values(true),
+        multiple_occurrences(true)
     )]
     pub dependencies: Vec<String>,
     /// Named address mapping.
     #[clap(
         short,
-        num_args = 0..
+        takes_value(true),
+        multiple_values(true),
+        multiple_occurrences(true)
     )]
     pub named_address_mapping: Vec<String>,
     /// Output file name.
-    #[clap(short, long, default_value = "output.yul")]
+    #[clap(short)]
+    #[clap(long, default_value = "output.yul")]
     pub output: String,
     /// Solc executable
     #[clap(long, env = "SOLC_EXE", default_value = "solc")]
@@ -35,10 +40,12 @@ pub struct Options {
     #[clap(long)]
     pub testing: bool,
     /// Active experiments.
+    #[clap(short)]
     #[clap(
-        short,
         long = "experiment",
-        num_args = 0..
+        takes_value(true),
+        multiple_values(true),
+        multiple_occurrences(true)
     )]
     pub experiments: Vec<String>,
     /// Sources to compile (positional arg)
@@ -73,10 +80,4 @@ impl Options {
     pub fn generate_source_info(&self) -> bool {
         !self.testing || self.experiment_on(Experiment::CAPTURE_SOURCE_INFO)
     }
-}
-
-#[test]
-fn verify_tool() {
-    use clap::CommandFactory;
-    Options::command().debug_assert()
 }

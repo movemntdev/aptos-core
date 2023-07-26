@@ -9,21 +9,22 @@ ARCH = "amd64"
 OS = "linux"
 
 IMAGES = {
-    "debian": "debian:bullseye",
-    "rust": "rust:1.70.0-bullseye",
+    "debian-base": "debian:bullseye",
+    "rust-base": "rust:1.66.1-bullseye",
 }
+
 
 def update() -> int:
     script_dir = os.path.dirname(os.path.realpath(__file__))
-    dockerfile_path = os.path.join(script_dir, "..", "docker", "builder", "docker-bake-rust-all.hcl")
+    dockerfile_path = os.path.join(script_dir, "..", "docker", "rust-all.Dockerfile")
 
-    update_exists = False
+    exit_code = 1  # 0 = an update exists, 1 = an update does not exist
 
     for base_image, image_name in IMAGES.items():
         manifest = None
         digest = None
         current_digest = None
-        regex = f"{base_image} = \"docker-image://{image_name}.*\""
+        regex = f"FROM [\S]+ AS {base_image}"
 
         print(f"Update {image_name}")
         manifest_inspect = subprocess.check_output(["docker", "manifest", "inspect", image_name])
@@ -47,8 +48,8 @@ def update() -> int:
             dockerfile_content = f.read()
 
         for line in dockerfile_content.splitlines():
-            if re.search(regex, line):
-                current_digest = line.split("@")[1].split("\"")[0]
+            if re.match(regex, line):
+                current_digest = line.split()[1].split("@")[1]
                 break
             
         if current_digest == None:
@@ -60,25 +61,15 @@ def update() -> int:
             continue
 
         print(f"Found update for {image_name}: {current_digest} -> {digest}")
-        dockerfile_content = re.sub(regex, f"{base_image} = \"docker-image://{image_name}@{digest}\"", dockerfile_content)
+        dockerfile_content = re.sub(regex, f"FROM {image_name}@{digest} AS {base_image}", dockerfile_content)
 
         with open(dockerfile_path, "w") as f:
             f.write(dockerfile_content)
 
-        update_exists = True
+        exit_code = 0
 
-    return update_exists
-
-def write_github_output(key, value) -> None:
-    print(f"GITHUB_OUTPUT: {key}={value}")
-    try:
-        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-            f.write(f"{key}={value}\n")
-    except KeyError:
-        print("GITHUB_OUTPUT environment variable not set")
-        exit()
+    return exit_code
 
 
 if __name__ == "__main__":
-    write_github_output("NEED_UPDATE", update())
-    exit()
+    exit(update())

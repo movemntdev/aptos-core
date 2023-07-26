@@ -9,7 +9,7 @@ use crate::{
     loader::{Function, LoadedFunction, Loader},
     native_extensions::NativeContextExtensions,
     native_functions::{NativeFunction, NativeFunctions},
-    session::{LoadedFunctionInstantiation, SerializedReturnValues},
+    session::{LoadedFunctionInstantiation, SerializedReturnValues, Session},
 };
 use move_binary_format::{
     access::ModuleAccess,
@@ -23,6 +23,7 @@ use move_core_types::{
     account_address::AccountAddress,
     identifier::{IdentStr, Identifier},
     language_storage::{ModuleId, TypeTag},
+    resolver::MoveResolver,
     value::MoveTypeLayout,
     vm_status::StatusCode,
 };
@@ -46,6 +47,22 @@ impl VMRuntime {
         Ok(VMRuntime {
             loader: Loader::new(NativeFunctions::new(natives)?, vm_config),
         })
+    }
+
+    pub fn new_session<'r>(&self, remote: &'r dyn MoveResolver) -> Session<'r, '_> {
+        self.new_session_with_extensions(remote, NativeContextExtensions::default())
+    }
+
+    pub fn new_session_with_extensions<'r>(
+        &self,
+        remote: &'r dyn MoveResolver,
+        native_extensions: NativeContextExtensions<'r>,
+    ) -> Session<'r, '_> {
+        Session {
+            runtime: self,
+            data_cache: TransactionDataCache::new(remote),
+            native_extensions,
+        }
     }
 
     pub(crate) fn publish_module_bundle(

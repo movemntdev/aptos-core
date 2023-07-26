@@ -33,7 +33,6 @@ aptos-types = { workspace = true, features = ["fuzzing"] }
 aptos-vault-client = { workspace = true, features = ["fuzzing"] }
 bcs = { workspace = true }
 byteorder = { workspace = true }
-clap = { workspace = true }
 hex = { workspace = true }
 move-binary-format = { workspace = true, features = ["fuzzing"] }
 move-core-types = { workspace = true, features = ["fuzzing"] }
@@ -44,6 +43,7 @@ proptest-derive = { workspace = true }
 rand = { workspace = true }
 rusty-fork = { workspace = true }
 sha-1 = { workspace = true }
+structopt = { workspace = true }
 
 [dev-dependencies]
 datatest-stable = { workspace = true }

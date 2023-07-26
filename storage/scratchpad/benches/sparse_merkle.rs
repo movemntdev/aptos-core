@@ -13,19 +13,22 @@ use itertools::zip_eq;
 use rand::{distributions::Standard, prelude::StdRng, seq::IteratorRandom, Rng, SeedableRng};
 use std::collections::HashSet;
 
-#[cfg(unix)]
-#[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
-
 struct Block {
     smt: SparseMerkleTree<StateValue>,
-    updates: Vec<(HashValue, Option<StateValue>)>,
+    updates: Vec<Vec<(HashValue, Option<StateValue>)>>,
     proof_reader: ProofReader,
 }
 
 impl Block {
-    fn updates(&self) -> Vec<(HashValue, Option<&StateValue>)> {
-        self.updates.iter().map(|(k, v)| (*k, v.as_ref())).collect()
+    fn updates(&self) -> Vec<Vec<(HashValue, Option<&StateValue>)>> {
+        self.updates
+            .iter()
+            .map(|small_batch| small_batch.iter().map(|(k, v)| (*k, v.as_ref())).collect())
+            .collect()
+    }
+
+    fn updates_flat_batch(&self) -> Vec<(HashValue, Option<&StateValue>)> {
+        self.updates().iter().flatten().cloned().collect()
     }
 }
 
@@ -40,7 +43,7 @@ impl Group {
 
         for block in &self.blocks {
             let block_size = block.updates.len();
-            let one_large_batch = block.updates();
+            let one_large_batch = block.updates_flat_batch();
 
             group.throughput(Throughput::Elements(block_size as u64));
 
@@ -138,7 +141,7 @@ impl Benches {
                     Block {
                         smt: base_block
                             .smt
-                            .batch_update(base_block.updates(), &base_block.proof_reader)
+                            .batch_update(base_block.updates_flat_batch(), &base_block.proof_reader)
                             .unwrap(),
                         updates,
                         proof_reader,
@@ -164,8 +167,8 @@ impl Benches {
         rng: &mut StdRng,
         keys: &[HashValue],
         block_size: usize,
-    ) -> Vec<(HashValue, Option<StateValue>)> {
-        std::iter::repeat_with(|| Self::gen_update(rng, keys))
+    ) -> Vec<Vec<(HashValue, Option<StateValue>)>> {
+        std::iter::repeat_with(|| vec![Self::gen_update(rng, keys), Self::gen_update(rng, keys)])
             .take(block_size)
             .collect()
     }
@@ -185,10 +188,11 @@ impl Benches {
 
     fn gen_proof_reader(
         naive_smt: &mut NaiveSmt,
-        updates: &[(HashValue, Option<StateValue>)],
+        updates: &[Vec<(HashValue, Option<StateValue>)>],
     ) -> ProofReader {
         let proofs = updates
             .iter()
+            .flatten()
             .map(|(key, _)| (*key, naive_smt.get_proof(key)))
             .collect();
         ProofReader::new(proofs)

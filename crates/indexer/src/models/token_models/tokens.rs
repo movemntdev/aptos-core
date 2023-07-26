@@ -403,11 +403,14 @@ impl TableMetadataForToken {
             txn_version,
         )? {
             TokenResource::CollectionResource(collection_resource) => {
-                collection_resource.collection_data.get_handle()
+                collection_resource.collection_data.handle
             },
-            TokenResource::TokenStoreResource(inner) => inner.tokens.get_handle(),
-            TokenResource::PendingClaimsResource(inner) => inner.pending_claims.get_handle(),
+            TokenResource::TokenStoreResource(inner) => inner.tokens.handle,
+            TokenResource::PendingClaimsResource(inner) => inner.pending_claims.handle,
         };
-        Ok(Some(HashMap::from([(table_handle, value)])))
+        Ok(Some(HashMap::from([(
+            standardize_address(&table_handle),
+            value,
+        )])))
     }
 }

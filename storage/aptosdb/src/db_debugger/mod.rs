@@ -3,7 +3,6 @@
 
 pub mod checkpoint;
 mod common;
-mod examine;
 pub mod ledger;
 pub mod state_tree;
 pub mod truncate;
@@ -22,9 +21,6 @@ pub enum Cmd {
     Ledger(ledger::Cmd),
 
     Truncate(truncate::Cmd),
-
-    #[clap(subcommand)]
-    Examine(examine::Cmd),
 }
 
 impl Cmd {
@@ -34,13 +30,6 @@ impl Cmd {
             Cmd::Checkpoint(cmd) => cmd.run(),
             Cmd::Ledger(cmd) => cmd.run(),
             Cmd::Truncate(cmd) => cmd.run(),
-            Cmd::Examine(cmd) => cmd.run(),
         }
     }
-}
-
-#[test]
-fn verify_tool() {
-    use clap::CommandFactory;
-    Cmd::command().debug_assert()
 }

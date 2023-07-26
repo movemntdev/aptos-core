@@ -580,8 +580,8 @@ impl FromOnChainGasSchedule for MiscGasParameters {
     fn from_on_chain_gas_schedule(
         gas_schedule: &BTreeMap<String, u64>,
         feature_version: u64,
-    ) -> Result<Self, String> {
-        Ok(Self {
+    ) -> Option<Self> {
+        Some(Self {
             abs_val: FromOnChainGasSchedule::from_on_chain_gas_schedule(
                 gas_schedule,
                 feature_version,

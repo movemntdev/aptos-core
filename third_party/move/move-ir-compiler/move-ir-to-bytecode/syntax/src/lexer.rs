@@ -403,7 +403,7 @@ impl<'input> Lexer<'input> {
 fn get_name_len(text: &str) -> usize {
     // If the first character is 0..=9 or EOF, then return a length of 0.
     let first_char = text.chars().next().unwrap_or('0');
-    if first_char.is_ascii_digit() {
+    if ('0'..='9').contains(&first_char) {
         return 0;
     }
     text.chars()

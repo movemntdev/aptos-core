@@ -6,7 +6,7 @@ use crate::{Result, Version};
 use anyhow::anyhow;
 use aptos_config::{config::NodeConfig, network_id::NetworkId};
 use aptos_inspection_service::inspection_client::InspectionClient;
-use aptos_rest_client::{AptosBaseUrl, Client as RestClient};
+use aptos_rest_client::Client as RestClient;
 use aptos_sdk::types::PeerId;
 use std::{
     collections::HashMap,
@@ -144,14 +144,12 @@ pub trait NodeExt: Node {
 
     /// Return REST API client of this Node
     fn rest_client_with_timeout(&self, timeout: Duration) -> RestClient {
-        RestClient::builder(AptosBaseUrl::Custom(self.rest_api_endpoint()))
-            .timeout(timeout)
-            .build()
+        RestClient::new_with_timeout(self.rest_api_endpoint(), timeout)
     }
 
     /// Return an InspectionClient for this Node
     fn inspection_client(&self) -> InspectionClient {
-        InspectionClient::new(self.inspection_service_endpoint())
+        InspectionClient::from_url(self.inspection_service_endpoint())
     }
 
     /// Restarts this Node by calling Node::Stop followed by Node::Start
@@ -217,10 +215,8 @@ pub trait NodeExt: Node {
     }
 
     async fn wait_until_healthy(&mut self, deadline: Instant) -> Result<()> {
-        let mut healthcheck_error =
-            HealthCheckError::Unknown(anyhow::anyhow!("No healthcheck performed yet"));
         while Instant::now() < deadline {
-            healthcheck_error = match self.health_check().await {
+            match self.health_check().await {
                 Ok(()) => return Ok(()),
                 Err(HealthCheckError::NotRunning(error)) => {
                     return Err(anyhow::anyhow!(
@@ -230,17 +226,16 @@ pub trait NodeExt: Node {
                         error,
                     ))
                 },
-                Err(e) => e, // For other errors we'll retry
-            };
+                Err(_) => {}, // For other errors we'll retry
+            }
 
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
 
         Err(anyhow::anyhow!(
-            "Timed out waiting for Node {}:{} to be healthy: Error: {:?}",
+            "Timed out waiting for Node {}:{} to be healthy",
             self.name(),
-            self.peer_id(),
-            healthcheck_error
+            self.peer_id()
         ))
     }
 }

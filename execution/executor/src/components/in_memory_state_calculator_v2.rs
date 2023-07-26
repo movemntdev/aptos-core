@@ -6,48 +6,49 @@ use anyhow::{anyhow, ensure, Result};
 use aptos_crypto::{hash::CryptoHash, HashValue};
 use aptos_executor_types::{ParsedTransactionOutput, ProofReader};
 use aptos_scratchpad::SparseMerkleTree;
-use aptos_storage_interface::{
-    cached_state_view::{ShardedStateCache, StateCache},
-    state_delta::StateDelta,
-};
+use aptos_storage_interface::{cached_state_view::StateCache, state_delta::StateDelta};
 use aptos_types::{
     account_address::AccountAddress,
     account_config::CORE_CODE_ADDRESS,
     account_view::AccountView,
     epoch_state::EpochState,
     state_store::{
-        create_empty_sharded_state_updates, state_key::StateKey,
-        state_storage_usage::StateStorageUsage, state_value::StateValue, ShardedStateUpdates,
+        state_key::StateKey, state_storage_usage::StateStorageUsage, state_value::StateValue,
     },
     transaction::Transaction,
     write_set::TransactionWrite,
 };
 use arr_macro::arr;
+use dashmap::DashMap;
 use rayon::prelude::*;
 use std::collections::HashMap;
 
+type ShardedStates = [DashMap<StateKey, Option<StateValue>>; 16];
+
 struct CoreAccountStateView<'a> {
-    base: &'a ShardedStateCache,
-    updates: &'a ShardedStateUpdates,
+    base: &'a ShardedStates,
+    updates: &'a HashMap<StateKey, Option<StateValue>>,
 }
 
 impl<'a> CoreAccountStateView<'a> {
-    pub fn new(base: &'a ShardedStateCache, updates: &'a ShardedStateUpdates) -> Self {
+    pub fn new(
+        base: &'a ShardedStates,
+        updates: &'a HashMap<StateKey, Option<StateValue>>,
+    ) -> Self {
         Self { base, updates }
     }
 }
 
 impl<'a> AccountView for CoreAccountStateView<'a> {
     fn get_state_value(&self, state_key: &StateKey) -> Result<Option<Vec<u8>>> {
-        if let Some(v_opt) = self.updates[state_key.get_shard_id() as usize].get(state_key) {
+        if let Some(v_opt) = self.updates.get(state_key) {
             return Ok(v_opt.as_ref().map(|x| x.bytes().to_vec()));
         }
-        if let Some(entry) = self.base[state_key.get_shard_id() as usize]
+        if let Some(v_opt) = self.base[state_key.get_shard_id() as usize]
             .get(state_key)
             .as_ref()
         {
-            let state_value = entry.value().1.as_ref();
-            return Ok(state_value.map(|x| x.bytes().to_vec()));
+            return Ok(v_opt.as_ref().map(|x| x.bytes().to_vec()));
         }
         Ok(None)
     }
@@ -67,12 +68,11 @@ impl InMemoryStateCalculatorV2 {
         to_keep: &[(Transaction, ParsedTransactionOutput)],
         new_epoch: bool,
     ) -> Result<(
-        Vec<ShardedStateUpdates>,
+        Vec<HashMap<StateKey, Option<StateValue>>>,
         Vec<Option<HashValue>>,
         StateDelta,
         Option<EpochState>,
-        ShardedStateUpdates,
-        ShardedStateCache,
+        HashMap<StateKey, Option<StateValue>>,
     )> {
         ensure!(!to_keep.is_empty(), "Empty block is not allowed.");
         ensure!(
@@ -81,13 +81,10 @@ impl InMemoryStateCalculatorV2 {
             base.base_version,
             base.current_version,
         );
-        base.updates_since_base.iter().try_for_each(|shard| {
-            ensure!(
-                shard.is_empty(),
-                "Updates is not empty, cannot calculate state."
-            );
-            Ok(())
-        })?;
+        ensure!(
+            base.updates_since_base.is_empty(),
+            "Updates is not empty, cannot calculate state."
+        );
 
         let num_txns = to_keep.len();
         for (i, (txn, txn_output)) in to_keep.iter().enumerate() {
@@ -103,15 +100,52 @@ impl InMemoryStateCalculatorV2 {
             // This makes sure all in-mem nodes seen while proofs were fetched stays in mem during the
             // calculation
             frozen_base: _,
-            sharded_state_cache,
+            state_cache,
             proofs,
         } = state_cache;
 
-        let state_updates_vec = Self::get_sharded_state_updates(to_keep);
-        let updates: ShardedStateUpdates = Self::calculate_block_state_updates(&state_updates_vec);
+        let sharded_state_cache = arr![DashMap::new(); 16];
+        // TODO(grao): Move this logic to an earlier stage.
+        {
+            let _timer = APTOS_EXECUTOR_OTHER_TIMERS_SECONDS
+                .with_label_values(&["produce_sharded_state_cache"])
+                .start_timer();
+            state_cache.into_iter().for_each(|(k, v)| {
+                sharded_state_cache[k.get_shard_id() as usize].insert(k, v);
+            });
+        };
+
+        let state_updates_vec = Self::get_state_updates(to_keep);
+        let updates: HashMap<StateKey, Option<StateValue>> = {
+            let _timer = APTOS_EXECUTOR_OTHER_TIMERS_SECONDS
+                .with_label_values(&["calculate_block_state_updates"])
+                .start_timer();
+            state_updates_vec
+                .iter()
+                .flatten()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect()
+        };
+
         let latest_checkpoint = base.current.clone();
-        let usage =
-            Self::calculate_usage(latest_checkpoint.usage(), &sharded_state_cache, &updates);
+        let latest_checkpoint_version = base.current_version;
+        let mut usage = latest_checkpoint.usage();
+        {
+            let _timer = APTOS_EXECUTOR_OTHER_TIMERS_SECONDS
+                .with_label_values(&["calculate_usage"])
+                .start_timer();
+            for (k, v) in &updates {
+                let key_size = k.size();
+                if let Some(ref value) = v {
+                    usage.add_item(key_size + value.size())
+                }
+                if let Some(old_v_opt) = sharded_state_cache[k.get_shard_id() as usize].get(k) {
+                    if let Some(old_v) = old_v_opt.as_ref() {
+                        usage.remove_item(key_size + old_v.size());
+                    }
+                }
+            }
+        }
 
         let next_epoch_state = if new_epoch {
             Some(Self::get_epoch_state(&sharded_state_cache, &updates)?)
@@ -123,7 +157,6 @@ impl InMemoryStateCalculatorV2 {
             let _timer = APTOS_EXECUTOR_OTHER_TIMERS_SECONDS
                 .with_label_values(&["make_checkpoint"])
                 .start_timer();
-            let latest_checkpoint_version = base.current_version;
             let new_checkpoint_version =
                 Some(latest_checkpoint_version.map_or(0, |v| v + 1) + num_txns as u64 - 1);
             let new_checkpoint = Self::make_checkpoint(
@@ -145,7 +178,7 @@ impl InMemoryStateCalculatorV2 {
             new_checkpoint_version,
             new_checkpoint,
             new_checkpoint_version,
-            create_empty_sharded_state_updates(),
+            HashMap::new(),
         );
 
         Ok((
@@ -154,7 +187,6 @@ impl InMemoryStateCalculatorV2 {
             result_state,
             next_epoch_state,
             updates,
-            sharded_state_cache,
         ))
     }
 
@@ -168,106 +200,31 @@ impl InMemoryStateCalculatorV2 {
         }
     }
 
-    fn get_sharded_state_updates(
+    // TODO(grao): Produce sharded output.
+    fn get_state_updates(
         to_keep: &[(Transaction, ParsedTransactionOutput)],
-    ) -> Vec<ShardedStateUpdates> {
-        let _timer = APTOS_EXECUTOR_OTHER_TIMERS_SECONDS
-            .with_label_values(&["get_sharded_state_updates"])
-            .start_timer();
+    ) -> Vec<HashMap<StateKey, Option<StateValue>>> {
         to_keep
             .par_iter()
             .map(|(_, txn_output)| {
-                let mut updates = arr![HashMap::new(); 16];
                 txn_output
                     .write_set()
                     .iter()
-                    .for_each(|(state_key, write_op)| {
-                        updates[state_key.get_shard_id() as usize]
-                            .insert(state_key.clone(), write_op.as_state_value());
-                    });
-                updates
+                    .map(|(state_key, write_op)| (state_key.clone(), write_op.as_state_value()))
+                    .collect()
             })
             .collect()
     }
 
-    fn calculate_block_state_updates(
-        state_updates_vec: &[ShardedStateUpdates],
-    ) -> ShardedStateUpdates {
-        let _timer = APTOS_EXECUTOR_OTHER_TIMERS_SECONDS
-            .with_label_values(&["calculate_block_state_updates"])
-            .start_timer();
-        let mut updates: ShardedStateUpdates = create_empty_sharded_state_updates();
-        updates
-            .par_iter_mut()
-            .enumerate()
-            .for_each(|(i, per_shard_update)| {
-                per_shard_update.extend(
-                    state_updates_vec
-                        .iter()
-                        .flat_map(|hms| &hms[i])
-                        .map(|(k, v)| (k.clone(), v.clone()))
-                        .collect::<Vec<_>>(),
-                )
-            });
-        updates
-    }
-
-    fn calculate_usage(
-        old_usage: StateStorageUsage,
-        sharded_state_cache: &ShardedStateCache,
-        updates: &ShardedStateUpdates,
-    ) -> StateStorageUsage {
-        let _timer = APTOS_EXECUTOR_OTHER_TIMERS_SECONDS
-            .with_label_values(&["calculate_usage"])
-            .start_timer();
-        if old_usage.is_untracked() {
-            return StateStorageUsage::new_untracked();
-        }
-        let (items_delta, bytes_delta) = updates
-            .par_iter()
-            .enumerate()
-            .map(|(i, shard_updates)| {
-                let mut items_delta = 0i64;
-                let mut bytes_delta = 0i64;
-                for (k, v) in shard_updates {
-                    let key_size = k.size();
-                    if let Some(ref value) = v {
-                        items_delta += 1;
-                        bytes_delta += (key_size + value.size()) as i64;
-                    }
-                    if let Some(old_entry) = sharded_state_cache[i].get(k) {
-                        if let (_, Some(old_v)) = old_entry.value() {
-                            items_delta -= 1;
-                            bytes_delta -= (key_size + old_v.size()) as i64;
-                        }
-                    }
-                }
-                (items_delta, bytes_delta)
-            })
-            .reduce(
-                || (0i64, 0i64),
-                |(items_now, bytes_now), (items_delta, bytes_delta)| {
-                    (items_now + items_delta, bytes_now + bytes_delta)
-                },
-            );
-        StateStorageUsage::new(
-            (old_usage.items() as i64 + items_delta) as usize,
-            (old_usage.bytes() as i64 + bytes_delta) as usize,
-        )
-    }
-
     fn make_checkpoint(
         latest_checkpoint: SparseMerkleTree<StateValue>,
-        updates: &ShardedStateUpdates,
+        updates: &HashMap<StateKey, Option<StateValue>>,
         usage: StateStorageUsage,
         proof_reader: ProofReader,
     ) -> Result<SparseMerkleTree<StateValue>> {
         // Update SMT.
-        //
-        // TODO(grao): Consider use the sharded updates directly instead of flatten.
         let smt_updates: Vec<_> = updates
             .iter()
-            .flatten()
             .map(|(key, value)| (key.hash(), value.as_ref()))
             .collect();
         let new_checkpoint =
@@ -278,8 +235,8 @@ impl InMemoryStateCalculatorV2 {
     }
 
     fn get_epoch_state(
-        base: &ShardedStateCache,
-        updates: &ShardedStateUpdates,
+        base: &[DashMap<StateKey, Option<StateValue>>; 16],
+        updates: &HashMap<StateKey, Option<StateValue>>,
     ) -> Result<EpochState> {
         let core_account_view = CoreAccountStateView::new(base, updates);
         let validator_set = core_account_view

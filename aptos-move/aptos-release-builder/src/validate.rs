@@ -1,7 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{aptos_framework_path, components::ProposalMetadata, ExecutionMode, ReleaseConfig};
+use crate::{ExecutionMode, ReleaseConfig};
 use anyhow::Result;
 use aptos::{
     common::types::CliCommand,
@@ -41,6 +41,13 @@ struct CreateProposalEvent {
     proposal_id: U64,
 }
 
+fn aptos_framework_path() -> PathBuf {
+    let mut path = Path::new(env!("CARGO_MANIFEST_DIR")).to_path_buf();
+    path.pop();
+    path.push("framework/aptos-framework");
+    path
+}
+
 impl NetworkConfig {
     pub fn new_from_dir(endpoint: Url, test_dir: &Path) -> Result<Self> {
         let root_key_path = test_dir.join("mint.key");
@@ -66,15 +73,11 @@ impl NetworkConfig {
     /// - Execute this proposal
     ///
     /// We expect all the scripts here to be single step governance proposal.
-    pub async fn submit_and_execute_proposal(
-        &self,
-        metadata: &ProposalMetadata,
-        script_path: Vec<PathBuf>,
-    ) -> Result<()> {
+    pub async fn submit_and_execute_proposal(&self, script_path: Vec<PathBuf>) -> Result<()> {
         let mut proposals = vec![];
         for path in script_path.iter() {
             let proposal_id = self
-                .create_governance_proposal(path.as_path(), metadata, false)
+                .create_governance_proposal(path.as_path(), false)
                 .await?;
             self.vote_proposal(proposal_id).await?;
             proposals.push(proposal_id);
@@ -98,12 +101,11 @@ impl NetworkConfig {
     /// We expect all the scripts here to be multi step governance proposal.
     pub async fn submit_and_execute_multi_step_proposal(
         &self,
-        metadata: &ProposalMetadata,
         script_path: Vec<PathBuf>,
     ) -> Result<()> {
         let first_script = script_path.first().unwrap();
         let proposal_id = self
-            .create_governance_proposal(first_script.as_path(), metadata, true)
+            .create_governance_proposal(first_script.as_path(), true)
             .await?;
         self.vote_proposal(proposal_id).await?;
         // Wait for the proposal to resolve.
@@ -167,7 +169,6 @@ impl NetworkConfig {
     pub async fn create_governance_proposal(
         &self,
         script_path: &Path,
-        metadata: &ProposalMetadata,
         is_multi_step: bool,
     ) -> Result<u64> {
         println!("Creating proposal: {:?}", script_path);
@@ -175,21 +176,12 @@ impl NetworkConfig {
         let address_string = format!("{}", self.validator_account);
         let privkey_string = hex::encode(self.validator_key.to_bytes());
 
-        let metadata_path = TempPath::new();
-        metadata_path.create_as_file()?;
-        fs::write(
-            metadata_path.path(),
-            serde_json::to_string_pretty(metadata)?,
-        )?;
-
         let mut args = vec![
             "",
             "--pool-address",
             address_string.as_str(),
             "--script-path",
             script_path.to_str().unwrap(),
-            "--metadata-path",
-            metadata_path.path().to_str().unwrap(),
             "--metadata-url",
             "https://raw.githubusercontent.com/aptos-labs/aptos-core/b4fb9acfc297327c43d030def2b59037c4376611/testsuite/smoke-test/src/upgrade_multi_step_test_metadata.txt",
             "--sender-account",
@@ -363,17 +355,17 @@ async fn execute_release(
     let scripts_path = TempPath::new();
     scripts_path.create_as_dir()?;
 
-    let proposal_folder = if let Some(dir) = &output_dir {
-        dir.as_path()
-    } else {
-        scripts_path.path()
-    };
-    release_config.generate_release_proposal_scripts(proposal_folder)?;
+    release_config.generate_release_proposal_scripts(
+        if let Some(dir) = &output_dir {
+            dir.as_path()
+        } else {
+            scripts_path.path()
+        },
+    )?;
 
     for proposal in release_config.proposals {
-        let mut proposal_path = proposal_folder.to_path_buf();
+        let mut proposal_path = scripts_path.path().to_path_buf();
         proposal_path.push("sources");
-        proposal_path.push(&release_config.name);
         proposal_path.push(proposal.name.as_str());
 
         let mut script_paths: Vec<PathBuf> = std::fs::read_dir(proposal_path.as_path())?
@@ -394,7 +386,7 @@ async fn execute_release(
             ExecutionMode::MultiStep => {
                 network_config.set_fast_resolve(30).await?;
                 network_config
-                    .submit_and_execute_multi_step_proposal(&proposal.metadata, script_paths)
+                    .submit_and_execute_multi_step_proposal(script_paths)
                     .await?;
 
                 network_config.set_fast_resolve(43200).await?;
@@ -403,7 +395,7 @@ async fn execute_release(
                 network_config.set_fast_resolve(30).await?;
                 // Single step governance proposal;
                 network_config
-                    .submit_and_execute_proposal(&proposal.metadata, script_paths)
+                    .submit_and_execute_proposal(script_paths)
                     .await?;
                 network_config.set_fast_resolve(43200).await?;
             },

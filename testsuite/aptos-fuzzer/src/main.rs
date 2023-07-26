@@ -4,63 +4,68 @@
 //! Helpers for fuzz testing.
 
 use aptos_fuzzer::{commands, FuzzTarget};
-use clap::Parser;
+use once_cell::sync::Lazy;
 use std::{env, ffi::OsString, fs, path::PathBuf};
+use structopt::StructOpt;
 
-#[derive(Debug, Parser)]
-#[clap(name = "fuzzer", about = "Aptos fuzzer")]
+#[derive(Debug, StructOpt)]
+#[structopt(name = "fuzzer", about = "Aptos fuzzer")]
 struct Opt {
     /// Print extended debug output
-    #[clap(long = "debug")]
+    #[structopt(long = "debug")]
     debug: bool,
-    #[clap(subcommand)]
+    #[structopt(subcommand)]
     cmd: Command,
 }
 
 /// The default number of items to generate in a corpus.
 const GENERATE_DEFAULT_ITEMS: usize = 128;
+/// A stringified form of `GENERATE_DEFAULT_ITEMS`.
+///
+/// Required because structopt only accepts strings as default values.
+static GENERATE_DEFAULT_ITEMS_STR: Lazy<String> = Lazy::new(|| GENERATE_DEFAULT_ITEMS.to_string());
 
-#[derive(Debug, Parser)]
+#[derive(Debug, StructOpt)]
 enum Command {
     /// Generate corpus for a particular fuzz target
-    #[clap(name = "generate")]
+    #[structopt(name = "generate")]
     Generate {
         /// Number of items to generate in the corpus
-        #[clap(
-            short = 'n',
+        #[structopt(
+            short = "n",
             long = "num-items",
-            default_value_t = GENERATE_DEFAULT_ITEMS
+            default_value = &GENERATE_DEFAULT_ITEMS_STR
         )]
         num_items: usize,
         /// Custom directory for corpus output to be stored in (required if not running under
         /// `cargo run`)
-        #[clap(long = "corpus-dir", value_parser)]
+        #[structopt(long = "corpus-dir", parse(from_os_str))]
         corpus_dir: Option<PathBuf>,
-        #[clap(name = "TARGET")]
+        #[structopt(name = "TARGET")]
         /// Name of target to generate (use `list` to list)
         target: FuzzTarget,
     },
     /// Run fuzzer on specified target (must be run under `cargo run`)
-    #[clap(name = "fuzz")]
+    #[structopt(name = "fuzz", usage = "fuzzer fuzz <TARGET> -- [ARGS]")]
     Fuzz {
         /// Target to fuzz (use `list` to list targets)
-        #[clap(name = "TARGET", required = true)]
+        #[structopt(name = "TARGET", required = true)]
         target: FuzzTarget,
         /// Custom directory for corpus
-        #[clap(long = "corpus-dir", value_parser)]
+        #[structopt(long = "corpus-dir", parse(from_os_str))]
         corpus_dir: Option<PathBuf>,
         /// Custom directory for artifacts
-        #[clap(long = "artifact-dir", value_parser)]
+        #[structopt(long = "artifact-dir", parse(from_os_str))]
         artifact_dir: Option<PathBuf>,
         /// Arguments for `cargo fuzz run`
-        #[clap(name = "ARGS", value_parser, allow_hyphen_values = true)]
+        #[structopt(name = "ARGS", parse(from_os_str), allow_hyphen_values = true)]
         args: Vec<OsString>,
     },
     /// List fuzz targets
-    #[clap(name = "list")]
+    #[structopt(name = "list")]
     List {
         /// Only print out names, no descriptions.
-        #[clap(long = "no-desc", short = 'n')]
+        #[structopt(long = "no-desc", short = "n")]
         no_desc: bool,
     },
 }
@@ -101,7 +106,7 @@ fn default_dir(target: FuzzTarget, intermediate_dir: &str) -> (PathBuf, bool) {
 }
 
 fn main() {
-    let opt: Opt = Opt::parse();
+    let opt: Opt = Opt::from_args();
 
     match opt.cmd {
         Command::Generate {
@@ -143,10 +148,4 @@ fn main() {
             commands::list_targets(no_desc);
         },
     }
-}
-
-#[test]
-fn verify_tool() {
-    use clap::CommandFactory;
-    Opt::command().debug_assert()
 }

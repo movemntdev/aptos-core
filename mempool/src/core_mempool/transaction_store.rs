@@ -8,12 +8,14 @@ use crate::{
             AccountTransactions, MultiBucketTimelineIndex, ParkingLotIndex, PriorityIndex,
             PriorityQueueIter, TTLIndex,
         },
-        mempool::Mempool,
-        transaction::{InsertionInfo, MempoolTransaction, TimelineState},
+        transaction::{MempoolTransaction, TimelineState},
         TxnPointer,
     },
     counters,
-    counters::{BROADCAST_BATCHED_LABEL, BROADCAST_READY_LABEL, CONSENSUS_READY_LABEL},
+    counters::{
+        BROADCAST_BATCHED_LABEL, BROADCAST_READY_LABEL, CONSENSUS_READY_LABEL, E2E_LABEL,
+        LOCAL_LABEL,
+    },
     logging::{LogEntry, LogEvent, LogSchema, TxnsLog},
     shared_mempool::types::MultiBucketTimelineIndexIds,
 };
@@ -156,13 +158,18 @@ impl TransactionStore {
         }
     }
 
-    pub(crate) fn get_insertion_info_and_bucket(
+    /// Return (SystemTime, is the timestamp for end-to-end)
+    pub(crate) fn get_insertion_time_and_bucket(
         &self,
         address: &AccountAddress,
         sequence_number: u64,
-    ) -> Option<(&InsertionInfo, &str)> {
+    ) -> Option<(&SystemTime, bool, &str)> {
         if let Some(txn) = self.get_mempool_txn(address, sequence_number) {
-            return Some((&txn.insertion_info, self.get_bucket(txn.ranking_score)));
+            return Some((
+                &txn.insertion_time,
+                txn.timeline_state != TimelineState::NonQualified,
+                self.get_bucket(txn.ranking_score),
+            ));
         }
         None
     }
@@ -375,40 +382,34 @@ impl TransactionStore {
     fn log_ready_transaction(
         ranking_score: u64,
         bucket: &str,
-        insertion_info: InsertionInfo,
+        time_delta: Duration,
         broadcast_ready: bool,
     ) {
-        if let Ok(time_delta) = SystemTime::now().duration_since(insertion_info.insertion_time) {
-            let submitted_by = insertion_info.submitted_by_label();
-            if broadcast_ready {
-                counters::core_mempool_txn_commit_latency(
-                    CONSENSUS_READY_LABEL,
-                    submitted_by,
-                    bucket,
-                    time_delta,
-                );
-                counters::core_mempool_txn_commit_latency(
-                    BROADCAST_READY_LABEL,
-                    submitted_by,
-                    bucket,
-                    time_delta,
-                );
-            } else {
-                counters::core_mempool_txn_commit_latency(
-                    CONSENSUS_READY_LABEL,
-                    submitted_by,
-                    bucket,
-                    time_delta,
-                );
-            }
-        }
-
         if broadcast_ready {
+            counters::core_mempool_txn_commit_latency(
+                CONSENSUS_READY_LABEL,
+                E2E_LABEL,
+                bucket,
+                time_delta,
+            );
+            counters::core_mempool_txn_commit_latency(
+                BROADCAST_READY_LABEL,
+                E2E_LABEL,
+                bucket,
+                time_delta,
+            );
             counters::core_mempool_txn_ranking_score(
                 BROADCAST_READY_LABEL,
                 BROADCAST_READY_LABEL,
                 bucket,
                 ranking_score,
+            );
+        } else {
+            counters::core_mempool_txn_commit_latency(
+                CONSENSUS_READY_LABEL,
+                LOCAL_LABEL,
+                bucket,
+                time_delta,
             );
         }
         counters::core_mempool_txn_ranking_score(
@@ -438,12 +439,14 @@ impl TransactionStore {
                 }
 
                 if process_ready {
-                    Self::log_ready_transaction(
-                        txn.ranking_score,
-                        self.timeline_index.get_bucket(txn.ranking_score),
-                        txn.insertion_info,
-                        process_broadcast_ready,
-                    );
+                    if let Ok(time_delta) = SystemTime::now().duration_since(txn.insertion_time) {
+                        Self::log_ready_transaction(
+                            txn.ranking_score,
+                            self.timeline_index.get_bucket(txn.ranking_score),
+                            time_delta,
+                            process_broadcast_ready,
+                        );
+                    }
                 }
 
                 // Remove txn from parking lot after it has been promoted to
@@ -600,18 +603,22 @@ impl TransactionStore {
                         if let TimelineState::Ready(timeline_id) = txn.timeline_state {
                             last_timeline_id[i] = timeline_id;
                         }
-                        let bucket = self.timeline_index.get_bucket(txn.ranking_score);
-                        Mempool::log_txn_latency(
-                            txn.insertion_info,
-                            bucket,
-                            BROADCAST_BATCHED_LABEL,
-                        );
-                        counters::core_mempool_txn_ranking_score(
-                            BROADCAST_BATCHED_LABEL,
-                            BROADCAST_BATCHED_LABEL,
-                            bucket,
-                            txn.ranking_score,
-                        );
+                        if let Ok(time_delta) = SystemTime::now().duration_since(txn.insertion_time)
+                        {
+                            let bucket = self.timeline_index.get_bucket(txn.ranking_score);
+                            counters::core_mempool_txn_commit_latency(
+                                BROADCAST_BATCHED_LABEL,
+                                E2E_LABEL,
+                                bucket,
+                                time_delta,
+                            );
+                            counters::core_mempool_txn_ranking_score(
+                                BROADCAST_BATCHED_LABEL,
+                                BROADCAST_BATCHED_LABEL,
+                                bucket,
+                                txn.ranking_score,
+                            );
+                        }
                     }
                 }
             }
@@ -651,7 +658,7 @@ impl TransactionStore {
         for key in self.system_ttl_index.iter().take(20) {
             if let Some(txn) = self.get_mempool_txn(&key.address, key.sequence_number) {
                 if !txn.was_parked {
-                    oldest_insertion_time = Some(txn.insertion_info.insertion_time);
+                    oldest_insertion_time = Some(txn.insertion_time);
                     break;
                 }
             }
@@ -733,9 +740,7 @@ impl TransactionStore {
                     let account = txn.get_sender();
                     let txn_sequence_number = txn.sequence_info.transaction_sequence_number;
                     gc_txns_log.add_with_status(account, txn_sequence_number, status);
-                    if let Ok(time_delta) =
-                        SystemTime::now().duration_since(txn.insertion_info.insertion_time)
-                    {
+                    if let Ok(time_delta) = SystemTime::now().duration_since(txn.insertion_time) {
                         counters::CORE_MEMPOOL_GC_LATENCY
                             .with_label_values(&[metric_label, status])
                             .observe(time_delta.as_secs_f64());
@@ -768,12 +773,7 @@ impl TransactionStore {
                 } else {
                     "ready"
                 };
-                txns_log.add_full_metadata(
-                    *account,
-                    *seq_num,
-                    status,
-                    txn.insertion_info.insertion_time,
-                );
+                txns_log.add_full_metadata(*account, *seq_num, status, txn.insertion_time);
             }
         }
         txns_log

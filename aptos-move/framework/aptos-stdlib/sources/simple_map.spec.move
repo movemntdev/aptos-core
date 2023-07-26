@@ -24,14 +24,6 @@ spec aptos_std::simple_map {
         pragma intrinsic;
     }
 
-    spec new {
-        pragma intrinsic;
-    }
-
-    spec new_from {
-        pragma intrinsic;
-    }
-
     spec create {
         pragma intrinsic;
     }
@@ -56,23 +48,11 @@ spec aptos_std::simple_map {
         pragma intrinsic;
     }
 
-    spec add_all {
-        pragma intrinsic;
-    }
-
     spec remove {
         pragma intrinsic;
     }
 
     spec find {
-        pragma verify=false;
-    }
-
-    spec keys {
-        pragma verify=false;
-    }
-
-    spec values {
         pragma verify=false;
     }
 

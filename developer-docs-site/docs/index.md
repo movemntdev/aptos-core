@@ -51,7 +51,7 @@ See the newest Aptos releases in the [Latest Releases](./releases/index.md) list
   <div class="col">
     <div class="card card-body h-100 d-flex flex-column">
     <a href="move/move-on-aptos" class="card-title card-link stretched-link"> <h2>Move on Aptos</h2></a>
-    <p class="card-text">Learn how the Move programming language helps make the Aptos blockchain safe and reliable.</p>
+    <p class="card-text">Learn how Move works on the Aptos blockchain.</p>
     </div>
   </div>
   <div class="col">
@@ -125,7 +125,7 @@ See the newest Aptos releases in the [Latest Releases](./releases/index.md) list
 Aptos offers the ability to run a local testnet, as well as provides a shared devnet and testnet. See the [System Integrators Guide](guides/system-integrators-guide.md#networks) for a summary of the available networks and the means to connect to them.
 
 :::tip Aptos Devnet Resets
-The Aptos devnet is reset every Thursday. See the latest updates in the [Aptos Discord](https://discord.gg/aptosnetwork).
+The Aptos devnet is reset every Thursday. See the latest updates in the [Aptos Discord](https://discord.gg/aptoslabs).
 :::info
 
 :::
@@ -134,7 +134,7 @@ The Aptos devnet is reset every Thursday. See the latest updates in the [Aptos D
 
 We are excited that you are here, and we look forward to getting to know you. Welcome to the Aptos community! Find out more about us and exchange ideas at:
 
-* [Discord](https://discord.gg/aptosnetwork)
+* [Discord](https://discord.gg/aptoslabs)
 * [Stack Overflow](https://stackoverflow.com/questions/tagged/aptos)
 * [Forum](https://forum.aptoslabs.com/)
 * [Medium](https://medium.com/aptoslabs)

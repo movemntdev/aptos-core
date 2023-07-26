@@ -1,60 +1,63 @@
 ---
 remote_endpoint: ~
-name: "v1.6"
 proposals:
+  - name: enable_signature_checker
+    metadata:
+      title: "Enable the new signature checker"
+      description: "This enables the improved signature checker implementation."
+      source_code_url: "TBD"
+      discussion_url: "https://github.com/aptos-labs/aptos-core/pull/7856"
+    execution_mode: MultiStep
+    update_sequence:
+    - FeatureFlag:
+        enabled:
+          - signature_checker_v2
+        disabled: []
+  - name: enable_struct_constructor
+    metadata:
+      title: "Enable Struct Constructor Feature"
+      description: "AIP-25: Enable some select set of structs as valid parameters to entry and view functions."
+      source_code_url: "TBD"
+      discussion_url: "https://github.com/aptos-foundation/AIPs/issues/104"
+    execution_mode: MultiStep
+    update_sequence:
+    - FeatureFlag:
+        enabled:
+          - struct_constructors
+        disabled: []
   - name: upgrade_framework
     metadata:
-      title: "Multi-step proposal to upgrade mainnet framework to v1.6"
-      description: "This includes changes outlined in https://github.com/aptos-labs/aptos-core/releases/aptos-node-v1.6"
+      title: "Multi-step proposal to upgrade mainnet framework to v1.4.0"
+      description: "This includes changes outlined in https://github.com/aptos-labs/aptos-core/releases/aptos-node-v1.4.0. Struct constructor, generic cryptography algebra, ed25519 returns false if wrong length, quorum store, and transaction shuffling will be enabled in separate proposals."
+      source_code_url: "TBD"
+      discussion_url: "TBD"
     execution_mode: MultiStep
     update_sequence:
       - DefaultGas
       - Framework:
           bytecode_version: 6
           git_hash: ~
-  - name: enable_fee_payer
+  - name: enable_ed25519_pubkey_validate_return_false_wrong_length
     metadata:
-      title: "Enable fee payer"
-      description: "AIP-39: Support secondary fee payer to pay gas cost on behalf of the sender."
-      source_code_url: "https://github.com/aptos-labs/aptos-core/pull/8904"
-      discussion_url: "https://github.com/aptos-foundation/AIPs/blob/main/aips/aip-39.md"
+      title: "Enable ed25519_pubkey_validate_return_false_wrong_length"
+      description: "AIP-23: Make ed25519 public key validation return none if key has the wrong length."
+      source_code_url: "TBD"
+      discussion_url: "https://github.com/aptos-foundation/AIPs/issues/102"
     execution_mode: MultiStep
     update_sequence:
     - FeatureFlag:
         enabled:
-          - gas_payer_enabled
-  - name: enable_block_gas_limit
+          - ed25519_pubkey_validate_return_false_wrong_length
+        disabled: []
+  - name: enable_transaction_shuffling
     metadata:
-      title: "Enable Block Gas Limit"
-      description: "AIP-33: The block gas limit is a feature that terminates block execution when the gas consumed by the committed prefix of transactions exceeds the limit, thus providing predictable latency."
-      discussion_url: "https://github.com/aptos-foundation/AIPs/issues/132"
+      title: "Enable Transaction Shuffling"
+      description: "AIP-27: Sender Aware Transaction Shuffling"
+      source_code_url: "TBD"
+      discussion_url: "https://github.com/aptos-foundation/AIPs/issues/109"
     execution_mode: MultiStep
     update_sequence:
     - Execution:
-        V2:
+        V1:
           transaction_shuffler_type:
             sender_aware_v1: 32
-          block_gas_limit : 35000
-  - name: enable_aptos_unique_identifiers
-    metadata:
-      title: "Enable Aptos Unique Identifiers"
-      description: "AIP-36: Support for aptos unique identifiers (generated using native function generate_unique_address)"
-      discussion_url: "https://github.com/aptos-foundation/AIPs/issues/154"
-    execution_mode: MultiStep
-    update_sequence:
-    - FeatureFlag:
-        enabled:
-          - aptos_unique_identifiers
-  - name: enable_partial_voting
-    metadata:
-      title: "Enable partial voting"
-      description: "AIP-28:  Partial voting for on chain governance."
-      source_code_url: "https://github.com/aptos-labs/aptos-core/pull/8090"
-      discussion_url: "https://github.com/aptos-foundation/AIPs/blob/main/aips/aip-28.md"
-    execution_mode: MultiStep
-    update_sequence:
-    - RawScript: /aptos/aptos-move/aptos-release-builder/data/proposals/aip_28_initialization.move
-    - FeatureFlag:
-        enabled:
-          - partial_governance_voting
-          - delegation_pool_partial_governance_voting

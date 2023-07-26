@@ -28,7 +28,6 @@ impl NetworkLoadTest for QuorumStoreOnChainEnableTest {
     fn test(
         &self,
         swarm: &mut dyn aptos_forge::Swarm,
-        _report: &mut aptos_forge::TestReport,
         duration: std::time::Duration,
     ) -> anyhow::Result<()> {
         let runtime = Runtime::new().unwrap();
@@ -108,7 +107,7 @@ impl NetworkLoadTest for QuorumStoreOnChainEnableTest {
 }
 
 impl NetworkTest for QuorumStoreOnChainEnableTest {
-    fn run(&self, ctx: &mut aptos_forge::NetworkContext<'_>) -> anyhow::Result<()> {
+    fn run<'t>(&self, ctx: &mut aptos_forge::NetworkContext<'t>) -> anyhow::Result<()> {
         <dyn NetworkLoadTest>::run(self, ctx)
     }
 }

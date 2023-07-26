@@ -36,16 +36,6 @@ impl AccountIdentifier {
         str_to_account_address(self.address.as_str())
     }
 
-    pub fn pool_address(&self) -> ApiResult<Option<AccountAddress>> {
-        if let Some(sub_account) = &self.sub_account {
-            if let Some(metadata) = &sub_account.metadata {
-                return str_to_account_address(metadata.pool_address.as_str()).map(Some);
-            }
-        }
-
-        Ok(None)
-    }
-
     pub fn base_account(address: AccountAddress) -> Self {
         AccountIdentifier {
             address: to_hex_lower(&address),
@@ -142,30 +132,6 @@ impl AccountIdentifier {
         }
     }
 
-    pub fn is_delegator_active_stake(&self) -> bool {
-        if let Some(ref inner) = self.sub_account {
-            inner.is_delegator_active_stake()
-        } else {
-            false
-        }
-    }
-
-    pub fn is_delegator_inactive_stake(&self) -> bool {
-        if let Some(ref inner) = self.sub_account {
-            inner.is_delegator_inactive_stake()
-        } else {
-            false
-        }
-    }
-
-    pub fn is_delegator_pending_inactive_stake(&self) -> bool {
-        if let Some(ref inner) = self.sub_account {
-            inner.is_delegator_pending_inactive_stake()
-        } else {
-            false
-        }
-    }
-
     pub fn is_operator_stake(&self) -> bool {
         if let Some(ref inner) = self.sub_account {
             !(inner.is_total_stake()
@@ -201,9 +167,6 @@ fn str_to_account_address(address: &str) -> Result<AccountAddress, ApiError> {
 pub struct SubAccountIdentifier {
     /// Hex encoded AccountAddress beginning with 0x
     pub address: String,
-    /// Metadata only used for delegated staking
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<SubAccountIdentifierMetadata>,
 }
 
 const STAKE: &str = "stake";
@@ -217,78 +180,36 @@ impl SubAccountIdentifier {
     pub fn new_total_stake() -> SubAccountIdentifier {
         SubAccountIdentifier {
             address: STAKE.to_string(),
-            metadata: None,
         }
     }
 
     pub fn new_pending_active_stake() -> SubAccountIdentifier {
         SubAccountIdentifier {
             address: PENDING_ACTIVE_STAKE.to_string(),
-            metadata: None,
         }
     }
 
     pub fn new_active_stake() -> SubAccountIdentifier {
         SubAccountIdentifier {
             address: ACTIVE_STAKE.to_string(),
-            metadata: None,
         }
     }
 
     pub fn new_pending_inactive_stake() -> SubAccountIdentifier {
         SubAccountIdentifier {
             address: PENDING_INACTIVE_STAKE.to_string(),
-            metadata: None,
         }
     }
 
     pub fn new_inactive_stake() -> SubAccountIdentifier {
         SubAccountIdentifier {
             address: INACTIVE_STAKE.to_string(),
-            metadata: None,
-        }
-    }
-
-    pub fn new_delegated_total_stake(pool: &str) -> SubAccountIdentifier {
-        SubAccountIdentifier {
-            address: STAKE.to_string(),
-            metadata: Some(SubAccountIdentifierMetadata::new_pool_address(
-                AccountAddress::from_str(pool).unwrap(),
-            )),
-        }
-    }
-
-    pub fn new_delegated_active_stake(pool: &str) -> SubAccountIdentifier {
-        SubAccountIdentifier {
-            address: ACTIVE_STAKE.to_string(),
-            metadata: Some(SubAccountIdentifierMetadata::new_pool_address(
-                AccountAddress::from_str(pool).unwrap(),
-            )),
-        }
-    }
-
-    pub fn new_delegated_pending_inactive_stake(pool: &str) -> SubAccountIdentifier {
-        SubAccountIdentifier {
-            address: PENDING_INACTIVE_STAKE.to_string(),
-            metadata: Some(SubAccountIdentifierMetadata::new_pool_address(
-                AccountAddress::from_str(pool).unwrap(),
-            )),
-        }
-    }
-
-    pub fn new_delegated_inactive_stake(pool: &str) -> SubAccountIdentifier {
-        SubAccountIdentifier {
-            address: INACTIVE_STAKE.to_string(),
-            metadata: Some(SubAccountIdentifierMetadata::new_pool_address(
-                AccountAddress::from_str(pool).unwrap(),
-            )),
         }
     }
 
     pub fn new_operator_stake(operator: AccountAddress) -> SubAccountIdentifier {
         SubAccountIdentifier {
             address: format!("{}-{}", STAKE, to_hex_lower(&operator)),
-            metadata: None,
         }
     }
 
@@ -301,27 +222,15 @@ impl SubAccountIdentifier {
     }
 
     pub fn is_active_stake(&self) -> bool {
-        self.address.as_str() == ACTIVE_STAKE && self.metadata.is_none()
+        self.address.as_str() == ACTIVE_STAKE
     }
 
     pub fn is_pending_inactive_stake(&self) -> bool {
-        self.address.as_str() == PENDING_INACTIVE_STAKE && self.metadata.is_none()
+        self.address.as_str() == PENDING_INACTIVE_STAKE
     }
 
     pub fn is_inactive_stake(&self) -> bool {
-        self.address.as_str() == INACTIVE_STAKE && self.metadata.is_none()
-    }
-
-    pub fn is_delegator_active_stake(&self) -> bool {
-        self.address.as_str() == ACTIVE_STAKE && self.metadata.is_some()
-    }
-
-    pub fn is_delegator_inactive_stake(&self) -> bool {
-        self.address.as_str() == INACTIVE_STAKE && self.metadata.is_some()
-    }
-
-    pub fn is_delegator_pending_inactive_stake(&self) -> bool {
-        self.address.as_str() == PENDING_INACTIVE_STAKE && self.metadata.is_some()
+        self.address.as_str() == INACTIVE_STAKE
     }
 
     pub fn operator_address(&self) -> ApiResult<AccountAddress> {
@@ -339,20 +248,6 @@ impl SubAccountIdentifier {
             "Sub account isn't an operator address {:?}",
             self
         ))))
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct SubAccountIdentifierMetadata {
-    /// Hex encoded Pool beginning with 0x
-    pub pool_address: String,
-}
-
-impl SubAccountIdentifierMetadata {
-    pub fn new_pool_address(pool_address: AccountAddress) -> Self {
-        SubAccountIdentifierMetadata {
-            pool_address: to_hex_lower(&pool_address),
-        }
     }
 }
 

@@ -59,11 +59,11 @@ where `<address>` is a valid [named or literal address](./address.md).
 For example:
 
 ```move
-module 0x42::example {
+module 0x42::test {
     struct Example has copy, drop { i: u64 }
 
     use std::debug;
-    friend 0x42::another_example;
+    friend 0x42::another_test;
 
     const ONE: u64 = 1;
 
@@ -75,19 +75,19 @@ module 0x42::example {
 }
 ```
 
-The `module 0x42::example` part specifies that the module `example` will be published under the [account address](./address.md) `0x42` in [global storage](./global-storage-structure.md).
+The `module 0x42::test` part specifies that the module `test` will be published under the [account address](./address.md) `0x42` in [global storage](./global-storage-structure.md).
 
 Modules can also be declared using [named addresses](./address.md). For example:
 
 ```move
-module example_addr::example {
+module test_addr::test {
     struct Example has copy, drop { a: address }
 
     use std::debug;
-    friend example_addr::another_example;
+    friend test_addr::another_test;
 
     public fun print() {
-        let example = Example { a: @example_addr };
+        let example = Example { a: @test_addr };
         debug::print(&example)
     }
 }

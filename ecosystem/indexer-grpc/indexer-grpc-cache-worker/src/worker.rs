@@ -7,13 +7,12 @@ use crate::metrics::{
 };
 use aptos_indexer_grpc_utils::{
     cache_operator::CacheOperator,
-    config::IndexerGrpcFileStoreConfig,
+    config::IndexerGrpcConfig,
     create_grpc_client,
-    file_store_operator::{
-        FileStoreMetadata, FileStoreOperator, GcsFileStoreOperator, LocalFileStoreOperator,
-    },
+    file_store_operator::{FileStoreMetadata, FileStoreOperator},
     time_diff_since_pb_timestamp_in_secs,
 };
+use aptos_logger::{error, info};
 use aptos_moving_average::MovingAverage;
 use aptos_protos::internal::fullnode::v1::{
     stream_status::StatusType, transactions_from_node_response::Response,
@@ -21,18 +20,19 @@ use aptos_protos::internal::fullnode::v1::{
 };
 use futures::{self, StreamExt};
 use prost::Message;
-use tracing::{error, info};
 
 type ChainID = u32;
 type StartingVersion = u64;
+
+const WORKER_RESTART_DELAY_IF_METADATA_NOT_FOUND_IN_SECS: u64 = 60;
 
 pub struct Worker {
     /// Redis client.
     redis_client: redis::Client,
     /// Fullnode grpc address.
     fullnode_grpc_address: String,
-    /// File store config
-    file_store: IndexerGrpcFileStoreConfig,
+    /// File store bucket name.
+    pub file_store_bucket_name: String,
 }
 
 /// GRPC data status enum is to identify the data frame.
@@ -57,17 +57,14 @@ pub(crate) enum GrpcDataStatus {
 }
 
 impl Worker {
-    pub async fn new(
-        fullnode_grpc_address: String,
-        redis_main_instance_address: String,
-        file_store: IndexerGrpcFileStoreConfig,
-    ) -> Self {
-        let redis_client = redis::Client::open(format!("redis://{}", redis_main_instance_address))
+    pub async fn new(config: IndexerGrpcConfig) -> Self {
+        let redis_client = redis::Client::open(format!("redis://{}", config.redis_address))
             .expect("Create redis client failed.");
         Self {
             redis_client,
-            file_store,
-            fullnode_grpc_address: format!("http://{}", fullnode_grpc_address),
+            // The fullnode grpc address is required.
+            fullnode_grpc_address: format!("http://{}", config.fullnode_grpc_address.unwrap()),
+            file_store_bucket_name: config.file_store_bucket_name,
         }
     }
 
@@ -84,33 +81,31 @@ impl Worker {
         loop {
             let conn = self
                 .redis_client
-                .get_tokio_connection_manager()
+                .get_tokio_connection()
                 .await
                 .expect("Get redis connection failed.");
+
             let mut rpc_client = create_grpc_client(self.fullnode_grpc_address.clone()).await;
 
             // 1. Fetch metadata.
-            let file_store_operator: Box<dyn FileStoreOperator> = match &self.file_store {
-                IndexerGrpcFileStoreConfig::GcsFileStore(gcs_file_store) => {
-                    Box::new(GcsFileStoreOperator::new(
-                        gcs_file_store.gcs_file_store_bucket_name.clone(),
-                        gcs_file_store
-                            .gcs_file_store_service_account_key_path
-                            .clone(),
-                    ))
-                },
-                IndexerGrpcFileStoreConfig::LocalFileStore(local_file_store) => Box::new(
-                    LocalFileStoreOperator::new(local_file_store.local_file_store_path.clone()),
-                ),
-            };
-
+            let file_store_operator = FileStoreOperator::new(self.file_store_bucket_name.clone());
             file_store_operator.verify_storage_bucket_existence().await;
-            let starting_version = file_store_operator
-                .get_starting_version()
-                .await
-                .unwrap_or(0);
-
+            let mut starting_version = 0;
             let file_store_metadata = file_store_operator.get_file_store_metadata().await;
+
+            if let Some(metadata) = file_store_metadata {
+                info!("[Indexer Cache] File store metadata: {:?}", metadata);
+                starting_version = metadata.version;
+            } else {
+                error!("[Indexer Cache] File store is empty. Exit after 1 minute.");
+                tokio::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(
+                        WORKER_RESTART_DELAY_IF_METADATA_NOT_FOUND_IN_SECS,
+                    ))
+                    .await;
+                    std::process::exit(1);
+                });
+            }
 
             // 2. Start streaming RPC.
             let request = tonic::Request::new(GetTransactionsFromNodeRequest {
@@ -131,7 +126,7 @@ impl Worker {
 
 async fn process_transactions_from_node_response(
     response: TransactionsFromNodeResponse,
-    cache_operator: &mut CacheOperator<redis::aio::ConnectionManager>,
+    cache_operator: &mut CacheOperator<redis::aio::Connection>,
 ) -> anyhow::Result<GrpcDataStatus> {
     match response.response.unwrap() {
         Response::Status(status) => {
@@ -197,10 +192,10 @@ async fn process_transactions_from_node_response(
 
 /// Setup the cache operator with init signal, includeing chain id and starting version from fullnode.
 async fn setup_cache_with_init_signal(
-    conn: redis::aio::ConnectionManager,
+    conn: redis::aio::Connection,
     init_signal: TransactionsFromNodeResponse,
 ) -> (
-    CacheOperator<redis::aio::ConnectionManager>,
+    CacheOperator<redis::aio::Connection>,
     ChainID,
     StartingVersion,
 ) {
@@ -231,7 +226,7 @@ async fn setup_cache_with_init_signal(
 
 // Infinite streaming processing. Retry if error happens; crash if fatal.
 async fn process_streaming_response(
-    conn: redis::aio::ConnectionManager,
+    conn: redis::aio::Connection,
     file_store_metadata: Option<FileStoreMetadata>,
     mut resp_stream: impl futures_core::Stream<Item = Result<TransactionsFromNodeResponse, tonic::Status>>
         + std::marker::Unpin,
@@ -286,7 +281,7 @@ async fn process_streaming_response(
                     PROCESSED_VERSIONS_COUNT.inc_by(num_of_transactions);
                     LATEST_PROCESSED_VERSION.set(current_version as i64);
                     PROCESSED_BATCH_SIZE.set(num_of_transactions as i64);
-                    info!(
+                    aptos_logger::info!(
                         start_version = start_version,
                         num_of_transactions = num_of_transactions,
                         "[Indexer Cache] Data chunk received.",
@@ -304,7 +299,7 @@ async fn process_streaming_response(
                     start_version,
                     num_of_transactions,
                 } => {
-                    info!(
+                    aptos_logger::info!(
                         start_version = start_version,
                         num_of_transactions = num_of_transactions,
                         "[Indexer Cache] End signal received for current batch.",

@@ -80,7 +80,7 @@ pub struct Test {
     /// Use the EVM-based execution backend.
     /// Does not work with --stackless.
     #[cfg(feature = "evm-backend")]
-    #[clap(long = "evm")]
+    #[structopt(long = "evm")]
     pub evm: bool,
 }
 

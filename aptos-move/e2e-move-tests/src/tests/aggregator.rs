@@ -117,11 +117,10 @@ fn test_aggregator_underflow() {
     let txn2 = add(&mut h, &acc, 0, 400);
     let txn3 = sub(&mut h, &acc, 0, 500);
 
+    // Currently we panic on going below zero.
     assert_success!(h.run(txn1));
     assert_success!(h.run(txn2));
-
-    // Value dropped below zero - abort with EAGGREGATOR_UNDERFLOW.
-    assert_abort!(h.run(txn3), 131074);
+    h.run(txn3);
 }
 
 #[test]
@@ -145,11 +144,10 @@ fn test_aggregator_overflow() {
     let txn2 = add(&mut h, &acc, 0, 400);
     let txn3 = add(&mut h, &acc, 0, 201);
 
+    // Currently we panic on exceeding the limit.
     assert_success!(h.run(txn1));
     assert_success!(h.run(txn2));
-
-    // Limit exceeded - abort with EAGGREGATOR_OVERFLOW.
-    assert_abort!(h.run(txn3), 131073);
+    h.run(txn3);
 }
 
 #[test]
@@ -159,7 +157,7 @@ fn test_aggregator_materialize_overflow() {
     let txn1 = new(&mut h, &acc, 0, 399);
     let txn2 = materialize_and_add(&mut h, &acc, 0, 400);
 
-    // Overflow on materialized value leads to abort with EAGGREGATOR_OVERFLOW.
+    // Underflow on materialized value leads to abort with EAGGREGATOR_OVERFLOW.
     assert_success!(h.run(txn1));
     assert_abort!(h.run(txn2), 131073);
 }

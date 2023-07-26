@@ -68,10 +68,13 @@ module dao_platform::bucket_table {
         let hash = sip_hash_from_value(&key);
         let index = bucket_index(map.level, map.num_buckets, hash);
         let bucket = table_with_length::borrow_mut(&mut map.buckets, index);
-        vector::for_each_ref(bucket, |entry| {
-            let entry: &Entry<K, V> = entry;
+        let i = 0;
+        let len = vector::length(bucket);
+        while (i < len) {
+            let entry = vector::borrow(bucket, i);
             assert!(&entry.key != &key, error::invalid_argument(EALREADY_EXIST));
-        });
+            i = i + 1;
+        };
         vector::push_back(bucket, Entry {hash, key, value});
         map.len = map.len + 1;
 
@@ -174,10 +177,16 @@ module dao_platform::bucket_table {
     public fun contains<K, V>(map: &BucketTable<K, V>, key: &K): bool {
         let index = bucket_index(map.level, map.num_buckets, sip_hash_from_value(key));
         let bucket = table_with_length::borrow(&map.buckets, index);
-        vector::any(bucket, |entry| {
-            let entry: &Entry<K, V> = entry;
-            &entry.key == key
-        })
+        let i = 0;
+        let len = vector::length(bucket);
+        while (i < len) {
+            let entry = vector::borrow(bucket, i);
+            if (&entry.key == key) {
+                return true
+            };
+            i = i + 1;
+        };
+        false
     }
 
     /// Remove from `table` and return the value which `key` maps to.

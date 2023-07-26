@@ -14,7 +14,6 @@ use aptos_types::{
     access_path::AccessPath,
     account_address::AccountAddress,
     account_config::CORE_CODE_ADDRESS,
-    block_executor::partitioner::{ExecutableTransactions, SubBlocksForShard},
     chain_id::ChainId,
     contract_event::ContractEvent,
     event::EventKey,
@@ -24,17 +23,17 @@ use aptos_types::{
     },
     state_store::state_key::StateKey,
     transaction::{
-        ChangeSet, ExecutionStatus, RawTransaction, Script, SignedTransaction, Transaction,
-        TransactionArgument, TransactionOutput, TransactionPayload, TransactionStatus,
-        WriteSetPayload,
+        ChangeSet, ExecutionStatus, NoOpChangeSetChecker, RawTransaction, Script,
+        SignedTransaction, Transaction, TransactionArgument, TransactionOutput, TransactionPayload,
+        TransactionStatus, WriteSetPayload,
     },
     vm_status::{StatusCode, VMStatus},
     write_set::{WriteOp, WriteSet, WriteSetMut},
 };
-use aptos_vm::{sharded_block_executor::ShardedBlockExecutor, VMExecutor};
+use aptos_vm::VMExecutor;
 use move_core_types::{language_storage::TypeTag, move_resource::MoveResource};
 use once_cell::sync::Lazy;
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 #[derive(Debug)]
 enum MockVMTransaction {
@@ -58,17 +57,12 @@ pub static DISCARD_STATUS: Lazy<TransactionStatus> =
 
 pub struct MockVM;
 
-impl TransactionBlockExecutor for MockVM {
+impl TransactionBlockExecutor<Transaction> for MockVM {
     fn execute_transaction_block(
-        transactions: ExecutableTransactions<Transaction>,
+        transactions: Vec<Transaction>,
         state_view: CachedStateView,
-        maybe_block_gas_limit: Option<u64>,
     ) -> Result<ChunkOutput> {
-        ChunkOutput::by_transaction_execution::<MockVM>(
-            transactions,
-            state_view,
-            maybe_block_gas_limit,
-        )
+        ChunkOutput::by_transaction_execution::<MockVM>(transactions, state_view)
     }
 }
 
@@ -76,7 +70,6 @@ impl VMExecutor for MockVM {
     fn execute_block(
         transactions: Vec<Transaction>,
         state_view: &impl StateView,
-        _maybe_block_gas_limit: Option<u64>,
     ) -> Result<Vec<TransactionOutput>, VMStatus> {
         if state_view.is_genesis() {
             assert_eq!(
@@ -119,7 +112,7 @@ impl VMExecutor for MockVM {
                 read_state_value_from_storage(
                     state_view,
                     &access_path_for_config(ValidatorSet::CONFIG_ID)
-                        .map_err(|_| VMStatus::error(StatusCode::TOO_MANY_TYPE_NODES, None))?,
+                        .map_err(|_| VMStatus::Error(StatusCode::TOO_MANY_TYPE_NODES, None))?,
                 );
                 read_state_value_from_storage(
                     state_view,
@@ -205,15 +198,6 @@ impl VMExecutor for MockVM {
         }
 
         Ok(outputs)
-    }
-
-    fn execute_block_sharded<S: StateView + Sync + Send + 'static>(
-        _sharded_block_executor: &ShardedBlockExecutor<S>,
-        _block: Vec<SubBlocksForShard<Transaction>>,
-        _state_view: Arc<S>,
-        _maybe_block_gas_limit: Option<u64>,
-    ) -> std::result::Result<Vec<TransactionOutput>, VMStatus> {
-        todo!()
     }
 }
 
@@ -382,10 +366,9 @@ fn encode_transaction(sender: AccountAddress, program: Script) -> Transaction {
 }
 
 pub fn encode_reconfiguration_transaction() -> Transaction {
-    Transaction::GenesisTransaction(WriteSetPayload::Direct(ChangeSet::new(
-        WriteSet::default(),
-        vec![],
-    )))
+    Transaction::GenesisTransaction(WriteSetPayload::Direct(
+        ChangeSet::new(WriteSet::default(), vec![], &NoOpChangeSetChecker).unwrap(),
+    ))
 }
 
 fn decode_transaction(txn: &SignedTransaction) -> MockVMTransaction {
@@ -423,6 +406,7 @@ fn decode_transaction(txn: &SignedTransaction) -> MockVMTransaction {
         TransactionPayload::Multisig(_) => {
             unimplemented!("MockVM does not support multisig transaction payload.")
         },
+
         // Deprecated. Will be removed in the future.
         TransactionPayload::ModuleBundle(_) => {
             unimplemented!("MockVM does not support Module transaction payload.")

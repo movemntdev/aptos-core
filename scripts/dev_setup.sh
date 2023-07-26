@@ -415,11 +415,6 @@ function install_toolchain {
 }
 
 function install_rustup_components_and_nightly {
-    echo "Printing the rustup version and toolchain list"
-    rustup --version
-    rustup show
-    rustup toolchain list -v
-
     echo "Updating rustup and installing rustfmt & clippy"
     rustup update
     rustup component add rustfmt
@@ -427,25 +422,8 @@ function install_rustup_components_and_nightly {
 
     # We require nightly for strict rust formatting
     echo "Installing the nightly toolchain and rustfmt nightly"
-    if ! rustup toolchain install nightly
-    then
-      if [[ "$(uname)" == "Linux" ]]; then
-        # TODO: remove this once we have an answer: https://github.com/rust-lang/rustup/issues/3390
-        echo "Failed to install the nightly toolchain using rustup! Falling back to an older linux build at 2023-06-01."
-        rustup toolchain install nightly-2023-06-01 # Fix the date to avoid flakiness
-
-        # Rename the toolchain to nightly (crazy... see: https://github.com/rust-lang/rustup/issues/1299).
-        # Note: this only works for linux. The primary purpose is to unblock CI/CD on flakes.
-        mv ~/.rustup/toolchains/nightly-2023-06-01-x86_64-unknown-linux-gnu ~/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu
-      else
-        echo "Failed to install the nightly toolchain using rustup! Manual installation is required!"
-      fi
-    fi
-
-    if ! rustup component add rustfmt --toolchain nightly
-    then
-      echo "Failed to install rustfmt nightly using rustup."
-    fi
+    rustup toolchain install nightly
+    rustup component add rustfmt --toolchain nightly
 }
 
 function install_cargo_sort {
@@ -492,11 +470,8 @@ function install_dotnet {
     fi
     # Below we need to (a) set TERM variable because the .net installer expects it and it is not set
     # in some environments (b) use bash not sh because the installer uses bash features.
-    # NOTE: use wget to better follow the redirect
-    wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh
-    chmod +x dotnet-install.sh
-    ./dotnet-install.sh --channel $DOTNET_VERSION --install-dir "${DOTNET_INSTALL_DIR}" --version latest
-    rm dotnet-install.sh
+    curl -sSL https://dot.net/v1/dotnet-install.sh \
+        | TERM=linux /bin/bash -s -- --channel $DOTNET_VERSION --install-dir "${DOTNET_INSTALL_DIR}" --version latest
   else
     echo Dotnet already installed.
   fi
@@ -527,7 +502,9 @@ function install_z3 {
     Z3_PKG="z3-$Z3_VERSION-x64-glibc-2.31"
   elif [[ "$(uname)" == "Darwin" ]]; then
     if [[ "$(uname -m)" == "arm64" ]]; then
-      Z3_PKG="z3-$Z3_VERSION-arm64-osx-11.0"
+      # brew has a newer, arm64-native version
+      brew install z3
+      return
     else
       Z3_PKG="z3-$Z3_VERSION-x64-osx-10.16"
     fi
@@ -562,7 +539,11 @@ function install_cvc5 {
   if [[ "$(uname)" == "Linux" ]]; then
     CVC5_PKG="cvc5-Linux"
   elif [[ "$(uname)" == "Darwin" ]]; then
-    CVC5_PKG="cvc5-macOS"
+    if [[ "$(uname -m)" == "arm64" ]]; then
+      CVC5_PKG="cvc5-macOS-arm64"
+    else
+      CVC5_PKG="cvc5-macOS"
+    fi
   else
     echo "cvc5 support not configured for this platform (uname=$(uname))"
     return
@@ -675,14 +656,6 @@ function install_lld {
   fi
 }
 
-# this is needed for hdpi crate from aptos-ledger
-function install_libudev-dev {
-  # Need to install libudev-dev for linux
-  if [[ "$(uname)" == "Linux" ]]; then
-    install_pkg libudev-dev "$PACKAGE_MANAGER"
-  fi
-}
-
 function welcome_message {
 cat <<EOF
 Welcome to Aptos!
@@ -782,12 +755,7 @@ EOF
 }
 
 BATCH_MODE=false;
-# set verbose if not interactive.
-if [[ ! ( -t 2 ) ]]; then
-    VERBOSE=true;
-else
 VERBOSE=false;
-fi
 INSTALL_BUILD_TOOLS=false;
 OPERATIONS=false;
 INSTALL_PROFILE=false;
@@ -1041,8 +1009,6 @@ fi
 
 install_python3
 pip3 install pre-commit
-
-install_libudev-dev
 
 # For now best effort install, will need to improve later
 if command -v pre-commit; then

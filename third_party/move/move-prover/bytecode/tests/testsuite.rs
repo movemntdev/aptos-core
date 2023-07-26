@@ -13,6 +13,7 @@ use move_stackless_bytecode::{
     clean_and_optimize::CleanAndOptimizeProcessor,
     data_invariant_instrumentation::DataInvariantInstrumentationProcessor,
     eliminate_imm_refs::EliminateImmRefsProcessor,
+    escape_analysis::EscapeAnalysisProcessor,
     function_target_pipeline::{
         FunctionTargetPipeline, FunctionTargetsHolder, ProcessorResultDisplay,
     },
@@ -25,6 +26,7 @@ use move_stackless_bytecode::{
     options::ProverOptions,
     print_targets_for_test,
     reaching_def_analysis::ReachingDefProcessor,
+    read_write_set_analysis::ReadWriteSetProcessor,
     spec_instrumentation::SpecInstrumentationProcessor,
     usage_analysis::UsageProcessor,
     verification_analysis::VerificationAnalysisProcessor,
@@ -79,6 +81,11 @@ fn get_tested_transformation_pipeline(
             pipeline.add_processor(ReachingDefProcessor::new());
             pipeline.add_processor(LiveVarAnalysisProcessor::new());
             pipeline.add_processor(BorrowAnalysisProcessor::new());
+            Ok(Some(pipeline))
+        },
+        "escape_analysis" => {
+            let mut pipeline = FunctionTargetPipeline::default();
+            pipeline.add_processor(Box::new(EscapeAnalysisProcessor {}));
             Ok(Some(pipeline))
         },
         "memory_instr" => {
@@ -175,6 +182,11 @@ fn get_tested_transformation_pipeline(
             pipeline.add_processor(SpecInstrumentationProcessor::new());
             pipeline.add_processor(GlobalInvariantAnalysisProcessor::new());
             pipeline.add_processor(GlobalInvariantInstrumentationProcessor::new());
+            Ok(Some(pipeline))
+        },
+        "read_write_set" => {
+            let mut pipeline = FunctionTargetPipeline::default();
+            pipeline.add_processor(Box::new(ReadWriteSetProcessor {}));
             Ok(Some(pipeline))
         },
         "mono_analysis" => {

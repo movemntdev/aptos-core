@@ -62,7 +62,7 @@ impl AccountGenerator {
 pub struct AccountCache {
     generator: AccountGenerator,
     pub accounts: VecDeque<LocalAccount>,
-    pub rng: StdRng,
+    rng: StdRng,
 }
 
 impl AccountCache {
@@ -113,6 +113,7 @@ impl AccountCache {
             .map(|i| self.accounts[i].address())
             .collect();
         let sender = &mut self.accounts[sender_idx];
+
         (sender, receivers)
     }
 }

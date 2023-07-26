@@ -4,8 +4,8 @@
 use crate::smoke_test_environment::new_local_swarm_with_aptos;
 use anyhow::ensure;
 use aptos_forge::{
-    args::TransactionTypeArg, EmitJobMode, EmitJobRequest, EntryPoints, NodeExt, Result, Swarm,
-    TransactionType, TxnEmitter, TxnStats,
+    EmitJobMode, EmitJobRequest, EntryPoints, NodeExt, Result, Swarm, TransactionType, TxnEmitter,
+    TxnStats,
 };
 use aptos_sdk::{transaction_builder::TransactionFactory, types::PeerId};
 use rand::{rngs::OsRng, SeedableRng};
@@ -66,9 +66,10 @@ async fn test_txn_emmitter() {
             //     20,
             // )],
             // vec![
-            //     (TransactionTypeArg::CoinTransfer.materialize_default(), 20),
+            //     (TransactionType::default_coin_transfer(), 20),
             //     // // commenting this out given it consistently fails smoke test
             //     // // and it seems to be called only from `test_txn_emmitter`
+            //     // (TransactionType::NftMintAndTransfer, 20),
             //     (
             //         TransactionType::PublishPackage {
             //             use_account_pool: false,
@@ -77,13 +78,10 @@ async fn test_txn_emmitter() {
             //     ),
             // ],
             vec![
-                (TransactionTypeArg::NoOp.materialize(100, false), 20),
+                // (TransactionType::default_call_different_modules(), 20),
                 (
                     TransactionType::CallCustomModules {
-                        entry_point: EntryPoints::MakeOrChangeTable {
-                            offset: 0,
-                            count: 60,
-                        },
+                        entry_point: EntryPoints::TokenV1MintAndStoreNFTParallel,
                         num_modules: 1,
                         use_account_pool: false,
                     },

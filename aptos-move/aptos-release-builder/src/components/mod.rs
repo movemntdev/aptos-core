@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use self::framework::FrameworkReleaseConfig;
-use crate::{aptos_framework_path, components::feature_flags::Features, release_builder_path};
+use crate::components::feature_flags::Features;
 use anyhow::{anyhow, bail, Result};
 use aptos::governance::GenerateExecutionHash;
 use aptos_rest_client::Client;
@@ -35,7 +35,6 @@ pub mod version;
 
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct ReleaseConfig {
-    pub name: String,
     pub remote_endpoint: Option<Url>,
     pub proposals: Vec<Proposal>,
 }
@@ -48,18 +47,12 @@ pub struct Proposal {
     pub update_sequence: Vec<ReleaseEntry>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default, Eq, PartialEq)]
 pub struct ProposalMetadata {
     title: String,
     description: String,
-    #[serde(default = "default_url")]
     source_code_url: String,
-    #[serde(default = "default_url")]
     discussion_url: String,
-}
-
-fn default_url() -> String {
-    "https://github.com/aptos-labs/aptos-core".to_string()
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Eq, PartialEq)]
@@ -205,7 +198,8 @@ impl ReleaseEntry {
                 }
             },
             ReleaseEntry::RawScript(script_path) => {
-                let base_path = release_builder_path().join(script_path.as_path());
+                let base_path =
+                    PathBuf::from(std::env!("CARGO_MANIFEST_DIR")).join(script_path.as_path());
                 let file_name = base_path
                     .file_name()
                     .and_then(|name| name.to_str())
@@ -345,16 +339,9 @@ impl ReleaseConfig {
         std::fs::create_dir(source_dir.as_path())
             .map_err(|err| anyhow!("Fail to create folder for source: {:?}", err))?;
 
-        source_dir.push(&self.name);
-        std::fs::create_dir(source_dir.as_path())
-            .map_err(|err| anyhow!("Fail to create folder for source: {:?}", err))?;
-
         let mut metadata_dir = base_path.to_path_buf();
         metadata_dir.push("metadata");
 
-        std::fs::create_dir(metadata_dir.as_path())
-            .map_err(|err| anyhow!("Fail to create folder for metadata: {:?}", err))?;
-        metadata_dir.push(&self.name);
         std::fs::create_dir(metadata_dir.as_path())
             .map_err(|err| anyhow!("Fail to create folder for metadata: {:?}", err))?;
 
@@ -363,7 +350,6 @@ impl ReleaseConfig {
         for proposal in &self.proposals {
             let mut proposal_dir = base_path.to_path_buf();
             proposal_dir.push("sources");
-            proposal_dir.push(&self.name);
             proposal_dir.push(proposal.name.as_str());
 
             std::fs::create_dir(proposal_dir.as_path())
@@ -466,7 +452,6 @@ impl ReleaseConfig {
 impl Default for ReleaseConfig {
     fn default() -> Self {
         ReleaseConfig {
-            name: "TestingConfig".to_string(),
             remote_endpoint: None,
             proposals: vec![
                 Proposal {
@@ -537,7 +522,6 @@ pub fn get_execution_hash(result: &Vec<(String, String)>) -> Vec<u8> {
 
         let (_, hash) = GenerateExecutionHash {
             script_path: Option::from(move_script_path),
-            framework_local_dir: Some(aptos_framework_path()),
         }
         .generate_hash()
         .unwrap();
@@ -562,22 +546,9 @@ fn append_script_hash(raw_script: String) -> String {
 
     let (_, hash) = GenerateExecutionHash {
         script_path: Option::from(move_script_path),
-        framework_local_dir: Some(aptos_framework_path()),
     }
     .generate_hash()
     .unwrap();
 
     format!("// Script hash: {} \n{}", hash, raw_script)
-}
-
-impl Default for ProposalMetadata {
-    fn default() -> Self {
-        ProposalMetadata {
-            title: "default".to_string(),
-            description: "default".to_string(),
-            // Aptos CLI need a valid url for the two fields.
-            source_code_url: default_url(),
-            discussion_url: default_url(),
-        }
-    }
 }

@@ -17,7 +17,7 @@ use move_core_types::{
 use std::{collections::BTreeSet, sync::Arc};
 
 pub struct MoveVM {
-    pub(crate) runtime: VMRuntime,
+    runtime: VMRuntime,
 }
 
 impl MoveVM {
@@ -52,27 +52,23 @@ impl MoveVM {
     ///     publishing flow: you can keep using the same Move VM if you publish some modules in a Session
     ///     and apply the effects to the storage when the Session ends.
     pub fn new_session<'r>(&self, remote: &'r dyn MoveResolver) -> Session<'r, '_> {
-        self.new_session_with_extensions(remote, NativeContextExtensions::default())
+        self.runtime.new_session(remote)
     }
 
     /// Create a new session, as in `new_session`, but provide native context extensions.
     pub fn new_session_with_extensions<'r>(
         &self,
         remote: &'r dyn MoveResolver,
-        native_extensions: NativeContextExtensions<'r>,
+        extensions: NativeContextExtensions<'r>,
     ) -> Session<'r, '_> {
-        Session {
-            move_vm: self,
-            data_cache: TransactionDataCache::new(remote),
-            native_extensions,
-        }
+        self.runtime.new_session_with_extensions(remote, extensions)
     }
 
     /// Load a module into VM's code cache
-    pub fn load_module(
+    pub fn load_module<'r>(
         &self,
         module_id: &ModuleId,
-        remote: &dyn MoveResolver,
+        remote: &'r dyn MoveResolver,
     ) -> VMResult<Arc<CompiledModule>> {
         self.runtime
             .loader()
@@ -124,10 +120,7 @@ impl MoveVM {
     ///
     /// TODO: in the new loader architecture, as the loader is visible to the adapter, one would
     ///   call this directly via the loader instead of the VM.
-    pub fn with_module_metadata<T, F>(&self, module: &ModuleId, f: F) -> Option<T>
-    where
-        F: FnOnce(&[Metadata]) -> Option<T>,
-    {
-        f(&self.runtime.loader().get_module(module)?.module().metadata)
+    pub fn get_module_metadata(&self, module: ModuleId, key: &[u8]) -> Option<Metadata> {
+        self.runtime.loader().get_metadata(module, key)
     }
 }

@@ -4,7 +4,7 @@
 use crate::{
     async_proof_fetcher::AsyncProofFetcher, metrics::TIMER, state_view::DbStateView, DbReader,
 };
-use anyhow::Result;
+use anyhow::{format_err, Result};
 use aptos_crypto::{hash::CryptoHash, HashValue};
 use aptos_scratchpad::{FrozenSparseMerkleTree, SparseMerkleTree, StateStoreStatus};
 use aptos_state_view::{StateViewId, TStateView};
@@ -16,14 +16,11 @@ use aptos_types::{
     transaction::Version,
     write_set::WriteSet,
 };
-use arr_macro::arr;
-use core::fmt;
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use std::{
     collections::{HashMap, HashSet},
-    fmt::{Debug, Formatter},
     sync::Arc,
 };
 
@@ -34,12 +31,6 @@ static IO_POOL: Lazy<rayon::ThreadPool> = Lazy::new(|| {
         .build()
         .unwrap()
 });
-
-// Sharded by StateKey.get_shard_id(). The version in the value indicates there is an entry on that
-// version for the given StateKey, and the version is the maximum one which <= the base version. It
-// will be None if the value is None, or we found the value on the speculative tree (in that case
-// we don't know the maximum version).
-pub type ShardedStateCache = [DashMap<StateKey, (Option<Version>, Option<StateValue>)>; 16];
 
 /// `CachedStateView` is like a snapshot of the global state comprised of state view at two
 /// levels, persistent storage and memory.
@@ -94,14 +85,8 @@ pub struct CachedStateView {
     /// completely and migrate to fine grained storage. A value of None in this cache reflects that
     /// the corresponding key has been deleted. This is a temporary hack until we support deletion
     /// in JMT node.
-    sharded_state_cache: ShardedStateCache,
+    state_cache: DashMap<StateKey, Option<StateValue>>,
     proof_fetcher: Arc<AsyncProofFetcher>,
-}
-
-impl Debug for CachedStateView {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.id)
-    }
 }
 
 impl CachedStateView {
@@ -125,7 +110,7 @@ impl CachedStateView {
             id,
             snapshot,
             speculative_state,
-            sharded_state_cache: arr![DashMap::new(); 16],
+            state_cache: DashMap::new(),
             proof_fetcher,
         })
     }
@@ -153,45 +138,54 @@ impl CachedStateView {
     pub fn into_state_cache(self) -> StateCache {
         StateCache {
             frozen_base: self.speculative_state,
-            sharded_state_cache: self.sharded_state_cache,
+            state_cache: self.state_cache,
             proofs: self.proof_fetcher.get_proof_cache(),
         }
     }
 
-    fn get_version_and_state_value_internal(
-        &self,
-        state_key: &StateKey,
-    ) -> Result<(Option<Version>, Option<StateValue>)> {
+    fn get_state_value_internal(&self, state_key: &StateKey) -> Result<Option<StateValue>> {
         // Do most of the work outside the write lock.
         let key_hash = state_key.hash();
-        Ok(match self.speculative_state.get(key_hash) {
-            StateStoreStatus::ExistsInScratchPad(value) => (None, Some(value)),
-            StateStoreStatus::DoesNotExist => (None, None),
+        let state_value_option = match self.speculative_state.get(key_hash) {
+            StateStoreStatus::ExistsInScratchPad(value) => Some(value),
+            StateStoreStatus::DoesNotExist => None,
             // No matter it is in db or unknown, we have to query from db since even the
             // former case, we don't have the blob data but only its hash.
-            StateStoreStatus::ExistsInDB | StateStoreStatus::Unknown => match self.snapshot {
-                Some((version, root_hash)) => {
-                    let version_and_value_opt = self
-                        .proof_fetcher
-                        .fetch_state_value_with_version_and_schedule_proof_read(
+            StateStoreStatus::ExistsInDB | StateStoreStatus::Unknown => {
+                match self.snapshot {
+                    Some((version, root_hash)) => {
+                        let (value, proof) = self.proof_fetcher.fetch_state_value_and_proof(
                             state_key,
                             version,
                             Some(root_hash),
                         )?;
-                    match version_and_value_opt {
-                        Some((version, value)) => (Some(version), Some(value)),
-                        None => (None, None),
-                    }
-                },
-                None => (None, None),
+                        // TODO: proof verification can be opted out, for performance
+                        if let Some(proof) = proof {
+                            proof
+                                .verify(root_hash, key_hash, value.as_ref())
+                                .map_err(|err| {
+                                    format_err!(
+                                    "Proof is invalid for key {:?} with state root hash {:?}: {}",
+                                    state_key,
+                                    root_hash,
+                                    err
+                                )
+                                })?;
+                        }
+                        value
+                    },
+                    None => None,
+                }
             },
-        })
+        };
+
+        Ok(state_value_option)
     }
 }
 
 pub struct StateCache {
     pub frozen_base: FrozenSparseMerkleTree<StateValue>,
-    pub sharded_state_cache: ShardedStateCache,
+    pub state_cache: DashMap<StateKey, Option<StateValue>>,
     pub proofs: HashMap<HashValue, SparseMerkleProofExt>,
 }
 
@@ -205,21 +199,17 @@ impl TStateView for CachedStateView {
     fn get_state_value(&self, state_key: &StateKey) -> Result<Option<StateValue>> {
         let _timer = TIMER.with_label_values(&["get_state_value"]).start_timer();
         // First check if the cache has the state value.
-        if let Some(version_and_value_opt) =
-            self.sharded_state_cache[state_key.get_shard_id() as usize].get(state_key)
-        {
+        if let Some(val_opt) = self.state_cache.get(state_key) {
             // This can return None, which means the value has been deleted from the DB.
-            let value_opt = &version_and_value_opt.1;
-            return Ok(value_opt.clone());
+            return Ok(val_opt.clone());
         }
-        let version_and_state_value_option =
-            self.get_version_and_state_value_internal(state_key)?;
+        let state_value_option = self.get_state_value_internal(state_key)?;
         // Update the cache if still empty
-        let new_version_and_value = self.sharded_state_cache[state_key.get_shard_id() as usize]
+        let new_value = self
+            .state_cache
             .entry(state_key.clone())
-            .or_insert(version_and_state_value_option);
-        let value_opt = &new_version_and_value.1;
-        Ok(value_opt.clone())
+            .or_insert(state_value_option);
+        Ok(new_value.clone())
     }
 
     fn is_genesis(&self) -> bool {

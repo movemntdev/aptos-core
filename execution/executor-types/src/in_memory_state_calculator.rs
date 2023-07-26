@@ -14,14 +14,12 @@ use aptos_types::{
     event::EventKey,
     on_chain_config,
     state_store::{
-        create_empty_sharded_state_updates, state_key::StateKey,
-        state_storage_usage::StateStorageUsage, state_value::StateValue, ShardedStateUpdates,
+        state_key::StateKey, state_storage_usage::StateStorageUsage, state_value::StateValue,
     },
     transaction::{Transaction, Version},
     write_set::{TransactionWrite, WriteOp, WriteSet},
 };
 use dashmap::DashMap;
-use itertools::zip_eq;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 
@@ -50,7 +48,7 @@ pub struct InMemoryStateCalculator {
     //// These changes every time a new txn is added to the calculator.
     state_cache: DashMap<StateKey, Option<StateValue>>,
     next_version: Version,
-    updates_after_latest: ShardedStateUpdates,
+    updates_after_latest: HashMap<StateKey, Option<StateValue>>,
     usage: StateStorageUsage,
 
     //// These changes whenever make_checkpoint() or finish() happens.
@@ -60,14 +58,14 @@ pub struct InMemoryStateCalculator {
     // already, but frozen SMT is used here anyway to avoid exposing the `batch_update()` interface
     // on the non-frozen SMT.
     latest: FrozenSparseMerkleTree<StateValue>,
-    updates_between_checkpoint_and_latest: ShardedStateUpdates,
+    updates_between_checkpoint_and_latest: HashMap<StateKey, Option<StateValue>>,
 }
 
 impl InMemoryStateCalculator {
     pub fn new(base: &StateDelta, state_cache: StateCache) -> Self {
         let StateCache {
             frozen_base,
-            sharded_state_cache,
+            state_cache,
             proofs,
         } = state_cache;
         let StateDelta {
@@ -78,20 +76,13 @@ impl InMemoryStateCalculator {
             updates_since_base,
         } = base.clone();
 
-        // TODO(grao): Rethink the strategy for state sync, and optimize this.
-        let state_cache = sharded_state_cache
-            .iter()
-            .flatten()
-            .map(|entry| (entry.key().clone(), entry.value().1.clone()))
-            .collect();
-
         Self {
             _frozen_base: frozen_base,
             proof_reader: ProofReader::new(proofs),
 
             state_cache,
             next_version: current_version.map_or(0, |v| v + 1),
-            updates_after_latest: create_empty_sharded_state_updates(),
+            updates_after_latest: HashMap::new(),
             usage: current.usage(),
 
             checkpoint: base,
@@ -148,9 +139,7 @@ impl InMemoryStateCalculator {
             &mut self.usage,
             txn_output.write_set().clone(),
         )?;
-        updated_state_kvs.iter().for_each(|(k, v)| {
-            self.updates_after_latest[k.get_shard_id() as usize].insert(k.clone(), v.clone());
-        });
+        self.updates_after_latest.extend(updated_state_kvs.clone());
         self.next_version += 1;
 
         if txn_output.is_reconfig() {
@@ -172,7 +161,6 @@ impl InMemoryStateCalculator {
         let smt_updates: Vec<_> = self
             .updates_after_latest
             .iter()
-            .flatten()
             .map(|(key, value)| (key.hash(), value.as_ref()))
             .collect();
         let new_checkpoint =
@@ -184,8 +172,8 @@ impl InMemoryStateCalculator {
         self.latest = new_checkpoint.clone();
         self.checkpoint = new_checkpoint.unfreeze();
         self.checkpoint_version = self.next_version.checked_sub(1);
-        self.updates_between_checkpoint_and_latest = create_empty_sharded_state_updates();
-        self.updates_after_latest = create_empty_sharded_state_updates();
+        self.updates_between_checkpoint_and_latest = HashMap::new();
+        self.updates_after_latest = HashMap::new();
 
         Ok(root_hash)
     }
@@ -209,20 +197,14 @@ impl InMemoryStateCalculator {
         let smt_updates: Vec<_> = self
             .updates_after_latest
             .iter()
-            .flatten()
             .map(|(key, value)| (key.hash(), value.as_ref()))
             .collect();
         let latest = self
             .latest
             .batch_update(smt_updates, self.usage, &self.proof_reader)?;
 
-        zip_eq(
-            self.updates_between_checkpoint_and_latest.iter_mut(),
-            self.updates_after_latest.into_iter(),
-        )
-        .for_each(|(base, delta)| {
-            base.extend(delta);
-        });
+        self.updates_between_checkpoint_and_latest
+            .extend(self.updates_after_latest);
 
         let result_state = StateDelta::new(
             self.checkpoint,
@@ -245,7 +227,7 @@ impl InMemoryStateCalculator {
         mut self,
         last_checkpoint_index: Option<usize>,
         write_sets: &[WriteSet],
-    ) -> Result<(Option<ShardedStateUpdates>, StateDelta)> {
+    ) -> Result<(Option<HashMap<StateKey, Option<StateValue>>>, StateDelta)> {
         let idx_after_last_checkpoint = last_checkpoint_index.map_or(0, |idx| idx + 1);
         let updates_before_last_checkpoint = if idx_after_last_checkpoint != 0 {
             for write_set in write_sets[0..idx_after_last_checkpoint].iter() {
@@ -255,7 +237,7 @@ impl InMemoryStateCalculator {
                     &mut self.usage,
                     (*write_set).clone(),
                 )?;
-                self.insert_to_latest_updates(state_updates);
+                self.updates_after_latest.extend(state_updates.into_iter());
                 self.next_version += 1;
             }
             let updates = self.updates_after_latest.clone();
@@ -271,17 +253,11 @@ impl InMemoryStateCalculator {
                 &mut self.usage,
                 (*write_set).clone(),
             )?;
-            self.insert_to_latest_updates(state_updates);
+            self.updates_after_latest.extend(state_updates.into_iter());
             self.next_version += 1;
         }
         let (result_state, _) = self.finish()?;
         Ok((updates_before_last_checkpoint, result_state))
-    }
-
-    fn insert_to_latest_updates(&mut self, state_updates: HashMap<StateKey, Option<StateValue>>) {
-        state_updates.into_iter().for_each(|(k, v)| {
-            self.updates_after_latest[k.get_shard_id() as usize].insert(k, v);
-        });
     }
 }
 

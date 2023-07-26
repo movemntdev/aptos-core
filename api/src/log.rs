@@ -2,14 +2,13 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::metrics::{HISTOGRAM, POST_BODY_BYTES, REQUEST_SOURCE_CLIENT, RESPONSE_STATUS};
+use crate::metrics::{HISTOGRAM, REQUEST_SOURCE_CLIENT, RESPONSE_STATUS};
 use aptos_api_types::X_APTOS_CLIENT;
 use aptos_logger::{
     debug, info,
     prelude::{sample, SampleRate},
     warn, Schema,
 };
-use hyper::Method;
 use once_cell::sync::Lazy;
 use poem::{http::header, Endpoint, Request, Response, Result};
 use poem_openapi::OperationId;
@@ -18,7 +17,7 @@ use std::time::Duration;
 
 const REQUEST_SOURCE_CLIENT_UNKNOWN: &str = "unknown";
 static REQUEST_SOURCE_CLIENT_REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"aptos-[a-zA-Z\-]+/[0-9A-Za-z\.\-]+").unwrap());
+    Lazy::new(|| Regex::new(r"aptos-[a-zA-Z]+/[0-9A-Za-z\.\-]+").unwrap());
 
 /// Logs information about the request and response if the response status code
 /// is >= 500, to help us debug since this will be an error on our side.
@@ -28,7 +27,7 @@ pub async fn middleware_log<E: Endpoint>(next: E, request: Request) -> Result<Re
 
     let mut log = HttpRequestLog {
         remote_addr: request.remote_addr().as_socket_addr().cloned(),
-        method: request.method().clone(),
+        method: request.method().to_string(),
         path: request.uri().path().to_string(),
         status: 0,
         referer: request
@@ -47,10 +46,6 @@ pub async fn middleware_log<E: Endpoint>(next: E, request: Request) -> Result<Re
         forwarded: request
             .headers()
             .get(header::FORWARDED)
-            .and_then(|v| v.to_str().ok().map(|v| v.to_string())),
-        content_length: request
-            .headers()
-            .get(header::CONTENT_LENGTH)
             .and_then(|v| v.to_str().ok().map(|v| v.to_string())),
     };
 
@@ -74,16 +69,14 @@ pub async fn middleware_log<E: Endpoint>(next: E, request: Request) -> Result<Re
         .with_label_values(&[log.status.to_string().as_str()])
         .observe(elapsed.as_secs_f64());
 
-    let operation_id = response
-        .data::<OperationId>()
-        .map(|operation_id| operation_id.0)
-        .unwrap_or("operation_id_not_set");
-
     // Log response status per-endpoint + method.
     HISTOGRAM
         .with_label_values(&[
             log.method.as_str(),
-            operation_id,
+            response
+                .data::<OperationId>()
+                .map(|operation_id| operation_id.0)
+                .unwrap_or("operation_id_not_set"),
             log.status.to_string().as_str(),
         ])
         .observe(elapsed.as_secs_f64());
@@ -92,18 +85,13 @@ pub async fn middleware_log<E: Endpoint>(next: E, request: Request) -> Result<Re
     REQUEST_SOURCE_CLIENT
         .with_label_values(&[
             determine_request_source_client(&log.aptos_client),
-            operation_id,
+            response
+                .data::<OperationId>()
+                .map(|operation_id| operation_id.0)
+                .unwrap_or("operation_id_not_set"),
             log.status.to_string().as_str(),
         ])
         .inc();
-
-    if log.method == Method::POST {
-        if let Some(length) = log.content_length.and_then(|l| l.parse::<u32>().ok()) {
-            POST_BODY_BYTES
-                .with_label_values(&[operation_id, log.status.to_string().as_str()])
-                .observe(length as f64);
-        }
-    }
 
     Ok(response)
 }
@@ -136,8 +124,7 @@ fn determine_request_source_client(aptos_client: &Option<String>) -> &str {
 pub struct HttpRequestLog {
     #[schema(display)]
     remote_addr: Option<std::net::SocketAddr>,
-    #[schema(display)]
-    method: Method,
+    method: String,
     path: String,
     pub status: u16,
     referer: Option<String>,
@@ -146,5 +133,4 @@ pub struct HttpRequestLog {
     #[schema(debug)]
     pub elapsed: std::time::Duration,
     forwarded: Option<String>,
-    content_length: Option<String>,
 }

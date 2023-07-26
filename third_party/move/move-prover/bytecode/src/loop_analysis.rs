@@ -216,11 +216,7 @@ impl LoopAnalysisProcessor {
                         // by stack elimination.
                         let affected_non_temporary_variables: BTreeSet<_> = affected_variables
                             .into_iter()
-                            .filter(|&idx| {
-                                !func_env
-                                    .is_temporary(*idx)
-                                    .expect("compiled module available")
-                            })
+                            .filter(|&idx| !func_env.is_temporary(*idx))
                             .collect();
 
                         if affected_non_temporary_variables.is_empty() {
@@ -240,11 +236,7 @@ impl LoopAnalysisProcessor {
                                     .map(|&idx| {
                                         func_env
                                             .symbol_pool()
-                                            .string(
-                                                func_env
-                                                    .get_local_name(*idx)
-                                                    .expect("compiled module available"),
-                                            )
+                                            .string(func_env.get_local_name(*idx))
                                             .to_string()
                                     })
                                     .collect();

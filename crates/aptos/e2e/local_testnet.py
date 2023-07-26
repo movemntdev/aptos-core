@@ -8,7 +8,7 @@ import subprocess
 import time
 
 import requests
-from common import FAUCET_PORT, METRICS_PORT, NODE_PORT, Network, build_image_name
+from common import FAUCET_PORT, NODE_PORT, Network, build_image_name
 
 LOG = logging.getLogger(__name__)
 
@@ -38,13 +38,8 @@ def run_node(network: Network, image_repo_with_project: str):
         stderr=subprocess.DEVNULL,
     )
 
-    # If debug logging is enabled show the output of the command to run the container.
-    kwargs = {"check": True}
-    if LOG.getEffectiveLevel() > 10:
-        kwargs = {**kwargs, **{"stdout": subprocess.PIPE, "stderr": subprocess.PIPE}}
-
     # Run the container.
-    subprocess.run(
+    subprocess.check_output(
         [
             "docker",
             "run",
@@ -56,8 +51,6 @@ def run_node(network: Network, image_repo_with_project: str):
             "-p",
             f"{NODE_PORT}:{NODE_PORT}",
             "-p",
-            f"{METRICS_PORT}:{METRICS_PORT}",
-            "-p",
             f"{FAUCET_PORT}:{FAUCET_PORT}",
             image_name,
             "aptos",
@@ -65,9 +58,7 @@ def run_node(network: Network, image_repo_with_project: str):
             "run-local-testnet",
             "--with-faucet",
         ],
-        **kwargs,
     )
-
     LOG.info(f"Running aptos CLI local testnet from image: {image_name}")
     return container_name
 

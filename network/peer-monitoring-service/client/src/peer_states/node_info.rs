@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    metrics,
     peer_states::{key_value::StateValueInterface, request_tracker::RequestTracker},
     Error, LogEntry, LogEvent, LogSchema,
 };
@@ -15,11 +14,7 @@ use aptos_peer_monitoring_service_types::{
     response::{NodeInformationResponse, PeerMonitoringServiceResponse},
 };
 use aptos_time_service::TimeService;
-use std::{
-    fmt,
-    fmt::{Display, Formatter},
-    sync::Arc,
-};
+use std::sync::Arc;
 
 /// A simple container that holds a single peer's node info
 #[derive(Clone, Debug)]
@@ -106,7 +101,7 @@ impl StateValueInterface for NodeInfoState {
     }
 
     fn handle_monitoring_service_response_error(
-        &mut self,
+        &self,
         peer_network_id: &PeerNetworkId,
         error: Error,
     ) {
@@ -119,25 +114,6 @@ impl StateValueInterface for NodeInfoState {
             .message("Error encountered when requesting node information from the peer!")
             .peer(peer_network_id)
             .error(&error));
-    }
-
-    fn update_peer_state_metrics(&self, peer_network_id: &PeerNetworkId) {
-        if let Some(node_info_response) = self.get_latest_node_info_response() {
-            // Update the uptime metric
-            let node_uptime = node_info_response.uptime;
-            let uptime_in_hours = node_uptime.as_secs_f64() / 3600.0; // Convert to hours
-            metrics::observe_value(&metrics::NODE_UPTIME, peer_network_id, uptime_in_hours);
-        }
-    }
-}
-
-impl Display for NodeInfoState {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "NodeInfoState {{ recorded_node_info_response: {:?} }}",
-            self.recorded_node_info_response
-        )
     }
 }
 

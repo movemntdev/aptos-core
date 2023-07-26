@@ -2,28 +2,24 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    counters,
-    scheduler::{DependencyResult, DependencyStatus, Scheduler},
-    task::Transaction,
-    txn_last_input_output::ReadDescriptor,
+    counters, scheduler::Scheduler, task::Transaction, txn_last_input_output::ReadDescriptor,
 };
 use anyhow::Result;
 use aptos_aggregator::delta_change_set::{deserialize, serialize};
 use aptos_logger::error;
 use aptos_mvhashmap::{
-    types::{MVDataError, MVDataOutput, MVModulesError, MVModulesOutput, TxnIndex},
-    unsync_map::UnsyncMap,
+    types::{MVCodeError, MVCodeOutput, MVDataError, MVDataOutput, TxnIndex},
     MVHashMap,
 };
 use aptos_state_view::{StateViewId, TStateView};
 use aptos_types::{
-    executable::{Executable, ModulePath},
+    executable::{ExecutableTestType, ModulePath},
     state_store::{state_storage_usage::StateStorageUsage, state_value::StateValue},
     vm_status::{StatusCode, VMStatus},
     write_set::TransactionWrite,
 };
 use aptos_vm_logging::{log_schema::AdapterLogSchema, prelude::*};
-use std::{cell::RefCell, fmt::Debug, hash::Hash, sync::Arc};
+use std::{cell::RefCell, collections::BTreeMap, fmt::Debug, hash::Hash, sync::Arc};
 
 /// A struct that is always used by a single thread performing an execution task. The struct is
 /// passed to the VM and acts as a proxy to resolve reads first in the shared multi-version
@@ -32,8 +28,8 @@ use std::{cell::RefCell, fmt::Debug, hash::Hash, sync::Arc};
 /// TODO(issue 10177): MvHashMapView currently needs to be sync due to trait bounds, but should
 /// not be. In this case, the read_dependency member can have a RefCell<bool> type and the
 /// captured_reads member can have RefCell<Vec<ReadDescriptor<K>>> type.
-pub(crate) struct MVHashMapView<'a, K, V: TransactionWrite, X: Executable> {
-    versioned_map: &'a MVHashMap<K, V, X>,
+pub(crate) struct MVHashMapView<'a, K, V: TransactionWrite> {
+    versioned_map: &'a MVHashMap<K, V, ExecutableTestType>, // TODO: proper generic type
     scheduler: &'a Scheduler,
     captured_reads: RefCell<Vec<ReadDescriptor<K>>>,
 }
@@ -48,8 +44,6 @@ pub(crate) enum ReadResult<V> {
     U128(u128),
     // Read could not resolve the delta (no base value).
     Unresolved,
-    // Parallel execution halts.
-    ExecutionHalted,
     // Read did not return anything.
     None,
 }
@@ -58,10 +52,12 @@ impl<
         'a,
         K: ModulePath + PartialOrd + Ord + Send + Clone + Debug + Hash + Eq,
         V: TransactionWrite + Send + Sync,
-        X: Executable,
-    > MVHashMapView<'a, K, V, X>
+    > MVHashMapView<'a, K, V>
 {
-    pub(crate) fn new(versioned_map: &'a MVHashMap<K, V, X>, scheduler: &'a Scheduler) -> Self {
+    pub(crate) fn new(
+        versioned_map: &'a MVHashMap<K, V, ExecutableTestType>,
+        scheduler: &'a Scheduler,
+    ) -> Self {
         Self {
             versioned_map,
             scheduler,
@@ -75,18 +71,18 @@ impl<
     }
 
     // TODO: Actually fill in the logic to record fetched executables, etc.
-    fn fetch_module(
+    fn fetch_code(
         &self,
         key: &K,
         txn_idx: TxnIndex,
-    ) -> anyhow::Result<MVModulesOutput<V, X>, MVModulesError> {
+    ) -> anyhow::Result<MVCodeOutput<V, ExecutableTestType>, MVCodeError> {
         // Add a fake read from storage to register in reads for now in order
         // for the read / write path intersection fallback for modules to still work.
         self.captured_reads
             .borrow_mut()
             .push(ReadDescriptor::from_storage(key.clone()));
 
-        self.versioned_map.fetch_module(key, txn_idx)
+        self.versioned_map.fetch_code(key, txn_idx)
     }
 
     fn set_aggregator_base_value(&self, key: &K, value: u128) {
@@ -124,7 +120,7 @@ impl<
                 Err(Dependency(dep_idx)) => {
                     // `self.txn_idx` estimated to depend on a write from `dep_idx`.
                     match self.scheduler.wait_for_dependency(txn_idx, dep_idx) {
-                        DependencyResult::Dependency(dep_condition) => {
+                        Some(dep_condition) => {
                             let _timer = counters::DEPENDENCY_WAIT_SECONDS.start_timer();
                             // Wait on a condition variable corresponding to the encountered
                             // read dependency. Once the dep_idx finishes re-execution, scheduler
@@ -142,17 +138,11 @@ impl<
                             // eventually finish and lead to unblocking txn_idx, contradiction.
                             let (lock, cvar) = &*dep_condition;
                             let mut dep_resolved = lock.lock();
-                            while let DependencyStatus::Unresolved = *dep_resolved {
+                            while !*dep_resolved {
                                 dep_resolved = cvar.wait(dep_resolved).unwrap();
                             }
-                            if let DependencyStatus::ExecutionHalted = *dep_resolved {
-                                return ReadResult::ExecutionHalted;
-                            }
                         },
-                        DependencyResult::ExecutionHalted => {
-                            return ReadResult::ExecutionHalted;
-                        },
-                        DependencyResult::Resolved => continue,
+                        None => continue,
                     }
                 },
                 Err(DeltaApplicationFailure) => {
@@ -169,23 +159,23 @@ impl<
     }
 }
 
-enum ViewMapKind<'a, T: Transaction, X: Executable> {
-    MultiVersion(&'a MVHashMapView<'a, T::Key, T::Value, X>),
-    Unsync(&'a UnsyncMap<T::Key, T::Value, X>),
+enum ViewMapKind<'a, T: Transaction> {
+    MultiVersion(&'a MVHashMapView<'a, T::Key, T::Value>),
+    BTree(&'a BTreeMap<T::Key, T::Value>),
 }
 
-pub(crate) struct LatestView<'a, T: Transaction, S: TStateView<Key = T::Key>, X: Executable> {
+pub(crate) struct LatestView<'a, T: Transaction, S: TStateView<Key = T::Key>> {
     base_view: &'a S,
-    latest_view: ViewMapKind<'a, T, X>,
+    latest_view: ViewMapKind<'a, T>,
     txn_idx: TxnIndex,
 }
 
-impl<'a, T: Transaction, S: TStateView<Key = T::Key>, X: Executable> LatestView<'a, T, S, X> {
+impl<'a, T: Transaction, S: TStateView<Key = T::Key>> LatestView<'a, T, S> {
     pub(crate) fn new_mv_view(
         base_view: &'a S,
-        map: &'a MVHashMapView<'a, T::Key, T::Value, X>,
+        map: &'a MVHashMapView<'a, T::Key, T::Value>,
         txn_idx: TxnIndex,
-    ) -> LatestView<'a, T, S, X> {
+    ) -> LatestView<'a, T, S> {
         LatestView {
             base_view,
             latest_view: ViewMapKind::MultiVersion(map),
@@ -195,12 +185,12 @@ impl<'a, T: Transaction, S: TStateView<Key = T::Key>, X: Executable> LatestView<
 
     pub(crate) fn new_btree_view(
         base_view: &'a S,
-        map: &'a UnsyncMap<T::Key, T::Value, X>,
+        map: &'a BTreeMap<T::Key, T::Value>,
         txn_idx: TxnIndex,
-    ) -> LatestView<'a, T, S, X> {
+    ) -> LatestView<'a, T, S> {
         LatestView {
             base_view,
-            latest_view: ViewMapKind::Unsync(map),
+            latest_view: ViewMapKind::BTree(map),
             txn_idx,
         }
     }
@@ -222,19 +212,17 @@ impl<'a, T: Transaction, S: TStateView<Key = T::Key>, X: Executable> LatestView<
     }
 }
 
-impl<'a, T: Transaction, S: TStateView<Key = T::Key>, X: Executable> TStateView
-    for LatestView<'a, T, S, X>
-{
+impl<'a, T: Transaction, S: TStateView<Key = T::Key>> TStateView for LatestView<'a, T, S> {
     type Key = T::Key;
 
     fn get_state_value(&self, state_key: &T::Key) -> anyhow::Result<Option<StateValue>> {
         match self.latest_view {
             ViewMapKind::MultiVersion(map) => match state_key.module_path() {
                 Some(_) => {
-                    use MVModulesError::*;
-                    use MVModulesOutput::*;
+                    use MVCodeError::*;
+                    use MVCodeOutput::*;
 
-                    match map.fetch_module(state_key, self.txn_idx) {
+                    match map.fetch_code(state_key, self.txn_idx) {
                         Ok(Executable(_)) => unreachable!("Versioned executable not implemented"),
                         Ok(Module((v, _))) => Ok(v.as_state_value()),
                         Err(Dependency(_)) => {
@@ -251,7 +239,7 @@ impl<'a, T: Transaction, S: TStateView<Key = T::Key>, X: Executable> TStateView
                     if matches!(mv_value, ReadResult::Unresolved) {
                         let from_storage =
                             self.base_view.get_state_value_bytes(state_key)?.map_or(
-                                Err(VMStatus::error(StatusCode::STORAGE_ERROR, None)),
+                                Err(VMStatus::Error(StatusCode::STORAGE_ERROR, None)),
                                 |bytes| Ok(deserialize(&bytes)),
                             )?;
 
@@ -265,15 +253,6 @@ impl<'a, T: Transaction, S: TStateView<Key = T::Key>, X: Executable> TStateView
                     match mv_value {
                         ReadResult::Value(v) => Ok(v.as_state_value()),
                         ReadResult::U128(v) => Ok(Some(StateValue::new_legacy(serialize(&v)))),
-                        // ExecutionHalted indicates that the parallel execution is halted.
-                        // The read should return immediately and log the error.
-                        // For now we use STORAGE_ERROR as the VM will not log the speculative eror,
-                        // so no actual error will be logged once the execution is halted and
-                        // the speculative logging is flushed.
-                        ReadResult::ExecutionHalted => Err(anyhow::Error::new(VMStatus::error(
-                            StatusCode::STORAGE_ERROR,
-                            Some("Speculative error to halt BlockSTM early.".to_string()),
-                        ))),
                         ReadResult::None => self.get_base_value(state_key),
                         ReadResult::Unresolved => unreachable!(
                             "Must be resolved as base value is recorded in the MV data structure"
@@ -281,7 +260,7 @@ impl<'a, T: Transaction, S: TStateView<Key = T::Key>, X: Executable> TStateView
                     }
                 },
             },
-            ViewMapKind::Unsync(map) => map.fetch_data(state_key).map_or_else(
+            ViewMapKind::BTree(map) => map.get(state_key).map_or_else(
                 || self.get_base_value(state_key),
                 |v| Ok(v.as_state_value()),
             ),

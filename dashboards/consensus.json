@@ -339,7 +339,6 @@
             "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
-          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -352,65 +351,6 @@
         "overrides": []
       },
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 9 },
-      "id": 176,
-      "options": {
-        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
-        "tooltip": { "mode": "multi", "sort": "none" }
-      },
-      "pluginVersion": "9.1.1",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-          "editorMode": "code",
-          "expr": "rate(aptos_consensus_committed_txns_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\",state=\"failed_duplicate\"}[$interval])",
-          "format": "time_series",
-          "intervalFactor": 1,
-          "legendFormat": "{{kubernetes_pod_name}}-{{state}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Transaction execution old seq no (likely duplicate) per sec",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-      "description": "",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "transactions / s",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 80 }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 9 },
       "id": 128,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -469,7 +409,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 17 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 9 },
       "id": 140,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -496,7 +436,7 @@
       "datasource": { "type": "prometheus", "uid": "${Datasource}" },
       "editable": false,
       "error": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
       "id": 96,
       "isNew": false,
       "panels": [],
@@ -531,12 +471,18 @@
             "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 80 }
+            ]
+          },
           "unit": "s"
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 26 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 18 },
       "id": 97,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -584,12 +530,18 @@
             "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 80 }
+            ]
+          },
           "unit": "s"
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 26 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 18 },
       "id": 98,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -637,12 +589,18 @@
             "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 80 }
+            ]
+          },
           "unit": "s"
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 26 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 18 },
       "id": 103,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -690,12 +648,18 @@
             "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 80 }
+            ]
+          },
           "unit": "s"
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 34 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 26 },
       "id": 99,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -743,12 +707,18 @@
             "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 80 }
+            ]
+          },
           "unit": "s"
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 34 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 26 },
       "id": 29,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -796,12 +766,18 @@
             "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 80 }
+            ]
+          },
           "unit": "s"
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 34 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 26 },
       "id": 101,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -849,12 +825,18 @@
             "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 80 }
+            ]
+          },
           "unit": "s"
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 42 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 34 },
       "id": 90,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -902,12 +884,18 @@
             "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 80 }
+            ]
+          },
           "unit": "s"
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 42 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 34 },
       "id": 100,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -955,12 +943,18 @@
             "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 80 }
+            ]
+          },
           "unit": "s"
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 42 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 34 },
       "id": 102,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -1008,12 +1002,18 @@
             "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 80 }
+            ]
+          },
           "unit": "s"
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 50 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 42 },
       "id": 89,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -1059,12 +1059,18 @@
             "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 80 }
+            ]
+          },
           "unit": "s"
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 50 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 42 },
       "id": 175,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -1089,7 +1095,7 @@
       "datasource": { "type": "prometheus", "uid": "${Datasource}" },
       "editable": false,
       "error": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 58 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 50 },
       "id": 70,
       "isNew": false,
       "panels": [],
@@ -1110,7 +1116,7 @@
       "fieldConfig": { "defaults": { "unit": "" }, "overrides": [] },
       "fill": 0,
       "fillGradient": 0,
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 59 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 51 },
       "hiddenSeries": false,
       "id": 44,
       "isNew": false,
@@ -1132,7 +1138,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "9.5.3-cloud.1.0cb5a501",
+      "pluginVersion": "9.4.7",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1176,7 +1182,7 @@
       "fieldConfig": { "defaults": { "unit": "" }, "overrides": [] },
       "fill": 0,
       "fillGradient": 0,
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 59 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 51 },
       "hiddenSeries": false,
       "id": 118,
       "isNew": false,
@@ -1198,7 +1204,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "9.5.3-cloud.1.0cb5a501",
+      "pluginVersion": "9.4.7",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1242,7 +1248,7 @@
       "fieldConfig": { "defaults": { "unit": "" }, "overrides": [] },
       "fill": 0,
       "fillGradient": 0,
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 59 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 51 },
       "hiddenSeries": false,
       "id": 119,
       "isNew": false,
@@ -1264,7 +1270,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "9.5.3-cloud.1.0cb5a501",
+      "pluginVersion": "9.4.7",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1308,7 +1314,7 @@
       "fieldConfig": { "defaults": { "unit": "" }, "overrides": [] },
       "fill": 0,
       "fillGradient": 0,
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 67 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 59 },
       "hiddenSeries": false,
       "id": 120,
       "isNew": false,
@@ -1330,7 +1336,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "9.5.3-cloud.1.0cb5a501",
+      "pluginVersion": "9.4.7",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1374,7 +1380,7 @@
       "fieldConfig": { "defaults": { "unit": "" }, "overrides": [] },
       "fill": 0,
       "fillGradient": 0,
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 67 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 59 },
       "hiddenSeries": false,
       "id": 121,
       "isNew": false,
@@ -1396,7 +1402,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "9.5.3-cloud.1.0cb5a501",
+      "pluginVersion": "9.4.7",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1440,7 +1446,7 @@
       "fieldConfig": { "defaults": { "unit": "" }, "overrides": [] },
       "fill": 0,
       "fillGradient": 0,
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 67 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 59 },
       "hiddenSeries": false,
       "id": 122,
       "isNew": false,
@@ -1462,7 +1468,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "9.5.3-cloud.1.0cb5a501",
+      "pluginVersion": "9.4.7",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1506,7 +1512,7 @@
       "fieldConfig": { "defaults": { "unit": "" }, "overrides": [] },
       "fill": 0,
       "fillGradient": 0,
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 75 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 67 },
       "hiddenSeries": false,
       "id": 123,
       "isNew": false,
@@ -1528,7 +1534,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "9.5.3-cloud.1.0cb5a501",
+      "pluginVersion": "9.4.7",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1572,7 +1578,7 @@
       "fieldConfig": { "defaults": { "unit": "" }, "overrides": [] },
       "fill": 0,
       "fillGradient": 0,
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 75 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 67 },
       "hiddenSeries": false,
       "id": 124,
       "isNew": false,
@@ -1594,7 +1600,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "9.5.3-cloud.1.0cb5a501",
+      "pluginVersion": "9.4.7",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1638,7 +1644,7 @@
       "fieldConfig": { "defaults": { "unit": "" }, "overrides": [] },
       "fill": 0,
       "fillGradient": 0,
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 75 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 67 },
       "hiddenSeries": false,
       "id": 125,
       "isNew": false,
@@ -1660,7 +1666,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "9.5.3-cloud.1.0cb5a501",
+      "pluginVersion": "9.4.7",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1704,7 +1710,7 @@
       "fieldConfig": { "defaults": { "unit": "" }, "overrides": [] },
       "fill": 0,
       "fillGradient": 0,
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 83 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 75 },
       "hiddenSeries": false,
       "id": 126,
       "isNew": false,
@@ -1726,7 +1732,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "9.5.3-cloud.1.0cb5a501",
+      "pluginVersion": "9.1.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1770,7 +1776,7 @@
       "fieldConfig": { "defaults": { "unit": "" }, "overrides": [] },
       "fill": 0,
       "fillGradient": 0,
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 83 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 75 },
       "hiddenSeries": false,
       "id": 83,
       "isNew": false,
@@ -1792,7 +1798,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "9.5.3-cloud.1.0cb5a501",
+      "pluginVersion": "9.1.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1836,7 +1842,7 @@
       "fieldConfig": { "defaults": { "unit": "" }, "overrides": [] },
       "fill": 0,
       "fillGradient": 0,
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 83 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 75 },
       "hiddenSeries": false,
       "id": 129,
       "isNew": false,
@@ -1858,7 +1864,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "9.5.3-cloud.1.0cb5a501",
+      "pluginVersion": "9.1.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1902,7 +1908,7 @@
       "fieldConfig": { "defaults": { "unit": "" }, "overrides": [] },
       "fill": 0,
       "fillGradient": 0,
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 91 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 83 },
       "hiddenSeries": false,
       "id": 159,
       "isNew": false,
@@ -1924,7 +1930,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "9.5.3-cloud.1.0cb5a501",
+      "pluginVersion": "9.1.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1968,7 +1974,7 @@
       "fieldConfig": { "defaults": { "unit": "" }, "overrides": [] },
       "fill": 0,
       "fillGradient": 0,
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 91 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 83 },
       "hiddenSeries": false,
       "id": 160,
       "isNew": false,
@@ -1990,7 +1996,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "9.5.3-cloud.1.0cb5a501",
+      "pluginVersion": "9.1.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -2027,7 +2033,7 @@
       "datasource": { "type": "prometheus", "uid": "${Datasource}" },
       "editable": false,
       "error": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 99 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 91 },
       "id": 18,
       "isNew": false,
       "panels": [],
@@ -2067,7 +2073,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 100 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 92 },
       "id": 45,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -2116,7 +2122,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 100 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 92 },
       "id": 14,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -2169,7 +2175,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 100 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 92 },
       "id": 16,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -2222,7 +2228,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 108 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 100 },
       "id": 26,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -2275,7 +2281,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 108 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 100 },
       "id": 27,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -2300,7 +2306,7 @@
       "datasource": { "type": "prometheus", "uid": "${Datasource}" },
       "editable": false,
       "error": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 116 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 108 },
       "id": 59,
       "isNew": false,
       "panels": [],
@@ -2340,7 +2346,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 117 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 109 },
       "id": 60,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -2390,7 +2396,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 117 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 109 },
       "id": 61,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -2440,7 +2446,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 117 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 109 },
       "id": 141,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -2466,7 +2472,7 @@
       "datasource": { "type": "prometheus", "uid": "${Datasource}" },
       "editable": false,
       "error": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 125 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 117 },
       "id": 55,
       "isNew": false,
       "panels": [],
@@ -2506,7 +2512,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 126 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 118 },
       "id": 8,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -2557,7 +2563,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 126 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 118 },
       "id": 57,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -2608,7 +2614,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 126 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 118 },
       "id": 56,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -2661,7 +2667,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 134 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 126 },
       "id": 115,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -2714,7 +2720,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 134 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 126 },
       "id": 130,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -2767,7 +2773,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 134 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 126 },
       "id": 131,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -2820,7 +2826,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 142 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 134 },
       "id": 158,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -2847,7 +2853,7 @@
       "datasource": { "type": "prometheus", "uid": "${Datasource}" },
       "editable": false,
       "error": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 150 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 142 },
       "id": 4,
       "isNew": false,
       "panels": [],
@@ -2887,7 +2893,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 151 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 143 },
       "id": 150,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -2939,7 +2945,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 151 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 143 },
       "id": 80,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -2991,7 +2997,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 151 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 143 },
       "id": 79,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -3053,7 +3059,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 159 },
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 151 },
       "id": 85,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -3105,7 +3111,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 159 },
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 151 },
       "id": 88,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -3155,7 +3161,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 159 },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 151 },
       "id": 86,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -3205,7 +3211,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 159 },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 151 },
       "id": 87,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -3257,7 +3263,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 167 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 159 },
       "id": 21,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -3310,7 +3316,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 167 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 159 },
       "id": 24,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -3363,7 +3369,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 175 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 167 },
       "id": 25,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -3414,7 +3420,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 175 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 167 },
       "id": 23,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -3439,7 +3445,7 @@
       "datasource": { "type": "prometheus", "uid": "${Datasource}" },
       "editable": false,
       "error": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 183 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 175 },
       "id": 52,
       "isNew": false,
       "panels": [],
@@ -3479,7 +3485,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 184 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 176 },
       "id": 28,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -3532,7 +3538,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 184 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 176 },
       "id": 53,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -3559,7 +3565,7 @@
       "datasource": { "type": "prometheus", "uid": "${Datasource}" },
       "editable": false,
       "error": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 192 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 184 },
       "id": 64,
       "isNew": false,
       "panels": [],
@@ -3599,7 +3605,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 5, "x": 0, "y": 193 },
+      "gridPos": { "h": 8, "w": 5, "x": 0, "y": 185 },
       "id": 91,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -3650,7 +3656,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 5, "x": 5, "y": 193 },
+      "gridPos": { "h": 8, "w": 5, "x": 5, "y": 185 },
       "id": 147,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -3701,7 +3707,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 5, "x": 10, "y": 193 },
+      "gridPos": { "h": 8, "w": 5, "x": 10, "y": 185 },
       "id": 149,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -3752,7 +3758,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 4, "x": 15, "y": 193 },
+      "gridPos": { "h": 8, "w": 4, "x": 15, "y": 185 },
       "id": 148,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -3803,7 +3809,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 5, "x": 19, "y": 193 },
+      "gridPos": { "h": 8, "w": 5, "x": 19, "y": 185 },
       "id": 157,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -3854,7 +3860,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 201 },
+      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 193 },
       "id": 65,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -3905,7 +3911,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 11, "x": 8, "y": 201 },
+      "gridPos": { "h": 9, "w": 11, "x": 8, "y": 193 },
       "id": 104,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -3956,7 +3962,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 210 },
+      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 202 },
       "id": 66,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -4007,7 +4013,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 8, "x": 8, "y": 210 },
+      "gridPos": { "h": 9, "w": 8, "x": 8, "y": 202 },
       "id": 106,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -4058,7 +4064,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 210 },
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 202 },
       "id": 93,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -4107,7 +4113,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 219 },
+      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 211 },
       "id": 67,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -4158,7 +4164,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 8, "x": 8, "y": 219 },
+      "gridPos": { "h": 9, "w": 8, "x": 8, "y": 211 },
       "id": 105,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -4209,7 +4215,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 219 },
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 211 },
       "id": 92,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -4258,7 +4264,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 228 },
+      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 220 },
       "id": 107,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -4309,7 +4315,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 8, "x": 8, "y": 228 },
+      "gridPos": { "h": 9, "w": 8, "x": 8, "y": 220 },
       "id": 108,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -4360,7 +4366,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 228 },
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 220 },
       "id": 109,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -4411,7 +4417,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 237 },
+      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 229 },
       "id": 110,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -4462,7 +4468,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 8, "x": 8, "y": 237 },
+      "gridPos": { "h": 9, "w": 8, "x": 8, "y": 229 },
       "id": 111,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -4513,7 +4519,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 237 },
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 229 },
       "id": 112,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -4564,7 +4570,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 246 },
+      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 238 },
       "id": 68,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -4613,7 +4619,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 8, "x": 8, "y": 246 },
+      "gridPos": { "h": 9, "w": 8, "x": 8, "y": 238 },
       "id": 94,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -4662,7 +4668,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 246 },
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 238 },
       "id": 117,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -4713,7 +4719,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 255 },
+      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 247 },
       "id": 113,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -4764,7 +4770,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 9, "w": 8, "x": 8, "y": 255 },
+      "gridPos": { "h": 9, "w": 8, "x": 8, "y": 247 },
       "id": 114,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -4786,7 +4792,7 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 264 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 256 },
       "id": 137,
       "panels": [],
       "title": "Collected votes",
@@ -4822,7 +4828,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 265 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 257 },
       "id": 135,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -4871,7 +4877,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 265 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 257 },
       "id": 138,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -4920,7 +4926,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 265 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 257 },
       "id": 139,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -4969,7 +4975,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 273 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 265 },
       "id": 142,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -5018,7 +5024,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 273 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 265 },
       "id": 143,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -5067,7 +5073,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 273 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 265 },
       "id": 146,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -5125,7 +5131,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 281 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 273 },
       "id": 144,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -5210,7 +5216,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 281 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 273 },
       "id": 145,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -5258,7 +5264,7 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 289 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 281 },
       "id": 152,
       "panels": [],
       "title": "Backpressures",
@@ -5303,7 +5309,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 290 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 282 },
       "id": 153,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -5361,7 +5367,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 290 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 282 },
       "id": 154,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -5419,7 +5425,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 290 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 282 },
       "id": 155,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -5477,7 +5483,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 298 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 290 },
       "id": 156,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
@@ -5516,555 +5522,553 @@
       "type": "timeseries"
     },
     {
-      "collapsed": true,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 306 },
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 298 },
       "id": 165,
-      "panels": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-          "description": "Duration between block generation time until the moment the node ordered the block.",
-          "fieldConfig": {
-            "defaults": {
-              "color": { "mode": "palette-classic" },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": { "type": "linear" },
-                "showPoints": "never",
-                "spanNulls": false,
-                "stacking": { "group": "A", "mode": "none" },
-                "thresholdsStyle": { "mode": "off" }
-              },
-              "mappings": [],
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
-              "unit": "s"
-            },
-            "overrides": []
-          },
-          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 307 },
-          "id": 166,
-          "options": {
-            "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
-            "tooltip": { "mode": "multi", "sort": "none" }
-          },
-          "pluginVersion": "9.1.1",
-          "targets": [
-            {
-              "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-              "editorMode": "code",
-              "expr": "quantile(0.9, rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"ordered\"}[$interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"ordered\"}[$interval]))",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{kubernetes_pod_name}}-{{role}}",
-              "range": true,
-              "refId": "B"
-            }
-          ],
-          "title": "Block creation to ordered",
-          "type": "timeseries"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-          "description": "Duration between block generation time until the moment the node ordered the block.",
-          "fieldConfig": {
-            "defaults": {
-              "color": { "mode": "palette-classic" },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": { "type": "linear" },
-                "showPoints": "never",
-                "spanNulls": false,
-                "stacking": { "group": "A", "mode": "none" },
-                "thresholdsStyle": { "mode": "off" }
-              },
-              "mappings": [],
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
-              "unit": "s"
-            },
-            "overrides": []
-          },
-          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 307 },
-          "id": 161,
-          "options": {
-            "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
-            "tooltip": { "mode": "multi", "sort": "none" }
-          },
-          "pluginVersion": "9.1.1",
-          "targets": [
-            {
-              "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-              "editorMode": "code",
-              "expr": "quantile(0.90, rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_sent\"}[$interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_sent\"}[$interval])) < 1000000",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{kubernetes_pod_name}}-{{role}}",
-              "range": true,
-              "refId": "B"
-            }
-          ],
-          "title": "Block creation to sent rand",
-          "type": "timeseries"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-          "description": "Duration between block generation time until the moment the node ordered the block.",
-          "fieldConfig": {
-            "defaults": {
-              "color": { "mode": "palette-classic" },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": { "type": "linear" },
-                "showPoints": "never",
-                "spanNulls": false,
-                "stacking": { "group": "A", "mode": "none" },
-                "thresholdsStyle": { "mode": "off" }
-              },
-              "mappings": [],
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
-              "unit": "s"
-            },
-            "overrides": []
-          },
-          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 307 },
-          "id": 162,
-          "options": {
-            "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
-            "tooltip": { "mode": "multi", "sort": "none" }
-          },
-          "pluginVersion": "9.1.1",
-          "targets": [
-            {
-              "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-              "editorMode": "code",
-              "expr": "quantile(0.90, rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_aggregated\"}[$interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_aggregated\"}[$interval])) < 1000000",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{kubernetes_pod_name}}-{{role}}",
-              "range": true,
-              "refId": "B"
-            }
-          ],
-          "title": "Block creation to aggregate rand",
-          "type": "timeseries"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-          "description": "Duration between block generation time until the moment the node ordered the block.",
-          "fieldConfig": {
-            "defaults": {
-              "color": { "mode": "palette-classic" },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": { "type": "linear" },
-                "showPoints": "never",
-                "spanNulls": false,
-                "stacking": { "group": "A", "mode": "none" },
-                "thresholdsStyle": { "mode": "off" }
-              },
-              "mappings": [],
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
-              "unit": "s"
-            },
-            "overrides": []
-          },
-          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 315 },
-          "id": 163,
-          "options": {
-            "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
-            "tooltip": { "mode": "multi", "sort": "none" }
-          },
-          "pluginVersion": "9.1.1",
-          "targets": [
-            {
-              "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-              "editorMode": "code",
-              "expr": "quantile(0.90, rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_received\"}[$interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_received\"}[$interval])) < 1000000",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{kubernetes_pod_name}}-{{role}}",
-              "range": true,
-              "refId": "B"
-            }
-          ],
-          "title": "Block creation to receive rand",
-          "type": "timeseries"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-          "description": "Duration between block generation time until the moment the node executes the block.",
-          "fieldConfig": {
-            "defaults": {
-              "color": { "mode": "palette-classic" },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": { "type": "linear" },
-                "showPoints": "never",
-                "spanNulls": false,
-                "stacking": { "group": "A", "mode": "none" },
-                "thresholdsStyle": { "mode": "off" }
-              },
-              "mappings": [],
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
-              "unit": "s"
-            },
-            "overrides": []
-          },
-          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 315 },
-          "id": 167,
-          "options": {
-            "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
-            "tooltip": { "mode": "multi", "sort": "none" }
-          },
-          "pluginVersion": "9.1.1",
-          "targets": [
-            {
-              "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-              "editorMode": "code",
-              "expr": "quantile(0.90, rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"executed\"}[$interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"executed\"}[$interval])) < 1000000",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{kubernetes_pod_name}}-{{role}}",
-              "range": true,
-              "refId": "B"
-            }
-          ],
-          "title": "Block creation to executed",
-          "type": "timeseries"
-        }
-      ],
+      "panels": [],
       "title": "[TEST] Rand Latency",
       "type": "row"
     },
     {
-      "collapsed": true,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 307 },
-      "id": 169,
-      "panels": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-          "description": "Duration between block generation time until the moment the node ordered the block.",
-          "fieldConfig": {
-            "defaults": {
-              "color": { "mode": "palette-classic" },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": { "type": "linear" },
-                "showPoints": "never",
-                "spanNulls": false,
-                "stacking": { "group": "A", "mode": "none" },
-                "thresholdsStyle": { "mode": "off" }
-              },
-              "mappings": [],
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
-              "unit": "s"
-            },
-            "overrides": []
+      "datasource": { "type": "prometheus", "uid": "${Datasource}" },
+      "description": "Duration between block generation time until the moment the node ordered the block.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
           },
-          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 308 },
-          "id": 170,
-          "options": {
-            "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
-            "tooltip": { "mode": "multi", "sort": "none" }
-          },
-          "pluginVersion": "9.1.1",
-          "targets": [
-            {
-              "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-              "editorMode": "code",
-              "expr": "rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"ordered\"}[$interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"ordered\"}[$interval])",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{kubernetes_pod_name}}-{{role}}",
-              "range": true,
-              "refId": "B"
-            }
-          ],
-          "title": "Block creation to ordered",
-          "type": "timeseries"
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "unit": "s"
         },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 299 },
+      "id": 166,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "9.1.1",
+      "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-          "description": "Duration between block generation time until the moment the node ordered the block.",
-          "fieldConfig": {
-            "defaults": {
-              "color": { "mode": "palette-classic" },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": { "type": "linear" },
-                "showPoints": "never",
-                "spanNulls": false,
-                "stacking": { "group": "A", "mode": "none" },
-                "thresholdsStyle": { "mode": "off" }
-              },
-              "mappings": [],
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
-              "unit": "s"
-            },
-            "overrides": []
-          },
-          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 308 },
-          "id": 171,
-          "options": {
-            "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
-            "tooltip": { "mode": "multi", "sort": "none" }
-          },
-          "pluginVersion": "9.1.1",
-          "targets": [
-            {
-              "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-              "editorMode": "code",
-              "expr": "rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_sent\"}[$interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_sent\"}[$interval])",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{kubernetes_pod_name}}-{{role}}",
-              "range": true,
-              "refId": "B"
-            }
-          ],
-          "title": "Block creation to sent rand",
-          "type": "timeseries"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-          "description": "Duration between block generation time until the moment the node ordered the block.",
-          "fieldConfig": {
-            "defaults": {
-              "color": { "mode": "palette-classic" },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": { "type": "linear" },
-                "showPoints": "never",
-                "spanNulls": false,
-                "stacking": { "group": "A", "mode": "none" },
-                "thresholdsStyle": { "mode": "off" }
-              },
-              "mappings": [],
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
-              "unit": "s"
-            },
-            "overrides": []
-          },
-          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 308 },
-          "id": 172,
-          "options": {
-            "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
-            "tooltip": { "mode": "multi", "sort": "none" }
-          },
-          "pluginVersion": "9.1.1",
-          "targets": [
-            {
-              "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-              "editorMode": "code",
-              "expr": "rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_aggregated\"}[$interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_aggregated\"}[$interval])",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{kubernetes_pod_name}}-{{role}}",
-              "range": true,
-              "refId": "B"
-            }
-          ],
-          "title": "Block creation to aggregate rand",
-          "type": "timeseries"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-          "description": "Duration between block generation time until the moment the node ordered the block.",
-          "fieldConfig": {
-            "defaults": {
-              "color": { "mode": "palette-classic" },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": { "type": "linear" },
-                "showPoints": "never",
-                "spanNulls": false,
-                "stacking": { "group": "A", "mode": "none" },
-                "thresholdsStyle": { "mode": "off" }
-              },
-              "mappings": [],
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
-              "unit": "s"
-            },
-            "overrides": []
-          },
-          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 316 },
-          "id": 173,
-          "options": {
-            "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
-            "tooltip": { "mode": "multi", "sort": "none" }
-          },
-          "pluginVersion": "9.1.1",
-          "targets": [
-            {
-              "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-              "editorMode": "code",
-              "expr": "rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_received\"}[$interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_received\"}[$interval])",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{kubernetes_pod_name}}-{{role}}",
-              "range": true,
-              "refId": "B"
-            }
-          ],
-          "title": "Block creation to receive rand",
-          "type": "timeseries"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-          "description": "Duration between block generation time until the moment the node executes the block.",
-          "fieldConfig": {
-            "defaults": {
-              "color": { "mode": "palette-classic" },
-              "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": { "type": "linear" },
-                "showPoints": "never",
-                "spanNulls": false,
-                "stacking": { "group": "A", "mode": "none" },
-                "thresholdsStyle": { "mode": "off" }
-              },
-              "mappings": [],
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
-              "unit": "s"
-            },
-            "overrides": []
-          },
-          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 316 },
-          "id": 174,
-          "options": {
-            "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
-            "tooltip": { "mode": "multi", "sort": "none" }
-          },
-          "pluginVersion": "9.1.1",
-          "targets": [
-            {
-              "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-              "editorMode": "code",
-              "expr": "rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"executed\"}[$interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"executed\"}[$interval])",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{kubernetes_pod_name}}-{{role}}",
-              "range": true,
-              "refId": "B"
-            }
-          ],
-          "title": "Block creation to executed",
-          "type": "timeseries"
+          "editorMode": "code",
+          "expr": "quantile(0.9, rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"ordered\"}[$interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"ordered\"}[$interval]))",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{kubernetes_pod_name}}-{{role}}",
+          "range": true,
+          "refId": "B"
         }
       ],
+      "title": "Block creation to ordered",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${Datasource}" },
+      "description": "Duration between block generation time until the moment the node ordered the block.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 299 },
+      "id": 161,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "9.1.1",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${Datasource}" },
+          "editorMode": "code",
+          "expr": "quantile(0.90, rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_sent\"}[$interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_sent\"}[$interval])) < 1000000",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{kubernetes_pod_name}}-{{role}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Block creation to sent rand",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${Datasource}" },
+      "description": "Duration between block generation time until the moment the node ordered the block.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 299 },
+      "id": 162,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "9.1.1",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${Datasource}" },
+          "editorMode": "code",
+          "expr": "quantile(0.90, rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_aggregated\"}[$interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_aggregated\"}[$interval])) < 1000000",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{kubernetes_pod_name}}-{{role}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Block creation to aggregate rand",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${Datasource}" },
+      "description": "Duration between block generation time until the moment the node ordered the block.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 307 },
+      "id": 163,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "9.1.1",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${Datasource}" },
+          "editorMode": "code",
+          "expr": "quantile(0.90, rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_received\"}[$interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_received\"}[$interval])) < 1000000",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{kubernetes_pod_name}}-{{role}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Block creation to receive rand",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${Datasource}" },
+      "description": "Duration between block generation time until the moment the node executes the block.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 307 },
+      "id": 167,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "9.1.1",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${Datasource}" },
+          "editorMode": "code",
+          "expr": "quantile(0.90, rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"executed\"}[$interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"executed\"}[$interval])) < 1000000",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{kubernetes_pod_name}}-{{role}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Block creation to executed",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 315 },
+      "id": 169,
+      "panels": [],
       "title": "[TEST] Rand Latency Details",
       "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${Datasource}" },
+      "description": "Duration between block generation time until the moment the node ordered the block.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 316 },
+      "id": 170,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "9.1.1",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${Datasource}" },
+          "editorMode": "code",
+          "expr": "rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"ordered\"}[$interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"ordered\"}[$interval])",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{kubernetes_pod_name}}-{{role}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Block creation to ordered",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${Datasource}" },
+      "description": "Duration between block generation time until the moment the node ordered the block.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 316 },
+      "id": 171,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "9.1.1",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${Datasource}" },
+          "editorMode": "code",
+          "expr": "rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_sent\"}[$interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_sent\"}[$interval])",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{kubernetes_pod_name}}-{{role}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Block creation to sent rand",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${Datasource}" },
+      "description": "Duration between block generation time until the moment the node ordered the block.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 316 },
+      "id": 172,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "9.1.1",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${Datasource}" },
+          "editorMode": "code",
+          "expr": "rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_aggregated\"}[$interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_aggregated\"}[$interval])",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{kubernetes_pod_name}}-{{role}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Block creation to aggregate rand",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${Datasource}" },
+      "description": "Duration between block generation time until the moment the node ordered the block.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 324 },
+      "id": 173,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "9.1.1",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${Datasource}" },
+          "editorMode": "code",
+          "expr": "rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_received\"}[$interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"rand_received\"}[$interval])",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{kubernetes_pod_name}}-{{role}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Block creation to receive rand",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${Datasource}" },
+      "description": "Duration between block generation time until the moment the node executes the block.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 324 },
+      "id": 174,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "9.1.1",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${Datasource}" },
+          "editorMode": "code",
+          "expr": "rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"executed\"}[$interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"executed\"}[$interval])",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{kubernetes_pod_name}}-{{role}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Block creation to executed",
+      "type": "timeseries"
     }
   ],
-  "refresh": false,
+  "refresh": "",
   "revision": 1,
   "schemaVersion": 38,
   "style": "dark",
@@ -6282,6 +6286,6 @@
   "timezone": "browser",
   "title": "consensus",
   "uid": "consensus",
-  "version": 8,
+  "version": 4,
   "weekStart": ""
 }

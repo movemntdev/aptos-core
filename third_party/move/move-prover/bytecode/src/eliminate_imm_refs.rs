@@ -8,11 +8,7 @@ use crate::{
     function_target_pipeline::{FunctionTargetProcessor, FunctionTargetsHolder},
     stackless_bytecode::{AssignKind, Bytecode, Operation},
 };
-use move_model::{
-    ast::TempIndex,
-    model::FunctionEnv,
-    ty::{ReferenceKind, Type},
-};
+use move_model::{ast::TempIndex, model::FunctionEnv, ty::Type};
 
 pub struct EliminateImmRefsProcessor {}
 
@@ -57,20 +53,14 @@ impl<'a> EliminateImmRefs<'a> {
             .into_iter()
             .map(|ty| self.transform_type(ty))
             .collect();
-        self.builder.data.result_type = Type::tuple(
-            self.builder
-                .data
-                .result_type
-                .clone()
-                .flatten()
-                .into_iter()
-                .map(|ty| self.transform_type(ty))
-                .collect(),
-        );
+        self.builder.data.return_types = std::mem::take(&mut self.builder.data.return_types)
+            .into_iter()
+            .map(|ty| self.transform_type(ty))
+            .collect();
     }
 
     fn transform_type(&self, ty: Type) -> Type {
-        if let Type::Reference(ReferenceKind::Immutable, y) = ty {
+        if let Type::Reference(false, y) = ty {
             *y
         } else {
             ty

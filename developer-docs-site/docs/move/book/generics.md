@@ -435,7 +435,7 @@ module m {
     // error!
     // foo<T> -> foo<A<T>> -> foo<A<A<T>>> -> ...
     fun foo<T>() {
-        foo<A<T>>();
+        foo<Foo<T>>();
     }
 }
 }

@@ -14,7 +14,6 @@ rust-version = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
-aptos-block-partitioner = { workspace = true }
 aptos-crypto = { workspace = true }
 aptos-scratchpad = { workspace = true }
 aptos-secure-net = { workspace = true }

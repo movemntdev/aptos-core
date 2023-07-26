@@ -334,7 +334,6 @@ Return true if the GUID's ID is <code>id</code>
 
 <pre><code><b>aborts_if</b> creation_num_ref + 1 &gt; MAX_U64;
 <b>ensures</b> result.id.creation_num == <b>old</b>(creation_num_ref);
-<b>ensures</b> creation_num_ref == <b>old</b>(creation_num_ref) + 1;
 </code></pre>
 
 

@@ -27,7 +27,7 @@ use aptos_types::{
 use aptos_vm::data_cache::AsMoveResolver;
 use move_core_types::{
     identifier::Identifier, language_storage::StructTag, move_resource::MoveStructType,
-    resolver::MoveResolver,
+    resolver::ResourceResolver,
 };
 use poem_openapi::{
     param::{Path, Query},
@@ -36,6 +36,7 @@ use poem_openapi::{
 use std::{collections::BTreeMap, convert::TryInto, sync::Arc};
 
 /// API for accounts, their associated resources, and modules
+#[derive(Clone)]
 pub struct AccountsApi {
     pub context: Arc<Context>,
 }
@@ -48,10 +49,10 @@ impl AccountsApi {
     /// address. Optionally, a ledger version can be specified. If the ledger
     /// version is not specified in the request, the latest ledger version is used.
     #[oai(
-        path = "/accounts/:address",
-        method = "get",
-        operation_id = "get_account",
-        tag = "ApiTags::Accounts"
+    path = "/accounts/:address",
+    method = "get",
+    operation_id = "get_account",
+    tag = "ApiTags::Accounts"
     )]
     async fn get_account(
         &self,
@@ -76,6 +77,25 @@ impl AccountsApi {
         account.account(&accept_type)
     }
 
+    pub async fn get_account_raw(
+        &self,
+        accept_type: AcceptType,
+        address: Address,
+        ledger_version: Option<U64>,
+    ) -> BasicResultWith404<AccountData> {
+        fail_point_poem("endpoint_get_account")?;
+        self.context
+            .check_api_output_enabled("Get account", &accept_type)?;
+        let account = Account::new(
+            self.context.clone(),
+            address,
+            ledger_version,
+            None,
+            None,
+        )?;
+        account.account(&accept_type)
+    }
+
     /// Get account resources
     ///
     /// Retrieves all account resources for a given account and a specific ledger version.  If the
@@ -84,10 +104,10 @@ impl AccountsApi {
     /// The Aptos nodes prune account state history, via a configurable time window.
     /// If the requested ledger version has been pruned, the server responds with a 410.
     #[oai(
-        path = "/accounts/:address/resources",
-        method = "get",
-        operation_id = "get_account_resources",
-        tag = "ApiTags::Accounts"
+    path = "/accounts/:address/resources",
+    method = "get",
+    operation_id = "get_account_resources",
+    tag = "ApiTags::Accounts"
     )]
     async fn get_account_resources(
         &self,
@@ -123,6 +143,26 @@ impl AccountsApi {
         account.resources(&accept_type)
     }
 
+    pub async fn get_account_resources_raw(
+        &self,
+        accept_type: AcceptType,
+        address: Address,
+        ledger_version: Option<U64>,
+        start: Option<StateKeyWrapper>,
+        limit: Option<u16>,
+    ) -> BasicResultWith404<Vec<MoveResource>> {
+        fail_point_poem("endpoint_get_account_resources")?;
+        self.context
+            .check_api_output_enabled("Get account resources", &accept_type)?;
+        let account = Account::new(
+            self.context.clone(),
+            address,
+            ledger_version,
+            start.map(StateKey::from), limit,
+        )?;
+        account.resources(&accept_type)
+    }
+
     /// Get account modules
     ///
     /// Retrieves all account modules' bytecode for a given account at a specific ledger version.
@@ -131,10 +171,10 @@ impl AccountsApi {
     /// The Aptos nodes prune account state history, via a configurable time window.
     /// If the requested ledger version has been pruned, the server responds with a 410.
     #[oai(
-        path = "/accounts/:address/modules",
-        method = "get",
-        operation_id = "get_account_modules",
-        tag = "ApiTags::Accounts"
+    path = "/accounts/:address/modules",
+    method = "get",
+    operation_id = "get_account_modules",
+    tag = "ApiTags::Accounts"
     )]
     async fn get_account_modules(
         &self,
@@ -166,6 +206,27 @@ impl AccountsApi {
             ledger_version.0,
             start.0.map(StateKey::from),
             limit.0,
+        )?;
+        account.modules(&accept_type)
+    }
+
+    pub async fn get_account_modules_raw(
+        &self,
+        accept_type: AcceptType,
+        address: Address,
+        ledger_version: Option<U64>,
+        start: Option<StateKeyWrapper>,
+        limit: Option<u16>,
+    ) -> BasicResultWith404<Vec<MoveModuleBytecode>> {
+        fail_point_poem("endpoint_get_account_modules")?;
+        self.context
+            .check_api_output_enabled("Get account modules", &accept_type)?;
+        let account = Account::new(
+            self.context.clone(),
+            address,
+            ledger_version,
+            start.map(StateKey::from),
+            limit,
         )?;
         account.modules(&accept_type)
     }
@@ -337,11 +398,8 @@ impl Account {
         match accept_type {
             AcceptType::Json => {
                 // Resolve the BCS encoded versions into `MoveResource`s
-                let state_view = self
-                    .context
-                    .latest_state_view_poem(&self.latest_ledger_info)?;
-                let converted_resources = state_view
-                    .as_move_resolver()
+                let move_resolver = self.context.move_resolver_poem(&self.latest_ledger_info)?;
+                let converted_resources = move_resolver
                     .as_converter(self.context.db.clone())
                     .try_into_resources(resources.iter().map(|(k, v)| (k.clone(), v.as_slice())))
                     .context("Failed to build move resource response from data in DB")
@@ -357,8 +415,8 @@ impl Account {
                     &self.latest_ledger_info,
                     BasicResponseStatus::Ok,
                 ))
-                .map(|v| v.with_cursor(next_state_key))
-            },
+                    .map(|v| v.with_cursor(next_state_key))
+            }
             AcceptType::Bcs => {
                 // Put resources in a BTreeMap to ensure they're ordered the same every time
                 let resources: BTreeMap<StructTag, Vec<u8>> = resources.into_iter().collect();
@@ -367,8 +425,8 @@ impl Account {
                     &self.latest_ledger_info,
                     BasicResponseStatus::Ok,
                 ))
-                .map(|v| v.with_cursor(next_state_key))
-            },
+                    .map(|v| v.with_cursor(next_state_key))
+            }
         }
     }
 
@@ -429,8 +487,8 @@ impl Account {
                     &self.latest_ledger_info,
                     BasicResponseStatus::Ok,
                 ))
-                .map(|v| v.with_cursor(next_state_key))
-            },
+                    .map(|v| v.with_cursor(next_state_key))
+            }
             AcceptType::Bcs => {
                 // Sort modules by name
                 let modules: BTreeMap<MoveModuleId, Vec<u8>> = modules
@@ -442,8 +500,8 @@ impl Account {
                     &self.latest_ledger_info,
                     BasicResponseStatus::Ok,
                 ))
-                .map(|v| v.with_cursor(next_state_key))
-            },
+                    .map(|v| v.with_cursor(next_state_key))
+            }
         }
     }
 
@@ -516,8 +574,8 @@ impl Account {
     ) -> Result<Vec<(Identifier, move_core_types::value::MoveValue)>, BasicErrorWith404> {
         let (ledger_info, ledger_version, state_view) =
             self.context.state_view(Some(self.ledger_version))?;
-        let resolver = state_view.as_move_resolver();
 
+        let resolver = state_view.as_move_resolver();
         let bytes = resolver
             .get_resource(&self.address.into(), resource_type)
             .context(format!(

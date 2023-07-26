@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use aptos_metrics_core::{
-    exponential_buckets, op_counters::DurationHistogram, register_avg_counter, register_histogram,
-    register_histogram_vec, register_int_counter, register_int_counter_vec, Histogram,
-    HistogramVec, IntCounter, IntCounterVec,
+    exponential_buckets, histogram_opts, op_counters::DurationHistogram, register_avg_counter,
+    register_histogram, register_histogram_vec, register_int_counter, register_int_counter_vec,
+    Histogram, HistogramVec, IntCounter, IntCounterVec,
 };
 use once_cell::sync::Lazy;
 use std::time::Duration;
@@ -23,23 +23,10 @@ pub const POS_DUPLICATE_LABEL: &str = "duplicate";
 
 static TRANSACTION_COUNT_BUCKETS: Lazy<Vec<f64>> = Lazy::new(|| {
     exponential_buckets(
-        /*start=*/ 1.5, /*factor=*/ 1.5, /*count=*/ 25,
+        /*start=*/ 1.5, /*factor=*/ 1.5, /*count=*/ 20,
     )
     .unwrap()
 });
-
-static BYTE_BUCKETS: Lazy<Vec<f64>> = Lazy::new(|| {
-    exponential_buckets(
-        /*start=*/ 500.0, /*factor=*/ 1.5, /*count=*/ 25,
-    )
-    .unwrap()
-});
-
-// Histogram buckets that expand DEFAULT_BUCKETS with more granularity between 100-2000 ms
-const QUORUM_STORE_LATENCY_BUCKETS: &[f64] = &[
-    0.005, 0.01, 0.025, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.65, 0.7,
-    0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 5.0, 10.0,
-];
 
 /// Counter for tracking latency of quorum store processing requests from consensus
 /// A 'fail' result means the quorum store's callback response to consensus failed.
@@ -102,20 +89,19 @@ pub static NUM_BATCH_PER_BLOCK: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!(
         "quorum_store_num_batch_per_block",
         "Histogram for the number of batches per (committed) blocks.",
-        TRANSACTION_COUNT_BUCKETS.clone(),
+        // exponential_buckets(/*start=*/ 5.0, /*factor=*/ 1.1, /*count=*/ 20).unwrap(),
     )
     .unwrap()
 });
 
 /// Histogram for the number of transactions per batch.
 static NUM_TXN_PER_BATCH: Lazy<HistogramVec> = Lazy::new(|| {
-    register_histogram_vec!(
+    let histogram_opts = histogram_opts!(
         "quorum_store_num_txn_per_batch",
         "Histogram for the number of transanctions per batch.",
-        &["bucket"],
         TRANSACTION_COUNT_BUCKETS.clone(),
-    )
-    .unwrap()
+    );
+    register_histogram_vec!(histogram_opts, &["bucket"]).unwrap()
 });
 
 pub fn num_txn_per_batch(bucket_start: &str, num: usize) {
@@ -129,7 +115,7 @@ pub static BLOCK_SIZE_WHEN_PULL: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!(
         "quorum_store_block_size_when_pull",
         "Histogram for the number of transactions per block when pulled for consensus.",
-        TRANSACTION_COUNT_BUCKETS.clone(),
+        // exponential_buckets(/*start=*/ 5.0, /*factor=*/ 1.1, /*count=*/ 20).unwrap(),
     )
     .unwrap()
 });
@@ -139,7 +125,7 @@ pub static BLOCK_BYTES_WHEN_PULL: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!(
         "quorum_store_block_bytes_when_pull",
         "Histogram for the total size of transactions per block when pulled for consensus.",
-        BYTE_BUCKETS.clone(),
+        // exponential_buckets(/*start=*/ 5.0, /*factor=*/ 1.1, /*count=*/ 20).unwrap(),
     )
     .unwrap()
 });
@@ -149,7 +135,7 @@ pub static PROOF_SIZE_WHEN_PULL: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!(
         "quorum_store_proof_size_when_pull",
         "Histogram for the number of proof-of-store per block when pulled for consensus.",
-        TRANSACTION_COUNT_BUCKETS.clone(),
+        // exponential_buckets(/*start=*/ 5.0, /*factor=*/ 1.1, /*count=*/ 20).unwrap(),
     )
     .unwrap()
 });
@@ -158,7 +144,7 @@ pub static EXCLUDED_TXNS_WHEN_PULL: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!(
         "quorum_store_excluded_txns_when_pull",
         "Histogram for the number of transactions were considered but excluded when pulled for consensus.",
-        TRANSACTION_COUNT_BUCKETS.clone(),
+        // exponential_buckets(/*start=*/ 5.0, /*factor=*/ 1.1, /*count=*/ 20).unwrap(),
     )
         .unwrap()
 });
@@ -168,7 +154,7 @@ pub static GAP_BETWEEN_BATCH_EXPIRATION_AND_CURRENT_TIME_WHEN_SAVE: Lazy<Histogr
         register_histogram!(
         "quorum_store_gap_batch_expiration_and_current_time_when_save",
         "Histogram for the gaps between expiration round and the current round when saving proofs, and expiration time is lower.",
-        QUORUM_STORE_LATENCY_BUCKETS.to_vec()
+        // exponential_buckets(/*start=*/ 100.0, /*factor=*/ 1.1, /*count=*/ 100).unwrap(),
     )
     .unwrap()
     },
@@ -188,7 +174,7 @@ pub static GAP_BETWEEN_BATCH_EXPIRATION_AND_CURRENT_TIME_WHEN_COMMIT: Lazy<Histo
         register_histogram!(
         "quorum_store_gap_batch_expiration_and_current_time_when_commit",
         "Histogram for the gaps between expiration time and the current block timestamp on commit, and expiration round is lower.",
-        QUORUM_STORE_LATENCY_BUCKETS.to_vec()
+        // exponential_buckets(/*start=*/ 100.0, /*factor=*/ 1.1, /*count=*/ 100).unwrap(),
     )
             .unwrap()
     },
@@ -207,7 +193,6 @@ static POS_TO_PULL: Lazy<HistogramVec> = Lazy::new(|| {
         "quorum_store_pos_to_pull",
         "Histogram for how long it took a PoS to go from inserted to pulled into a proposed block",
         &["bucket"],
-        QUORUM_STORE_LATENCY_BUCKETS.to_vec()
     )
     .unwrap()
 });
@@ -223,7 +208,6 @@ static POS_TO_COMMIT: Lazy<HistogramVec> = Lazy::new(|| {
         "quorum_store_pos_to_commit",
         "Histogram for how long it took a PoS to go from inserted to commit notified",
         &["bucket"],
-        QUORUM_STORE_LATENCY_BUCKETS.to_vec()
     )
     .unwrap()
 });
@@ -278,7 +262,7 @@ pub static PULLED_TXNS_NUM: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!(
         "quorum_store_pulled_txns_num",
         "Histogram for the number of txns are pulled.",
-        TRANSACTION_COUNT_BUCKETS.clone()
+        // exponential_buckets(/*start=*/ 5.0, /*factor=*/ 1.1, /*count=*/ 20).unwrap(),
     )
     .unwrap()
 });
@@ -511,7 +495,6 @@ pub static BATCH_CREATION_DURATION: Lazy<DurationHistogram> = Lazy::new(|| {
         register_histogram!(
             "quorum_store_batch_creation_duration",
             "Histogram of the time durations for batch creation.",
-            QUORUM_STORE_LATENCY_BUCKETS.to_vec()
         )
         .unwrap(),
     )
@@ -523,7 +506,6 @@ pub static EMPTY_BATCH_CREATION_DURATION: Lazy<DurationHistogram> = Lazy::new(||
         register_histogram!(
             "quorum_store_empty_batch_creation_duration",
             "Histogram of the time durations for empty batch creation.",
-            QUORUM_STORE_LATENCY_BUCKETS.to_vec()
         )
         .unwrap(),
     )
@@ -546,7 +528,7 @@ pub static BATCH_TO_POS_DURATION: Lazy<DurationHistogram> = Lazy::new(|| {
         register_histogram!(
             "quorum_store_batch_to_PoS_duration",
             "Histogram of the time durations from batch creation to PoS creation.",
-            QUORUM_STORE_LATENCY_BUCKETS.to_vec()
+            // exponential_buckets(/*start=*/ 100.0, /*factor=*/ 1.1, /*count=*/ 100).unwrap(),
         )
         .unwrap(),
     )
@@ -564,7 +546,6 @@ pub static BATCH_RECEIVED_REPLIES_COUNT: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!(
         "quorum_store_batch_received_replies_votes",
         "Number of validators for which we received signed replies.",
-        TRANSACTION_COUNT_BUCKETS.clone(),
     )
     .unwrap()
 });
@@ -574,7 +555,6 @@ pub static BATCH_RECEIVED_REPLIES_VOTING_POWER: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!(
         "quorum_store_batch_received_replies_voting_power",
         "Voting power of validators for which we received signed replies.",
-        TRANSACTION_COUNT_BUCKETS.clone(),
     )
     .unwrap()
 });

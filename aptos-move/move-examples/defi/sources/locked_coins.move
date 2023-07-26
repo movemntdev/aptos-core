@@ -156,10 +156,13 @@ module defi::locked_coins {
         sponsor: &signer, recipients: vector<address>, amounts: vector<u64>, unlock_time_secs: u64) acquires Locks {
         let len = vector::length(&recipients);
         assert!(len == vector::length(&amounts), error::invalid_argument(EINVALID_RECIPIENTS_LIST_LENGTH));
-        vector::enumerate_ref(&recipients, |i, recipient| {
+        let i = 0;
+        while (i < len) {
+            let recipient = *vector::borrow(&recipients, i);
             let amount = *vector::borrow(&amounts, i);
-            add_locked_coins<CoinType>(sponsor, *recipient, amount, unlock_time_secs);
-        });
+            add_locked_coins<CoinType>(sponsor, recipient, amount, unlock_time_secs);
+            i = i + 1;
+        }
     }
 
     /// `Sponsor` can add locked coins for `recipient` with given unlock timestamp (in seconds).
@@ -210,9 +213,13 @@ module defi::locked_coins {
         let sponsor_address = signer::address_of(sponsor);
         assert!(exists<Locks<CoinType>>(sponsor_address), error::not_found(ESPONSOR_ACCOUNT_NOT_INITIALIZED));
 
-        vector::for_each_ref(&recipients, |recipient| {
-            update_lockup<CoinType>(sponsor, *recipient, new_unlock_time_secs);
-        });
+        let len = vector::length(&recipients);
+        let i = 0;
+        while (i < len) {
+            let recipient = *vector::borrow(&recipients, i);
+            update_lockup<CoinType>(sponsor, recipient, new_unlock_time_secs);
+            i = i + 1;
+        };
     }
 
     /// Sponsor can update the lockup of an existing lock.
@@ -239,9 +246,13 @@ module defi::locked_coins {
         let sponsor_address = signer::address_of(sponsor);
         assert!(exists<Locks<CoinType>>(sponsor_address), error::not_found(ESPONSOR_ACCOUNT_NOT_INITIALIZED));
 
-        vector::for_each_ref(&recipients, |recipient| {
-            cancel_lockup<CoinType>(sponsor, *recipient);
-        });
+        let len = vector::length(&recipients);
+        let i = 0;
+        while (i < len) {
+            let recipient = *vector::borrow(&recipients, i);
+            cancel_lockup<CoinType>(sponsor, recipient);
+            i = i + 1;
+        };
     }
 
     /// Sponsor can cancel an existing lock.

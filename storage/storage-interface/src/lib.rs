@@ -2,7 +2,6 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::cached_state_view::ShardedStateCache;
 use anyhow::{anyhow, format_err, Result};
 use aptos_crypto::{hash::CryptoHash, HashValue};
 use aptos_types::{
@@ -27,7 +26,6 @@ use aptos_types::{
         state_storage_usage::StateStorageUsage,
         state_value::{StateValue, StateValueChunkWithProof},
         table::{TableHandle, TableInfo},
-        ShardedStateUpdates,
     },
     transaction::{
         AccountTransactionsWithProof, Transaction, TransactionInfo, TransactionListWithProof,
@@ -126,6 +124,15 @@ pub trait DbReader: Send + Sync {
         ledger_version: Version,
         fetch_events: bool,
     ) -> Result<TransactionListWithProof> {
+        unimplemented!()
+    }
+
+    fn get_gas_prices(
+        &self,
+        start_version: Version,
+        limit: u64,
+        ledger_version: Version,
+    ) -> Result<Vec<u64>> {
         unimplemented!()
     }
 
@@ -305,9 +312,9 @@ pub trait DbReader: Send + Sync {
             .and_then(|opt| opt.ok_or_else(|| format_err!("Latest LedgerInfo not found.")))
     }
 
-    /// Returns the latest committed version, error on on non-bootstrapped/empty DB.
+    /// Returns the latest version, error on on non-bootstrapped DB.
     fn get_latest_version(&self) -> Result<Version> {
-        unimplemented!()
+        Ok(self.get_latest_ledger_info()?.ledger_info().version())
     }
 
     /// Returns the latest state checkpoint version if any.
@@ -372,7 +379,7 @@ pub trait DbReader: Send + Sync {
         unimplemented!()
     }
 
-    /// Gets the state value by state key at version.
+    /// Gets an account state by account address.
     /// See [AptosDB::get_state_value_by_version].
     ///
     /// [AptosDB::get_state_value_by_version]:
@@ -382,20 +389,6 @@ pub trait DbReader: Send + Sync {
         state_key: &StateKey,
         version: Version,
     ) -> Result<Option<StateValue>> {
-        unimplemented!()
-    }
-
-    /// Get the latest state value and its corresponding version when it's of the given key up
-    /// to the given version.
-    /// See [AptosDB::get_state_value_with_version_by_version].
-    ///
-    /// [AptosDB::get_state_value_with_version_by_version]:
-    /// ../aptosdb/struct.AptosDB.html#method.get_state_value_with_version_by_version
-    fn get_state_value_with_version_by_version(
-        &self,
-        state_key: &StateKey,
-        version: Version,
-    ) -> Result<Option<(Version, StateValue)>> {
         unimplemented!()
     }
 
@@ -441,6 +434,13 @@ pub trait DbReader: Send + Sync {
 
     /// Get the ledger info of the epoch that `known_version` belongs to.
     fn get_epoch_ending_ledger_info(&self, known_version: u64) -> Result<LedgerInfoWithSignatures> {
+        unimplemented!()
+    }
+
+    /// Gets the latest transaction info.
+    /// N.B. Unlike get_startup_info(), even if the db is not bootstrapped, this can return `Some`
+    /// -- those from a aptos db-tool restore run.
+    fn get_latest_transaction_info_option(&self) -> Result<Option<(Version, TransactionInfo)>> {
         unimplemented!()
     }
 
@@ -562,7 +562,16 @@ impl MoveStorage for &dyn DbReader {
     }
 
     fn fetch_synced_version(&self) -> Result<u64> {
-        self.get_latest_version()
+        let (synced_version, _) = self
+            .get_latest_transaction_info_option()
+            .map_err(|e| {
+                format_err!(
+                    "[MoveStorage] Failed fetching latest transaction info: {}",
+                    e
+                )
+            })?
+            .ok_or_else(|| format_err!("[MoveStorage] Latest transaction info not found."))?;
+        Ok(synced_version)
     }
 
     fn fetch_latest_state_checkpoint_version(&self) -> Result<Version> {
@@ -631,8 +640,7 @@ pub trait DbWriter: Send + Sync {
         ledger_info_with_sigs: Option<&LedgerInfoWithSignatures>,
         sync_commit: bool,
         latest_in_memory_state: StateDelta,
-        block_state_updates: ShardedStateUpdates,
-        sharded_state_cache: &ShardedStateCache,
+        block_state_updates: HashMap<StateKey, Option<StateValue>>,
     ) -> Result<()> {
         unimplemented!()
     }
@@ -712,11 +720,11 @@ impl SaveTransactionsRequest {
 }
 
 pub fn jmt_updates(
-    state_updates: &HashMap<&StateKey, Option<&StateValue>>,
+    state_updates: &HashMap<StateKey, Option<StateValue>>,
 ) -> Vec<(HashValue, Option<(HashValue, StateKey)>)> {
     state_updates
         .iter()
-        .map(|(k, v_opt)| (k.hash(), v_opt.as_ref().map(|v| (v.hash(), (*k).clone()))))
+        .map(|(k, v_opt)| (k.hash(), v_opt.as_ref().map(|v| (v.hash(), k.clone()))))
         .collect()
 }
 

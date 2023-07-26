@@ -5,12 +5,10 @@
 use crate::{
     executor::BlockExecutor,
     proptest_types::types::{
-        EmptyDataView, ExpectedOutput, KeyType, Output, Task, Transaction, TransactionGen,
+        EmptyDataView, ExpectedOutput, KeyType, Task, Transaction, TransactionGen,
         TransactionGenParams, ValueType,
     },
-    txn_commit_hook::NoOpTransactionCommitHook,
 };
-use aptos_types::executable::ExecutableTestType;
 use criterion::{BatchSize, Bencher as CBencher};
 use num_cpus;
 use proptest::{
@@ -20,7 +18,7 @@ use proptest::{
     strategy::{Strategy, ValueTree},
     test_runner::TestRunner,
 };
-use std::{fmt::Debug, hash::Hash, marker::PhantomData, sync::Arc};
+use std::{fmt::Debug, hash::Hash, marker::PhantomData};
 
 pub struct Bencher<K, V> {
     transaction_size: usize,
@@ -102,7 +100,7 @@ where
             .map(|txn_gen| txn_gen.materialize(&key_universe, (false, false)))
             .collect();
 
-        let expected_output = ExpectedOutput::generate_baseline(&transactions, None, None);
+        let expected_output = ExpectedOutput::generate_baseline(&transactions, None);
 
         Self {
             transactions,
@@ -115,20 +113,11 @@ where
             phantom: PhantomData,
         };
 
-        let executor_thread_pool = Arc::new(
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(num_cpus::get())
-                .build()
-                .unwrap(),
-        );
-
         let output = BlockExecutor::<
             Transaction<KeyType<K>, ValueType<V>>,
             Task<KeyType<K>, ValueType<V>>,
             EmptyDataView<KeyType<K>, ValueType<V>>,
-            NoOpTransactionCommitHook<Output<KeyType<K>, ValueType<V>>, usize>,
-            ExecutableTestType,
-        >::new(num_cpus::get(), executor_thread_pool, None, None)
+        >::new(num_cpus::get())
         .execute_transactions_parallel((), &self.transactions, &data_view);
 
         self.expected_output.assert_output(&output);

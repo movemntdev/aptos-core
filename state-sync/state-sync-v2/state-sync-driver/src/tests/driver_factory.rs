@@ -10,7 +10,7 @@ use aptos_config::{
     utils::get_genesis_txn,
 };
 use aptos_consensus_notifications::new_consensus_notifier_listener_pair;
-use aptos_data_client::client::AptosDataClient;
+use aptos_data_client::aptosnet::AptosNetDataClient;
 use aptos_data_streaming_service::streaming_client::new_streaming_service_client_listener_pair;
 use aptos_db::AptosDB;
 use aptos_event_notifications::EventSubscriptionService;
@@ -62,10 +62,6 @@ fn test_new_initialized_configs() {
         .subscribe_to_reconfigurations()
         .unwrap();
 
-    // Create the storage service notifier and listener
-    let (storage_service_notifier, _storage_service_listener) =
-        aptos_storage_service_notifications::new_storage_service_notifier_listener_pair();
-
     // Create a test streaming service client
     let (streaming_service_client, _) = new_streaming_service_client_listener_pair();
 
@@ -76,11 +72,10 @@ fn test_new_initialized_configs() {
         HashMap::new(),
         PeersAndMetadata::new(&[]),
     ));
-    let (aptos_data_client, _) = AptosDataClient::new(
+    let (aptos_data_client, _) = AptosNetDataClient::new(
         node_config.state_sync.aptos_data_client,
         node_config.base.clone(),
         TimeService::mock(),
-        db_rw.reader.clone(),
         network_client,
         None,
     );
@@ -95,7 +90,6 @@ fn test_new_initialized_configs() {
         db_rw,
         chunk_executor,
         mempool_notifier,
-        storage_service_notifier,
         metadata_storage,
         consensus_listener,
         event_subscription_service,

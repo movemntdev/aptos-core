@@ -112,10 +112,12 @@ module aptos_framework::aptos_coin {
     public entry fun delegate_mint_capability(account: signer, to: address) acquires Delegations {
         system_addresses::assert_core_resource(&account);
         let delegations = &mut borrow_global_mut<Delegations>(@core_resources).inner;
-        vector::for_each_ref(delegations, |element| {
-            let element: &DelegatedMintCapability = element;
+        let i = 0;
+        while (i < vector::length(delegations)) {
+            let element = vector::borrow(delegations, i);
             assert!(element.to != to, error::invalid_argument(EALREADY_DELEGATED));
-        });
+            i = i + 1;
+        };
         vector::push_back(delegations, DelegatedMintCapability { to });
     }
 

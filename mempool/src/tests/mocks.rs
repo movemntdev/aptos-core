@@ -56,7 +56,6 @@ impl MockSharedMempool {
     /// and the channel through which shared mempool receives client events.
     pub fn new() -> Self {
         let runtime = aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
-        let _entered_runtime = runtime.enter();
         let (ac_client, mempool, quorum_store_sender, mempool_notifier) = Self::start(
             runtime.handle(),
             &DbReaderWriter::new(MockDbReaderWriter),
@@ -113,7 +112,7 @@ impl MockSharedMempool {
             PeerManagerRequestSender::new(network_reqs_tx),
             ConnectionRequestSender::new(connection_reqs_tx),
         );
-        let network_events = NetworkEvents::new(network_notifs_rx, conn_notifs_rx, None);
+        let network_events = NetworkEvents::new(network_notifs_rx, conn_notifs_rx);
         let (ac_client, client_events) = mpsc::channel(1_024);
         let (quorum_store_sender, quorum_store_receiver) = mpsc::channel(1_024);
         let (mempool_notifier, mempool_listener) =
@@ -134,7 +133,7 @@ impl MockSharedMempool {
             vec![MempoolDirectSend],
             vec![],
             network_senders,
-            peers_and_metadata.clone(),
+            peers_and_metadata,
         );
         let network_and_events = hashmap! {NetworkId::Validator => network_events};
         let network_service_events = NetworkServiceEvents::new(network_and_events);
@@ -152,7 +151,6 @@ impl MockSharedMempool {
             db.reader.clone(),
             Arc::new(RwLock::new(validator)),
             vec![],
-            peers_and_metadata,
         );
 
         (ac_client, mempool, quorum_store_sender, mempool_notifier)
@@ -168,7 +166,6 @@ impl MockSharedMempool {
                         txn.gas_unit_price(),
                         0,
                         TimelineState::NotReady,
-                        false,
                     )
                     .code
                     != MempoolStatusCode::Accepted

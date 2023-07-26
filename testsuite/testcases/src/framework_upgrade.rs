@@ -22,7 +22,7 @@ impl Test for FrameworkUpgrade {
 }
 
 impl NetworkTest for FrameworkUpgrade {
-    fn run(&self, ctx: &mut NetworkContext<'_>) -> Result<()> {
+    fn run<'t>(&self, ctx: &mut NetworkContext<'t>) -> Result<()> {
         let runtime = Runtime::new()?;
 
         // Get the different versions we're testing with
@@ -122,6 +122,7 @@ impl NetworkTest for FrameworkUpgrade {
         ctx.report.report_txn_stats(
             format!("{}::full-framework-upgrade", self.name()),
             &txn_stat,
+            duration,
         );
 
         ctx.swarm().fork_check()?;

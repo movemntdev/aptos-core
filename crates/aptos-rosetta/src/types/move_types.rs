@@ -24,10 +24,8 @@ pub const COIN_STORE_RESOURCE: &str = "CoinStore";
 pub const STAKE_POOL_RESOURCE: &str = "StakePool";
 pub const STAKING_CONTRACT_RESOURCE: &str = "StakingContract";
 pub const STORE_RESOURCE: &str = "Store";
-pub const STAKING_GROUP_UPDATE_COMMISSION_RESOURCE: &str = "StakingGroupUpdateCommissionEvent";
 pub const VESTING_RESOURCE: &str = "Vesting";
 pub const DELEGATION_POOL_RESOURCE: &str = "DelegationPool";
-pub const WITHDRAW_STAKE_EVENT: &str = "WithdrawStakeEvent";
 
 pub const CREATE_ACCOUNT_FUNCTION: &str = "create_account";
 pub const TRANSFER_FUNCTION: &str = "transfer";
@@ -39,14 +37,12 @@ pub const SWITCH_OPERATOR_WITH_SAME_COMMISSION_FUNCTION: &str =
     "switch_operator_with_same_commission";
 pub const UPDATE_VOTER_FUNCTION: &str = "update_voter";
 pub const UNLOCK_STAKE_FUNCTION: &str = "unlock_stake";
-// TODO fix the typo in function name. commision -> commission
-pub const UPDATE_COMMISSION_FUNCTION: &str = "update_commision";
 pub const DISTRIBUTE_STAKING_REWARDS_FUNCTION: &str = "distribute";
 
 // Delegation Pool Contract
-pub const DELEGATION_POOL_ADD_STAKE_FUNCTION: &str = "add_stake";
-pub const DELEGATION_POOL_UNLOCK_FUNCTION: &str = "unlock";
-pub const DELEGATION_POOL_WITHDRAW_FUNCTION: &str = "withdraw";
+pub const ADD_DELEGATED_STAKE_FUNCTION: &str = "add_delegated_stake";
+pub const UNLOCK_DELEGATED_STAKE_FUNCTION: &str = "unlock_delegated_stake";
+pub const WITHDRAW_UNDELEGATED_FUNDS_FUNCTION: &str = "withdraw_undelegated_funds";
 
 pub const DECIMALS_FIELD: &str = "decimal";
 pub const DEPOSIT_EVENTS_FIELD: &str = "deposit_events";
@@ -84,19 +80,6 @@ pub struct Store {
     pub switch_operator_events: EventHandle,
     pub add_distribution_events: EventHandle,
     pub distribute_events: EventHandle,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct StakingGroupUpdateCommissionEvent {
-    pub update_commission_events: EventHandle,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct UpdateCommissionEvent {
-    pub staker: AccountAddress,
-    pub operator: AccountAddress,
-    pub old_commission_percentage: u64,
-    pub new_commission_percentage: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -229,6 +212,7 @@ pub struct AddDelegationEvent {
     pub pool_address: AccountAddress,
     pub delegator_address: AccountAddress,
     pub amount_added: u64,
+    pub add_stake_fee: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -239,7 +223,7 @@ pub struct UndelegationEvent {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct WithdrawUndelegedEvent {
+struct WithdrawUndelegedEvent {
     pub pool_address: AccountAddress,
     pub delegator_address: AccountAddress,
     pub amount_withdrawn: u64,

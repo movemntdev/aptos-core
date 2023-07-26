@@ -127,9 +127,3 @@ fn main() {
 
     println!("{}", dissassemble_string);
 }
-
-#[test]
-fn verify_tool() {
-    use clap::CommandFactory;
-    Args::command().debug_assert()
-}

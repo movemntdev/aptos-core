@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    core_mempool::{CoreMempool, MempoolTransaction, SubmittedBy, TimelineState},
+    core_mempool::{CoreMempool, MempoolTransaction, TimelineState},
     tests::common::{
         add_signed_txn, add_txn, add_txns_to_mempool, setup_mempool,
         setup_mempool_with_broadcast_buckets, TestTransaction,
@@ -73,44 +73,28 @@ fn test_transaction_metrics() {
         txn.gas_unit_price(),
         0,
         TimelineState::NotReady,
-        false,
     );
-    let txn = TestTransaction::new(1, 0, 1).make_signed_transaction();
+    let txn = TestTransaction::new(1, 0, 2).make_signed_transaction();
     mempool.add_txn(
         txn.clone(),
         txn.gas_unit_price(),
         0,
         TimelineState::NonQualified,
-        false,
-    );
-    let txn = TestTransaction::new(2, 0, 1).make_signed_transaction();
-    mempool.add_txn(
-        txn.clone(),
-        txn.gas_unit_price(),
-        0,
-        TimelineState::NotReady,
-        true,
     );
 
     // Check timestamp returned as end-to-end for broadcast-able transaction
-    let (insertion_info, _bucket) = mempool
+    let (&_insertion_time, is_end_to_end, _bucket) = mempool
         .get_transaction_store()
-        .get_insertion_info_and_bucket(&TestTransaction::get_address(0), 0)
+        .get_insertion_time_and_bucket(&TestTransaction::get_address(0), 0)
         .unwrap();
-    assert_eq!(insertion_info.submitted_by, SubmittedBy::Downstream);
+    assert!(is_end_to_end);
 
     // Check timestamp returned as not end-to-end for non-broadcast-able transaction
-    let (insertion_info, _bucket) = mempool
+    let (&_insertion_time, is_end_to_end, _bucket) = mempool
         .get_transaction_store()
-        .get_insertion_info_and_bucket(&TestTransaction::get_address(1), 0)
+        .get_insertion_time_and_bucket(&TestTransaction::get_address(1), 0)
         .unwrap();
-    assert_eq!(insertion_info.submitted_by, SubmittedBy::PeerValidator);
-
-    let (insertion_info, _bucket) = mempool
-        .get_transaction_store()
-        .get_insertion_info_and_bucket(&TestTransaction::get_address(2), 0)
-        .unwrap();
-    assert_eq!(insertion_info.submitted_by, SubmittedBy::Client);
+    assert!(!is_end_to_end);
 }
 
 #[test]
@@ -564,7 +548,6 @@ fn test_capacity_bytes() {
                 txn.ranking_score,
                 txn.sequence_info.account_sequence_number,
                 txn.timeline_state,
-                false,
             );
             assert_eq!(status.code, MempoolStatusCode::Accepted);
         });
@@ -575,7 +558,6 @@ fn test_capacity_bytes() {
                 txn.ranking_score,
                 txn.sequence_info.account_sequence_number,
                 txn.timeline_state,
-                false,
             );
             assert_eq!(status.code, MempoolStatusCode::MempoolIsFull);
         }
@@ -593,7 +575,6 @@ fn new_test_mempool_transaction(address: usize, sequence_number: u64) -> Mempool
         TimelineState::NotReady,
         0,
         SystemTime::now(),
-        false,
     )
 }
 
@@ -662,7 +643,7 @@ fn test_gc_ready_transaction() {
 
     // Insert in the middle transaction that's going to be expired.
     let txn = TestTransaction::new(1, 1, 1).make_signed_transaction_with_expiration_time(0);
-    pool.add_txn(txn, 1, 0, TimelineState::NotReady, false);
+    pool.add_txn(txn, 1, 0, TimelineState::NotReady);
 
     // Insert few transactions after it.
     // They are supposed to be ready because there's a sequential path from 0 to them.
@@ -701,7 +682,7 @@ fn test_clean_stuck_transactions() {
     }
     let db_sequence_number = 10;
     let txn = TestTransaction::new(0, db_sequence_number, 1).make_signed_transaction();
-    pool.add_txn(txn, 1, db_sequence_number, TimelineState::NotReady, false);
+    pool.add_txn(txn, 1, db_sequence_number, TimelineState::NotReady);
     let block = pool.get_batch(1, 1024, true, false, vec![]);
     assert_eq!(block.len(), 1);
     assert_eq!(block[0].sequence_number(), 10);
@@ -712,13 +693,7 @@ fn test_get_transaction_by_hash() {
     let mut pool = setup_mempool().0;
     let db_sequence_number = 10;
     let txn = TestTransaction::new(0, db_sequence_number, 1).make_signed_transaction();
-    pool.add_txn(
-        txn.clone(),
-        1,
-        db_sequence_number,
-        TimelineState::NotReady,
-        false,
-    );
+    pool.add_txn(txn.clone(), 1, db_sequence_number, TimelineState::NotReady);
     let hash = txn.clone().committed_hash();
     let ret = pool.get_by_hash(hash);
     assert_eq!(ret, Some(txn));
@@ -732,13 +707,7 @@ fn test_get_transaction_by_hash_after_the_txn_is_updated() {
     let mut pool = setup_mempool().0;
     let db_sequence_number = 10;
     let txn = TestTransaction::new(0, db_sequence_number, 1).make_signed_transaction();
-    pool.add_txn(
-        txn.clone(),
-        1,
-        db_sequence_number,
-        TimelineState::NotReady,
-        false,
-    );
+    pool.add_txn(txn.clone(), 1, db_sequence_number, TimelineState::NotReady);
     let hash = txn.committed_hash();
 
     // new txn with higher gas price
@@ -748,7 +717,6 @@ fn test_get_transaction_by_hash_after_the_txn_is_updated() {
         1,
         db_sequence_number,
         TimelineState::NotReady,
-        false,
     );
     let new_txn_hash = new_txn.clone().committed_hash();
 

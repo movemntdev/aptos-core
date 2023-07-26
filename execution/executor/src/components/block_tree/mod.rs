@@ -7,10 +7,7 @@
 #[cfg(test)]
 mod test;
 
-use crate::{
-    logging::{LogEntry, LogSchema},
-    metrics::APTOS_EXECUTOR_OTHER_TIMERS_SECONDS,
-};
+use crate::logging::{LogEntry, LogSchema};
 use anyhow::{anyhow, ensure, Result};
 use aptos_consensus_types::block::Block as ConsensusBlock;
 use aptos_crypto::HashValue;
@@ -21,10 +18,7 @@ use aptos_storage_interface::DbReader;
 use aptos_types::{ledger_info::LedgerInfo, proof::definition::LeafCount};
 use std::{
     collections::{hash_map::Entry, HashMap},
-    sync::{
-        mpsc::{channel, Receiver},
-        Arc, Weak,
-    },
+    sync::{Arc, Weak},
 };
 
 pub struct Block {
@@ -232,12 +226,7 @@ impl BlockTree {
         block_lookup.fetch_or_add_block(id, ExecutedBlock::new_empty(ledger_view), None)
     }
 
-    // Set the root to be at `ledger_info`, drop blocks that are no longer descendants of the
-    // new root.
-    //
-    // Dropping happens asynchronously in another thread. A receiver is returned to the caller
-    // to wait for the dropping to fully complete (useful for tests).
-    pub fn prune(&self, ledger_info: &LedgerInfo) -> Result<Receiver<()>> {
+    pub fn prune(&self, ledger_info: &LedgerInfo) -> Result<()> {
         let committed_block_id = ledger_info.consensus_block_id();
         let last_committed_block = self.get_block(committed_block_id)?;
 
@@ -261,26 +250,8 @@ impl BlockTree {
             );
             last_committed_block
         };
-        let old_root = {
-            let mut root_locked = self.root.lock();
-            // send old root to async task to drop it
-            let old_root = root_locked.clone();
-            *root_locked = root;
-            old_root
-        };
-        // This should be the last reference to old root, spawning a drop to a different thread
-        // guarantees that the drop will not happen in the current thread
-        let (tx, rx) = channel::<()>();
-        rayon::spawn(move || {
-            let _timeer = APTOS_EXECUTOR_OTHER_TIMERS_SECONDS
-                .with_label_values(&["drop_old_root"])
-                .start_timer();
-            drop(old_root);
-            // Error is ignored, since the caller might not care about dropping completion and
-            // has discarded the receiver already.
-            tx.send(()).ok();
-        });
-        Ok(rx)
+        *self.root.lock() = root;
+        Ok(())
     }
 
     pub fn add_block(

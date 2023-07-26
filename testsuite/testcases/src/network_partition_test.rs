@@ -45,7 +45,7 @@ impl NetworkLoadTest for NetworkPartitionTest {
 }
 
 impl NetworkTest for NetworkPartitionTest {
-    fn run(&self, ctx: &mut NetworkContext<'_>) -> anyhow::Result<()> {
+    fn run<'t>(&self, ctx: &mut NetworkContext<'t>) -> anyhow::Result<()> {
         <dyn NetworkLoadTest>::run(self, ctx)
     }
 }

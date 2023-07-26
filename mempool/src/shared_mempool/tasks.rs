@@ -117,7 +117,7 @@ pub(crate) async fn process_client_transaction_submission<NetworkClient, Transac
     } else {
         TimelineState::NotReady
     };
-    let statuses = process_incoming_transactions(&smp, vec![transaction], timeline_state, true);
+    let statuses = process_incoming_transactions(&smp, vec![transaction], timeline_state);
     log_txn_process_results(&statuses, None);
 
     if let Some(status) = statuses.first() {
@@ -168,7 +168,7 @@ pub(crate) async fn process_transaction_broadcast<NetworkClient, TransactionVali
 {
     timer.stop_and_record();
     let _timer = counters::process_txn_submit_latency_timer(peer.network_id());
-    let results = process_incoming_transactions(&smp, transactions, timeline_state, false);
+    let results = process_incoming_transactions(&smp, transactions, timeline_state);
     log_txn_process_results(&results, Some(peer));
 
     let ack_response = gen_ack_response(request_id, results, &peer);
@@ -246,7 +246,6 @@ pub(crate) fn process_incoming_transactions<NetworkClient, TransactionValidator>
     smp: &SharedMempool<NetworkClient, TransactionValidator>,
     transactions: Vec<SignedTransaction>,
     timeline_state: TimelineState,
-    client_submitted: bool,
 ) -> Vec<SubmissionStatusBundle>
 where
     NetworkClient: NetworkClientInterface<MempoolSyncMsg>,
@@ -309,13 +308,7 @@ where
         })
         .collect();
 
-    validate_and_add_transactions(
-        transactions,
-        smp,
-        timeline_state,
-        &mut statuses,
-        client_submitted,
-    );
+    validate_and_add_transactions(transactions, smp, timeline_state, &mut statuses);
     notify_subscribers(SharedMempoolNotification::NewTransactions, &smp.subscribers);
     statuses
 }
@@ -328,7 +321,6 @@ fn validate_and_add_transactions<NetworkClient, TransactionValidator>(
     smp: &SharedMempool<NetworkClient, TransactionValidator>,
     timeline_state: TimelineState,
     statuses: &mut Vec<(SignedTransaction, (MempoolStatus, Option<StatusCode>))>,
-    client_submitted: bool,
 ) where
     NetworkClient: NetworkClientInterface<MempoolSyncMsg>,
     TransactionValidator: TransactionValidation,
@@ -354,7 +346,6 @@ fn validate_and_add_transactions<NetworkClient, TransactionValidator>(
                             ranking_score,
                             sequence_info,
                             timeline_state,
-                            client_submitted,
                         );
                         statuses.push((transaction, (mempool_status, None)));
                     },
@@ -394,20 +385,13 @@ fn validate_and_add_transactions<NetworkClient, TransactionValidator>(
     smp: &SharedMempool<NetworkClient, TransactionValidator>,
     timeline_state: TimelineState,
     statuses: &mut Vec<(SignedTransaction, (MempoolStatus, Option<StatusCode>))>,
-    client_submitted: bool,
 ) where
     NetworkClient: NetworkClientInterface<MempoolSyncMsg>,
     TransactionValidator: TransactionValidation,
 {
     let mut mempool = smp.mempool.lock();
     for (transaction, sequence_info) in transactions.into_iter() {
-        let mempool_status = mempool.add_txn(
-            transaction.clone(),
-            0,
-            sequence_info,
-            timeline_state,
-            client_submitted,
-        );
+        let mempool_status = mempool.add_txn(transaction.clone(), 0, sequence_info, timeline_state);
         statuses.push((transaction, (mempool_status, None)));
     }
 }
@@ -545,19 +529,13 @@ pub(crate) fn process_committed_transactions(
     block_timestamp_usecs: u64,
 ) {
     let mut pool = mempool.lock();
-    let block_timestamp = Duration::from_micros(block_timestamp_usecs);
 
     for transaction in transactions {
-        pool.log_commit_transaction(
-            &transaction.sender,
-            transaction.sequence_number,
-            block_timestamp,
-        );
         pool.commit_transaction(&transaction.sender, transaction.sequence_number);
     }
 
     if block_timestamp_usecs > 0 {
-        pool.gc_by_expiration_time(block_timestamp);
+        pool.gc_by_expiration_time(Duration::from_micros(block_timestamp_usecs));
     }
 }
 

@@ -20,13 +20,11 @@ File store fetches data from cache and stores in Google Cloud Storage.
 * A Redis cache running at `$REDIS_ADDRESS`, e.g., `127.0.0.1:6379`
 * Example command to run:
 
-```yaml
-health_check_port: 8082
-server_config:
-    file_store_config:
-      file_store_type: GcsFileStore
-      gcs_file_store_bucket_name: indexer-grpc-file-store-bucketname
-    redis_main_instance_address: 127.0.0.1:6379
+```bash
+fullnode_grpc_address: 127.0.0.1:50051
+redis_address: 127.0.0.1:6379
+file_store_bucket_name: indexer-grpc-file-store-testnet 
+health_check_port: 8083
 ```
 
 * Your bucket looks like:
@@ -38,19 +36,4 @@ indexer-grpc-file-store-testnet/
         1000.json
         ...
     metadata.json
-```
-
-## [TEST ONLY] Run it with a local filestore
-
-For developing and testing locally, it might be easier to use a local filestore.
-
-Create a local directory to store the filestore: `mkdir test_indexer_grpc_filestore`
-
-Then in your config:
-```yaml
-...
-server_config:
-    file_store_config:
-      file_store_type: LocalFileStore
-      local_file_store_path: test_indexer_grpc_filestore
 ```

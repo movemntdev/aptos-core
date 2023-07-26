@@ -2,7 +2,10 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::account_generator::{AccountCache, AccountGenerator};
+use crate::{
+    account_generator::{AccountCache, AccountGenerator},
+    benchmark_transaction::{AccountCreationInfo, BenchmarkTransaction, ExtraInfo, TransferInfo},
+};
 use aptos_crypto::{ed25519::Ed25519PrivateKey, HashValue};
 use aptos_sdk::{transaction_builder::TransactionFactory, types::LocalAccount};
 use aptos_state_view::account_with_state_view::AsAccountWithStateView;
@@ -18,7 +21,6 @@ use aptos_types::{
 use chrono::Local;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
-use rand::thread_rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -87,7 +89,7 @@ pub struct TransactionGenerator {
 
     /// Each generated block of transactions are sent to this channel. Using `SyncSender` to make
     /// sure if execution is slow to consume the transactions, we do not run out of memory.
-    block_sender: Option<mpsc::SyncSender<Vec<Transaction>>>,
+    block_sender: Option<mpsc::SyncSender<Vec<BenchmarkTransaction>>>,
 
     /// Transaction Factory
     transaction_factory: TransactionFactory,
@@ -142,15 +144,11 @@ impl TransactionGenerator {
         accounts
     }
 
-    pub fn gen_user_account_cache(
-        reader: Arc<dyn DbReader>,
-        num_accounts: usize,
-        num_to_skip: usize,
-    ) -> AccountCache {
+    pub fn gen_user_account_cache(reader: Arc<dyn DbReader>, num_accounts: usize) -> AccountCache {
         Self::resync_sequence_numbers(
             reader,
             Self::gen_account_cache(
-                AccountGenerator::new_for_user_accounts(num_to_skip as u64),
+                AccountGenerator::new_for_user_accounts(0),
                 num_accounts,
                 "user",
             ),
@@ -173,7 +171,7 @@ impl TransactionGenerator {
     pub fn new_with_existing_db<P: AsRef<Path>>(
         db: DbReaderWriter,
         genesis_key: Ed25519PrivateKey,
-        block_sender: mpsc::SyncSender<Vec<Transaction>>,
+        block_sender: mpsc::SyncSender<Vec<BenchmarkTransaction>>,
         db_dir: P,
         version: Version,
         num_main_signer_accounts: Option<usize>,
@@ -190,7 +188,7 @@ impl TransactionGenerator {
             main_signer_accounts: num_main_signer_accounts.map(|num_main_signer_accounts| {
                 let num_cached_accounts =
                     std::cmp::min(num_existing_accounts, num_main_signer_accounts);
-                Self::gen_user_account_cache(db.reader.clone(), num_cached_accounts, 0)
+                Self::gen_user_account_cache(db.reader.clone(), num_cached_accounts)
             }),
             num_existing_accounts,
             version,
@@ -212,10 +210,10 @@ impl TransactionGenerator {
         let metadata = TestCase::P2p(P2pTestCase {
             num_accounts: self.num_existing_accounts + num_new_accounts,
         });
-        let serialized = toml::ser::to_string(&metadata).unwrap();
+        let serialized = toml::to_vec(&metadata).unwrap();
         let meta_file = path.as_ref().join(META_FILENAME);
         let mut file = File::create(meta_file).unwrap();
-        file.write_all(serialized.as_bytes()).unwrap();
+        file.write_all(&serialized).unwrap();
     }
 
     pub fn read_meta<P: AsRef<Path>>(path: &P) -> usize {
@@ -223,9 +221,7 @@ impl TransactionGenerator {
         File::open(filename).map_or(0, |mut file| {
             let mut contents = vec![];
             file.read_to_end(&mut contents).unwrap();
-            let test_case: TestCase =
-                toml::from_str(&String::from_utf8(contents).expect("Must be UTF8"))
-                    .expect("Must exist.");
+            let test_case: TestCase = toml::from_slice(&contents).expect("Must exist.");
             let TestCase::P2p(P2pTestCase { num_accounts }) = test_case;
             num_accounts
         })
@@ -282,25 +278,28 @@ impl TransactionGenerator {
         transactions_per_sender: usize,
     ) {
         assert!(self.block_sender.is_some());
-        let num_senders_per_block =
-            (block_size + transactions_per_sender - 1) / transactions_per_sender;
-        let account_pool_size = self.main_signer_accounts.as_ref().unwrap().accounts.len();
         let mut transaction_generator =
             transaction_generator_creator.create_transaction_generator();
+
         for _ in 0..num_blocks {
-            let transactions: Vec<_> = rand::seq::index::sample(
-                &mut thread_rng(),
-                account_pool_size,
-                num_senders_per_block,
-            )
-            .into_iter()
-            .flat_map(|idx| {
-                let sender = &mut self.main_signer_accounts.as_mut().unwrap().accounts[idx];
-                transaction_generator.generate_transactions(sender, transactions_per_sender)
-            })
-            .map(Transaction::UserTransaction)
-            .chain(once(Transaction::StateCheckpoint(HashValue::random())))
-            .collect();
+            // TODO: handle when block_size isn't divisible by transactions_per_sender
+            let transactions: Vec<_> = (0..(block_size / transactions_per_sender))
+                .into_iter()
+                .flat_map(|_| {
+                    let sender = self.main_signer_accounts.as_mut().unwrap().get_random();
+                    transaction_generator
+                        .generate_transactions(sender, transactions_per_sender)
+                        .into_iter()
+                        .map(|t| BenchmarkTransaction {
+                            transaction: Transaction::UserTransaction(t),
+                            extra_info: None,
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .chain(once(
+                    Transaction::StateCheckpoint(HashValue::random()).into(),
+                ))
+                .collect();
             self.version += transactions.len() as Version;
 
             if let Some(sender) = &self.block_sender {
@@ -345,9 +344,18 @@ impl TransactionGenerator {
                                 seed_account_balance,
                             ),
                     );
-                    Transaction::UserTransaction(txn)
+                    BenchmarkTransaction::new(
+                        Transaction::UserTransaction(txn),
+                        ExtraInfo::AccountCreationInfo(AccountCreationInfo::new(
+                            self.root_account.address(),
+                            new_account.address(),
+                            seed_account_balance,
+                        )),
+                    )
                 })
-                .chain(once(Transaction::StateCheckpoint(HashValue::random())))
+                .chain(once(
+                    Transaction::StateCheckpoint(HashValue::random()).into(),
+                ))
                 .collect();
             self.version += transactions.len() as Version;
             bar.inc(transactions.len() as u64 - 1);
@@ -390,9 +398,18 @@ impl TransactionGenerator {
                                 init_account_balance,
                             ),
                     );
-                    Transaction::UserTransaction(txn)
+                    BenchmarkTransaction::new(
+                        Transaction::UserTransaction(txn),
+                        ExtraInfo::AccountCreationInfo(AccountCreationInfo::new(
+                            sender.address(),
+                            new_account.address(),
+                            init_account_balance,
+                        )),
+                    )
                 })
-                .chain(once(Transaction::StateCheckpoint(HashValue::random())))
+                .chain(once(
+                    Transaction::StateCheckpoint(HashValue::random()).into(),
+                ))
                 .collect();
             self.version += transactions.len() as Version;
             if let Some(sender) = &self.block_sender {
@@ -414,6 +431,7 @@ impl TransactionGenerator {
         for _ in 0..num_blocks {
             // TODO: handle when block_size isn't divisible by transactions_per_sender
             let transactions: Vec<_> = (0..(block_size / transactions_per_sender))
+                .into_iter()
                 .flat_map(|_| {
                     let (sender, receivers) = self
                         .main_signer_accounts
@@ -427,11 +445,20 @@ impl TransactionGenerator {
                             let txn = sender.sign_with_transaction_builder(
                                 self.transaction_factory.transfer(receiver, amount),
                             );
-                            Transaction::UserTransaction(txn)
+                            BenchmarkTransaction::new(
+                                Transaction::UserTransaction(txn),
+                                ExtraInfo::TransferInfo(TransferInfo::new(
+                                    sender.address(),
+                                    receiver,
+                                    amount,
+                                )),
+                            )
                         })
                         .collect::<Vec<_>>()
                 })
-                .chain(once(Transaction::StateCheckpoint(HashValue::random())))
+                .chain(once(
+                    Transaction::StateCheckpoint(HashValue::random()).into(),
+                ))
                 .collect();
             self.version += transactions.len() as Version;
 

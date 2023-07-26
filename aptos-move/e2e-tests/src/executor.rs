@@ -14,16 +14,13 @@ use crate::{
 };
 use anyhow::Error;
 use aptos_bitvec::BitVec;
-use aptos_block_executor::txn_commit_hook::NoOpTransactionCommitHook;
 use aptos_crypto::HashValue;
 use aptos_framework::ReleaseBundle;
 use aptos_gas::{
-    AbstractValueSizeGasParameters, ChangeSetConfigs, NativeGasParameters, StandardGasMeter,
+    AbstractValueSizeGasParameters, ChangeSetConfigs, NativeGasParameters,
     LATEST_GAS_FEATURE_VERSION,
 };
-use aptos_gas_profiling::{GasProfiler, TransactionGasLog};
 use aptos_keygen::KeyGen;
-use aptos_memory_usage_tracker::MemoryTrackedGasMeter;
 use aptos_state_view::TStateView;
 use aptos_types::{
     access_path::AccessPath,
@@ -31,28 +28,26 @@ use aptos_types::{
         new_block_event_key, AccountResource, CoinInfoResource, CoinStoreResource, NewBlockEvent,
         CORE_CODE_ADDRESS,
     },
-    block_executor::partitioner::BlockExecutorTransactions,
     block_metadata::BlockMetadata,
     chain_id::ChainId,
     on_chain_config::{
         Features, OnChainConfig, TimedFeatureOverride, TimedFeatures, ValidatorSet, Version,
     },
-    state_store::{state_key::StateKey, state_value::StateValue},
+    state_store::state_key::StateKey,
     transaction::{
-        ExecutionStatus, SignedTransaction, Transaction, TransactionOutput, TransactionPayload,
-        TransactionStatus, VMValidatorResult,
+        ExecutionStatus, SignedTransaction, Transaction, TransactionOutput, TransactionStatus,
+        VMValidatorResult,
     },
     vm_status::VMStatus,
     write_set::WriteSet,
 };
 use aptos_vm::{
-    block_executor::{AptosTransactionOutput, BlockAptosVM},
+    block_executor::BlockAptosVM,
     data_cache::{AsMoveResolver, StorageAdapter},
     move_vm_ext::{MoveVmExt, SessionId},
     AptosVM, VMExecutor, VMValidator,
 };
 use aptos_vm_genesis::{generate_genesis_change_set_for_testing_with_count, GenesisOptions};
-use aptos_vm_logging::log_schema::AdapterLogSchema;
 use move_core_types::{
     account_address::AccountAddress,
     identifier::Identifier,
@@ -60,13 +55,13 @@ use move_core_types::{
     move_resource::MoveResource,
 };
 use move_vm_types::gas::UnmeteredGasMeter;
+use num_cpus;
 use serde::Serialize;
 use std::{
     env,
     fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
 static RNG_SEED: [u8; 32] = [9u8; 32];
@@ -87,9 +82,9 @@ pub type TraceSeqMapping = (usize, Vec<usize>, Vec<usize>);
 /// Provides an environment to run a VM instance.
 ///
 /// This struct is a mock in-memory implementation of the Aptos executor.
+#[derive(Debug)]
 pub struct FakeExecutor {
     data_store: FakeDataStore,
-    executor_thread_pool: Arc<rayon::ThreadPool>,
     block_time: u64,
     executed_output: Option<GoldenOutputs>,
     trace_dir: Option<PathBuf>,
@@ -97,21 +92,13 @@ pub struct FakeExecutor {
     no_parallel_exec: bool,
     features: Features,
     chain_id: u8,
-    aggregator_enabled: bool,
 }
 
 impl FakeExecutor {
     /// Creates an executor from a genesis [`WriteSet`].
     pub fn from_genesis(write_set: &WriteSet, chain_id: ChainId) -> Self {
-        let executor_thread_pool = Arc::new(
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(num_cpus::get())
-                .build()
-                .unwrap(),
-        );
         let mut executor = FakeExecutor {
             data_store: FakeDataStore::default(),
-            executor_thread_pool,
             block_time: 0,
             executed_output: None,
             trace_dir: None,
@@ -119,16 +106,11 @@ impl FakeExecutor {
             no_parallel_exec: false,
             features: Features::default(),
             chain_id: chain_id.id(),
-            aggregator_enabled: true,
         };
         executor.apply_write_set(write_set);
         // As a set effect, also allow module bundle txns. TODO: Remove
         aptos_vm::aptos_vm::allow_module_bundle_for_test();
         executor
-    }
-
-    pub fn set_aggregator_enabled(&mut self, aggregator_enabled: bool) {
-        self.aggregator_enabled = aggregator_enabled;
     }
 
     /// Configure this executor to not use parallel execution.
@@ -167,21 +149,10 @@ impl FakeExecutor {
         )
     }
 
-    pub fn data_store(&self) -> &FakeDataStore {
-        &self.data_store
-    }
-
     /// Creates an executor in which no genesis state has been applied yet.
     pub fn no_genesis() -> Self {
-        let executor_thread_pool = Arc::new(
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(num_cpus::get())
-                .build()
-                .unwrap(),
-        );
         FakeExecutor {
             data_store: FakeDataStore::default(),
-            executor_thread_pool,
             block_time: 0,
             executed_output: None,
             trace_dir: None,
@@ -189,7 +160,6 @@ impl FakeExecutor {
             no_parallel_exec: false,
             features: Features::default(),
             chain_id: ChainId::test().id(),
-            aggregator_enabled: true,
         }
     }
 
@@ -286,17 +256,12 @@ impl FakeExecutor {
     /// Creates an account for the given static address. This address needs to be static so
     /// we can load regular Move code to there without need to rewrite code addresses.
     pub fn new_account_at(&mut self, addr: AccountAddress) -> Account {
-        let data = self.new_account_data_at(addr);
-        data.account().clone()
-    }
-
-    pub fn new_account_data_at(&mut self, addr: AccountAddress) -> AccountData {
         // The below will use the genesis keypair but that should be fine.
         let acc = Account::new_genesis_account(addr);
         // Mint the account 10M Aptos coins (with 8 decimals).
         let data = AccountData::with_account(acc, 1_000_000_000_000_000, 0);
         self.add_account_data(&data);
-        data
+        data.account().clone()
     }
 
     /// Applies a [`WriteSet`] to this executor's data store.
@@ -360,7 +325,7 @@ impl FakeExecutor {
                 Some(aggregator) => {
                     let state_key = aggregator.state_key();
                     let value_bytes = self
-                        .read_state_value_bytes(&state_key)
+                        .read_state_value(&state_key)
                         .expect("aggregator value must exist in data store");
                     bcs::from_bytes(&value_bytes).unwrap()
                 },
@@ -424,21 +389,14 @@ impl FakeExecutor {
         &self,
         txn_block: Vec<Transaction>,
     ) -> Result<Vec<TransactionOutput>, VMStatus> {
-        BlockAptosVM::execute_block::<_, NoOpTransactionCommitHook<AptosTransactionOutput, VMStatus>>(
-            self.executor_thread_pool.clone(),
-            BlockExecutorTransactions::Unsharded(txn_block),
-            &self.data_store,
-            usize::min(4, num_cpus::get()),
-            None,
-            None,
-        )
+        BlockAptosVM::execute_block(txn_block, &self.data_store, usize::min(4, num_cpus::get()))
     }
 
     pub fn execute_transaction_block(
         &self,
         txn_block: Vec<Transaction>,
     ) -> Result<Vec<TransactionOutput>, VMStatus> {
-        let mut trace_map: (usize, Vec<usize>, Vec<usize>) = TraceSeqMapping::default();
+        let mut trace_map = TraceSeqMapping::default();
 
         // dump serialized transaction details before execution, if tracing
         if let Some(trace_dir) = &self.trace_dir {
@@ -451,7 +409,7 @@ impl FakeExecutor {
             }
         }
 
-        let output = AptosVM::execute_block(txn_block.clone(), &self.data_store, None);
+        let output = AptosVM::execute_block(txn_block.clone(), &self.data_store);
         if !self.no_parallel_exec {
             let parallel_output = self.execute_transaction_block_parallel(txn_block);
             assert_eq!(output, parallel_output);
@@ -496,49 +454,6 @@ impl FakeExecutor {
             .expect("A block with one transaction should have one output")
     }
 
-    pub fn execute_transaction_with_gas_profiler(
-        &self,
-        txn: SignedTransaction,
-    ) -> anyhow::Result<(TransactionOutput, TransactionGasLog)> {
-        let txn = txn
-            .check_signature()
-            .expect("invalid signature for transaction");
-
-        let log_context = AdapterLogSchema::new(self.data_store.id(), 0);
-
-        let (_status, output, gas_profiler) =
-            AptosVM::execute_user_transaction_with_custom_gas_meter(
-                &self.data_store,
-                &txn,
-                &log_context,
-                |gas_feature_version, gas_params, storage_gas_params, balance| {
-                    let gas_meter = MemoryTrackedGasMeter::new(StandardGasMeter::new(
-                        gas_feature_version,
-                        gas_params,
-                        storage_gas_params,
-                        balance,
-                    ));
-                    let gas_profiler = match txn.payload() {
-                        TransactionPayload::Script(_) => GasProfiler::new_script(gas_meter),
-                        TransactionPayload::EntryFunction(entry_func) => GasProfiler::new_function(
-                            gas_meter,
-                            entry_func.module().clone(),
-                            entry_func.function().to_owned(),
-                            entry_func.ty_args().to_vec(),
-                        ),
-                        TransactionPayload::ModuleBundle(..) => unreachable!("not supported"),
-                        TransactionPayload::Multisig(..) => unimplemented!("not supported yet"),
-                    };
-                    Ok(gas_profiler)
-                },
-            )?;
-
-        Ok((
-            output.into_transaction_output(self.get_state_view())?,
-            gas_profiler.finish(),
-        ))
-    }
-
     fn trace<P: AsRef<Path>, T: Serialize>(dir: P, item: &T) -> usize {
         let dir = dir.as_ref();
         let seq = fs::read_dir(dir).expect("Unable to read trace dir").count();
@@ -554,19 +469,14 @@ impl FakeExecutor {
         seq
     }
 
-    pub fn read_state_value(&self, state_key: &StateKey) -> Option<StateValue> {
-        TStateView::get_state_value(&self.data_store, state_key).unwrap()
-    }
-
     /// Get the blob for the associated AccessPath
-    pub fn read_state_value_bytes(&self, state_key: &StateKey) -> Option<Vec<u8>> {
+    pub fn read_state_value(&self, state_key: &StateKey) -> Option<Vec<u8>> {
         TStateView::get_state_value_bytes(&self.data_store, state_key).unwrap()
     }
 
     /// Set the blob for the associated AccessPath
     pub fn write_state_value(&mut self, state_key: StateKey, data_blob: Vec<u8>) {
-        self.data_store
-            .set(state_key, StateValue::new_legacy(data_blob));
+        self.data_store.set(state_key, data_blob);
     }
 
     /// Verifies the given transaction by running it through the VM verifier.
@@ -661,60 +571,6 @@ impl FakeExecutor {
         self.block_time / 1_000_000
     }
 
-    //// exec_module is like exec(), however, we can run a Module published under
-    //// the creator address instead of 0x1, as what is currently done in exec.
-    pub fn exec_module(
-        &mut self,
-        module: &ModuleId,
-        function_name: &str,
-        type_params: Vec<TypeTag>,
-        args: Vec<Vec<u8>>,
-    ) {
-        let write_set = {
-            // FIXME: should probably read the timestamp from storage.
-            let timed_features =
-                TimedFeatures::enable_all().with_override_profile(TimedFeatureOverride::Testing);
-            // TODO(Gas): we probably want to switch to non-zero costs in the future
-            let vm = MoveVmExt::new(
-                NativeGasParameters::zeros(),
-                AbstractValueSizeGasParameters::zeros(),
-                LATEST_GAS_FEATURE_VERSION,
-                self.chain_id,
-                self.features.clone(),
-                timed_features,
-            )
-            .unwrap();
-            let remote_view = StorageAdapter::new(&self.data_store);
-            let mut session =
-                vm.new_session(&remote_view, SessionId::void(), self.aggregator_enabled);
-            session
-                .execute_function_bypass_visibility(
-                    module,
-                    &Self::name(function_name),
-                    type_params,
-                    args,
-                    &mut UnmeteredGasMeter,
-                )
-                .unwrap_or_else(|e| {
-                    panic!(
-                        "Error calling {}.{}: {}",
-                        module.to_string().as_str(),
-                        function_name,
-                        e.into_vm_status()
-                    )
-                });
-            let change_set = session
-                .finish(
-                    &mut (),
-                    &ChangeSetConfigs::unlimited_at_gas_feature_version(LATEST_GAS_FEATURE_VERSION),
-                )
-                .expect("Failed to generate txn effects");
-            let (write_set, _delta_change_set, _events) = change_set.unpack();
-            write_set
-        };
-        self.data_store.add_write_set(&write_set);
-    }
-
     pub fn exec(
         &mut self,
         module_name: &str,
@@ -737,8 +593,7 @@ impl FakeExecutor {
             )
             .unwrap();
             let remote_view = StorageAdapter::new(&self.data_store);
-            let mut session =
-                vm.new_session(&remote_view, SessionId::void(), self.aggregator_enabled);
+            let mut session = vm.new_session(&remote_view, SessionId::void());
             session
                 .execute_function_bypass_visibility(
                     &Self::module(module_name),
@@ -755,13 +610,14 @@ impl FakeExecutor {
                         e.into_vm_status()
                     )
                 });
-            let change_set = session
+            let change_set_ext = session
                 .finish(
                     &mut (),
                     &ChangeSetConfigs::unlimited_at_gas_feature_version(LATEST_GAS_FEATURE_VERSION),
                 )
                 .expect("Failed to generate txn effects");
-            let (write_set, _delta_change_set, _events) = change_set.unpack();
+            let (_delta_change_set, change_set) = change_set_ext.into_inner();
+            let (write_set, _events) = change_set.into_inner();
             write_set
         };
         self.data_store.add_write_set(&write_set);
@@ -786,7 +642,7 @@ impl FakeExecutor {
         )
         .unwrap();
         let remote_view = StorageAdapter::new(&self.data_store);
-        let mut session = vm.new_session(&remote_view, SessionId::void(), self.aggregator_enabled);
+        let mut session = vm.new_session(&remote_view, SessionId::void());
         session
             .execute_function_bypass_visibility(
                 &Self::module(module_name),
@@ -797,15 +653,16 @@ impl FakeExecutor {
             )
             .map_err(|e| e.into_vm_status())?;
 
-        let change_set = session
+        let change_set_ext = session
             .finish(
                 &mut (),
                 &ChangeSetConfigs::unlimited_at_gas_feature_version(LATEST_GAS_FEATURE_VERSION),
             )
             .expect("Failed to generate txn effects");
         // TODO: Support deltas in fake executor.
-        let (write_set, _delta_change_set, _events) = change_set.unpack();
-        Ok(write_set)
+        let (_delta_change_set, change_set) = change_set_ext.into_inner();
+        let (writeset, _events) = change_set.into_inner();
+        Ok(writeset)
     }
 
     pub fn execute_view_function(

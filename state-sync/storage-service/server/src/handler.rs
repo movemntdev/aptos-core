@@ -6,16 +6,16 @@ use crate::{
     logging::{LogEntry, LogSchema},
     metrics,
     metrics::{
-        increment_counter, start_timer, LRU_CACHE_HIT, LRU_CACHE_PROBE, OPTIMISTIC_FETCH_ADD,
+        increment_counter, start_timer, LRU_CACHE_HIT, LRU_CACHE_PROBE, SUBSCRIPTION_EVENT_ADD,
     },
-    moderator::RequestModerator,
     network::ResponseSender,
-    optimistic_fetch::OptimisticFetchRequest,
     storage::StorageReaderInterface,
+    subscription::DataSubscriptionRequest,
 };
 use aptos_config::network_id::PeerNetworkId;
 use aptos_infallible::{Mutex, RwLock};
-use aptos_logger::{debug, error, sample, sample::SampleRate, trace, warn};
+use aptos_logger::{debug, error, sample, sample::SampleRate, warn};
+use aptos_network::ProtocolId;
 use aptos_storage_service_types::{
     requests::{
         DataRequest, EpochEndingLedgerInfoRequest, StateValuesWithProofRequest,
@@ -32,10 +32,9 @@ use aptos_types::transaction::Version;
 use lru::LruCache;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
-/// Storage server constants
-const INVALID_REQUEST_LOG_FREQUENCY_SECS: u64 = 5; // The frequency to log invalid requests (secs)
+/// Storage server constants.
 const STORAGE_SERVER_VERSION: u64 = 1;
-const SUMMARY_LOG_FREQUENCY_SECS: u64 = 5; // The frequency to log the storage server summary (secs)
+const SUMMARY_LOG_FREQUENCY_SECS: u64 = 5;
 
 /// The `Handler` is the "pure" inbound request handler. It contains all the
 /// necessary context and state needed to construct a response to an inbound
@@ -43,9 +42,8 @@ const SUMMARY_LOG_FREQUENCY_SECS: u64 = 5; // The frequency to log the storage s
 #[derive(Clone)]
 pub struct Handler<T> {
     cached_storage_server_summary: Arc<RwLock<StorageServerSummary>>,
-    optimistic_fetches: Arc<Mutex<HashMap<PeerNetworkId, OptimisticFetchRequest>>>,
+    data_subscriptions: Arc<Mutex<HashMap<PeerNetworkId, DataSubscriptionRequest>>>,
     lru_response_cache: Arc<Mutex<LruCache<StorageServiceRequest, StorageServiceResponse>>>,
-    request_moderator: Arc<RequestModerator>,
     storage: T,
     time_service: TimeService,
 }
@@ -53,18 +51,16 @@ pub struct Handler<T> {
 impl<T: StorageReaderInterface> Handler<T> {
     pub fn new(
         cached_storage_server_summary: Arc<RwLock<StorageServerSummary>>,
-        optimistic_fetches: Arc<Mutex<HashMap<PeerNetworkId, OptimisticFetchRequest>>>,
+        data_subscriptions: Arc<Mutex<HashMap<PeerNetworkId, DataSubscriptionRequest>>>,
         lru_response_cache: Arc<Mutex<LruCache<StorageServiceRequest, StorageServiceResponse>>>,
-        request_moderator: Arc<RequestModerator>,
         storage: T,
         time_service: TimeService,
     ) -> Self {
         Self {
             storage,
             cached_storage_server_summary,
-            optimistic_fetches,
+            data_subscriptions,
             lru_response_cache,
-            request_moderator,
             time_service,
         }
     }
@@ -74,24 +70,30 @@ impl<T: StorageReaderInterface> Handler<T> {
     pub fn process_request_and_respond(
         &self,
         peer_network_id: PeerNetworkId,
+        protocol_id: ProtocolId,
         request: StorageServiceRequest,
         response_sender: ResponseSender,
     ) {
         // Update the request count
         increment_counter(
             &metrics::STORAGE_REQUESTS_RECEIVED,
-            peer_network_id.network_id(),
+            protocol_id,
             request.get_label(),
         );
 
-        // Handle any optimistic fetch requests
-        if request.data_request.is_optimistic_fetch() {
-            self.handle_optimistic_fetch_request(peer_network_id, request, response_sender);
+        // Handle any data subscriptions
+        if request.data_request.is_data_subscription_request() {
+            self.handle_subscription_request(
+                peer_network_id,
+                protocol_id,
+                request,
+                response_sender,
+            );
             return;
         }
 
         // Process the request and return the response to the client
-        let response = self.process_request(&peer_network_id, request.clone(), false);
+        let response = self.process_request(&peer_network_id, protocol_id, request.clone(), false);
         self.send_response(request, response, response_sender);
     }
 
@@ -99,69 +101,65 @@ impl<T: StorageReaderInterface> Handler<T> {
     pub(crate) fn process_request(
         &self,
         peer_network_id: &PeerNetworkId,
+        protocol: ProtocolId,
         request: StorageServiceRequest,
-        optimistic_fetch_related: bool,
+        subscription_related: bool,
     ) -> aptos_storage_service_types::Result<StorageServiceResponse> {
         // Time the request processing (the timer will stop when it's dropped)
         let _timer = start_timer(
             &metrics::STORAGE_REQUEST_PROCESSING_LATENCY,
-            peer_network_id.network_id(),
+            protocol,
             request.get_label(),
         );
 
         // Process the request and handle any errors
-        match self.validate_and_handle_request(peer_network_id, &request) {
+        match self.sanity_check_and_handle_request(protocol, &request) {
             Err(error) => {
-                // Update the error counter
+                // Log the error and update the counters
                 increment_counter(
                     &metrics::STORAGE_ERRORS_ENCOUNTERED,
-                    peer_network_id.network_id(),
+                    protocol,
                     error.get_label().into(),
                 );
-
-                // Periodically log the validation failure
-                sample!(
-                        SampleRate::Duration(Duration::from_secs(INVALID_REQUEST_LOG_FREQUENCY_SECS)),
-                        error!(LogSchema::new(LogEntry::StorageServiceError)
-                            .error(&error)
-                            .peer_network_id(peer_network_id)
-                            .request(&request)
-                            .optimistic_fetch_related(optimistic_fetch_related)
-                    );
-                );
+                error!(LogSchema::new(LogEntry::StorageServiceError)
+                    .error(&error)
+                    .peer_network_id(peer_network_id)
+                    .request(&request)
+                    .subscription_related(subscription_related));
 
                 // Return an appropriate response to the client
                 match error {
                     Error::InvalidRequest(error) => Err(StorageServiceError::InvalidRequest(error)),
-                    Error::TooManyInvalidRequests(error) => {
-                        Err(StorageServiceError::TooManyInvalidRequests(error))
-                    },
                     error => Err(StorageServiceError::InternalError(error.to_string())),
                 }
             },
             Ok(response) => {
-                // Update the successful response counter
+                // The request was successful
                 increment_counter(
                     &metrics::STORAGE_RESPONSES_SENT,
-                    peer_network_id.network_id(),
+                    protocol,
                     response.get_label(),
                 );
-
-                // Return the response
                 Ok(response)
             },
         }
     }
 
-    /// Validate the request and only handle it if the moderator allows
-    fn validate_and_handle_request(
+    /// Sanity check the request (i.e., verify that it can be serviced)
+    /// and handle the request.
+    fn sanity_check_and_handle_request(
         &self,
-        peer_network_id: &PeerNetworkId,
+        protocol: ProtocolId,
         request: &StorageServiceRequest,
     ) -> Result<StorageServiceResponse, Error> {
-        // Validate the request with the moderator
-        self.request_moderator
-            .validate_request(peer_network_id, request)?;
+        // Sanity check the request and verify that it can be serviced
+        let storage_server_summary = self.cached_storage_server_summary.read().clone();
+        if !storage_server_summary.can_service(request) {
+            return Err(Error::InvalidRequest(format!(
+                "The given request cannot be satisfied. Request: {:?}, storage summary: {:?}",
+                request, storage_server_summary
+            )));
+        }
 
         // Process the request
         match &request.data_request {
@@ -175,7 +173,7 @@ impl<T: StorageReaderInterface> Handler<T> {
                 StorageServiceResponse::new(data_response, request.use_compression)
                     .map_err(|error| error.into())
             },
-            _ => self.process_cachable_request(peer_network_id, request),
+            _ => self.process_cachable_request(protocol, request),
         }
     }
 
@@ -190,44 +188,42 @@ impl<T: StorageReaderInterface> Handler<T> {
         response_sender.send(response);
     }
 
-    /// Handles the given optimistic fetch request
-    pub fn handle_optimistic_fetch_request(
+    /// Handles the given data subscription request
+    pub fn handle_subscription_request(
         &self,
         peer_network_id: PeerNetworkId,
+        protocol_id: ProtocolId,
         request: StorageServiceRequest,
         response_sender: ResponseSender,
     ) {
-        // Create the optimistic fetch request
-        let optimistic_fetch = OptimisticFetchRequest::new(
+        // Create the subscription request
+        let subscription_request = DataSubscriptionRequest::new(
+            protocol_id,
             request.clone(),
             response_sender,
             self.time_service.clone(),
         );
 
-        // Store the optimistic fetch and check if any existing fetches were found
+        // Store the subscription and check if any existing subscriptions were found
         if self
-            .optimistic_fetches
+            .data_subscriptions
             .lock()
-            .insert(peer_network_id, optimistic_fetch)
+            .insert(peer_network_id, subscription_request)
             .is_some()
         {
-            sample!(
-                SampleRate::Duration(Duration::from_secs(INVALID_REQUEST_LOG_FREQUENCY_SECS)),
-                warn!(LogSchema::new(LogEntry::OptimisticFetchRequest)
-                    .error(&Error::InvalidRequest(
-                        "An active optimistic fetch was already found for the peer!".into()
-                    ))
-                    .peer_network_id(&peer_network_id)
-                    .request(&request)
-                );
-            );
+            warn!(LogSchema::new(LogEntry::SubscriptionRequest)
+                .error(&Error::InvalidRequest(
+                    "An active subscription was already found for the peer!".into()
+                ))
+                .peer_network_id(&peer_network_id)
+                .request(&request));
         }
 
-        // Update the optimistic fetch metrics
+        // Update the subscription metrics
         increment_counter(
-            &metrics::OPTIMISTIC_FETCH_EVENTS,
-            peer_network_id.network_id(),
-            OPTIMISTIC_FETCH_ADD.into(),
+            &metrics::SUBSCRIPTION_EVENT,
+            protocol_id,
+            SUBSCRIPTION_EVENT_ADD.into(),
         );
     }
 
@@ -235,22 +231,14 @@ impl<T: StorageReaderInterface> Handler<T> {
     /// might already be cached.
     fn process_cachable_request(
         &self,
-        peer_network_id: &PeerNetworkId,
+        protocol: ProtocolId,
         request: &StorageServiceRequest,
     ) -> aptos_storage_service_types::Result<StorageServiceResponse, Error> {
-        increment_counter(
-            &metrics::LRU_CACHE_EVENT,
-            peer_network_id.network_id(),
-            LRU_CACHE_PROBE.into(),
-        );
+        increment_counter(&metrics::LRU_CACHE_EVENT, protocol, LRU_CACHE_PROBE.into());
 
         // Check if the response is already in the cache
         if let Some(response) = self.lru_response_cache.lock().get(request) {
-            increment_counter(
-                &metrics::LRU_CACHE_EVENT,
-                peer_network_id.network_id(),
-                LRU_CACHE_HIT.into(),
-            );
+            increment_counter(&metrics::LRU_CACHE_EVENT, protocol, LRU_CACHE_HIT.into());
             return Ok(response.clone());
         }
 
@@ -417,7 +405,7 @@ fn log_storage_response(
         },
         Err(storage_error) => {
             let storage_error = format!("{:?}", storage_error);
-            trace!(LogSchema::new(LogEntry::SentStorageResponse).response(&storage_error));
+            debug!(LogSchema::new(LogEntry::SentStorageResponse).response(&storage_error));
         },
     };
 }

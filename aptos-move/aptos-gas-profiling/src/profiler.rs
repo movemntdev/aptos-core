@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::log::{
-    CallFrame, EventStorage, ExecutionAndIOCosts, ExecutionGasEvent, FrameName, StorageFees,
-    TransactionGasLog, WriteOpType, WriteStorage, WriteTransient,
+    CallFrame, EventStorage, ExecutionGasEvent, FrameName, StorageFees, TransactionGasLog,
+    WriteOpType, WriteStorage, WriteTransient,
 };
-use aptos_gas::{AptosGasMeter, AptosGasParameters, Fee, Gas, GasScalingFactor};
+use aptos_gas::{AptosGasMeter, Fee, Gas, GasScalingFactor};
 use aptos_types::{
     contract_event::ContractEvent, state_store::state_key::StateKey, write_set::WriteOp,
 };
@@ -31,7 +31,6 @@ pub struct GasProfiler<G> {
     base: G,
 
     intrinsic_cost: Option<InternalGas>,
-    total_exec_io: InternalGas,
     frames: Vec<CallFrame>,
     write_set_transient: Vec<WriteTransient>,
     storage_fees: Option<StorageFees>,
@@ -85,7 +84,6 @@ impl<G> GasProfiler<G> {
             base,
 
             intrinsic_cost: None,
-            total_exec_io: 0.into(),
             frames: vec![CallFrame::new_script()],
             write_set_transient: vec![],
             storage_fees: None,
@@ -102,7 +100,6 @@ impl<G> GasProfiler<G> {
             base,
 
             intrinsic_cost: None,
-            total_exec_io: 0.into(),
             frames: vec![CallFrame::new_function(module_id, func_name, ty_args)],
             write_set_transient: vec![],
             storage_fees: None,
@@ -118,26 +115,14 @@ where
         &mut self.frames.last_mut().unwrap().events
     }
 
-    fn record_gas_event(&mut self, event: ExecutionGasEvent) {
-        use ExecutionGasEvent::*;
-
-        match &event {
-            Loc(..) => (),
-            Call(..) => unreachable!("call frames are handled separately"),
-            Bytecode { cost, .. } | CallNative { cost, .. } | LoadResource { cost, .. } => {
-                self.total_exec_io += *cost;
-            },
-        }
-
-        self.active_event_stream().push(event);
-    }
-
     fn record_bytecode(&mut self, op: Opcodes, cost: InternalGas) {
-        self.record_gas_event(ExecutionGasEvent::Bytecode { op, cost })
+        self.active_event_stream()
+            .push(ExecutionGasEvent::Bytecode { op, cost });
     }
 
     fn record_offset(&mut self, offset: CodeOffset) {
-        self.record_gas_event(ExecutionGasEvent::Loc(offset))
+        self.active_event_stream()
+            .push(ExecutionGasEvent::Loc(offset));
     }
 
     /// Delegate the charging call to the base gas meter and measure variation in balance.
@@ -321,6 +306,8 @@ where
             self.delegate_charge(|base| base.charge_native_function(amount, ret_vals));
 
         let cur = self.frames.pop().expect("frame must exist");
+        let last = self.frames.last_mut().expect("frame must exist");
+
         let (module_id, name, ty_args) = match cur.name {
             FrameName::Function {
                 module_id,
@@ -330,7 +317,7 @@ where
             FrameName::Script => unreachable!(),
         };
 
-        self.record_gas_event(ExecutionGasEvent::CallNative {
+        last.events.push(ExecutionGasEvent::CallNative {
             module_id,
             fn_name: name,
             ty_args,
@@ -441,19 +428,18 @@ where
         &mut self,
         addr: AccountAddress,
         ty: impl TypeView,
-        val: Option<impl ValueView>,
-        bytes_loaded: NumBytes,
+        loaded: Option<(NumBytes, impl ValueView)>,
     ) -> PartialVMResult<()> {
         let ty_tag = ty.to_type_tag();
 
-        let (cost, res) =
-            self.delegate_charge(|base| base.charge_load_resource(addr, ty, val, bytes_loaded));
+        let (cost, res) = self.delegate_charge(|base| base.charge_load_resource(addr, ty, loaded));
 
-        self.record_gas_event(ExecutionGasEvent::LoadResource {
-            addr,
-            ty: ty_tag,
-            cost,
-        });
+        self.active_event_stream()
+            .push(ExecutionGasEvent::LoadResource {
+                addr,
+                ty: ty_tag,
+                cost,
+            });
 
         res
     }
@@ -477,8 +463,6 @@ where
     delegate! {
         fn feature_version(&self) -> u64;
 
-        fn gas_params(&self) -> &AptosGasParameters;
-
         fn balance(&self) -> Gas;
 
         fn gas_unit_scaling_factor(&self) -> GasScalingFactor;
@@ -492,14 +476,6 @@ where
         fn storage_discount_for_events(&self, total_cost: Fee) -> Fee;
 
         fn storage_fee_for_transaction_storage(&self, txn_size: NumBytes) -> Fee;
-
-        fn execution_gas_used(&self) -> Gas;
-
-        fn io_gas_used(&self) -> Gas;
-
-        fn storage_fee_used_in_gas_units(&self) -> Gas;
-
-        fn storage_fee_used(&self) -> Fee;
     }
 
     delegate_mut! {
@@ -520,7 +496,6 @@ where
     ) -> VMResult<()> {
         for (key, op) in ops {
             let cost = self.io_gas_per_write(key, op);
-            self.total_exec_io += cost;
             self.write_set_transient.push(WriteTransient {
                 key: key.clone(),
                 cost,
@@ -576,7 +551,7 @@ where
             event_fee += fee;
         }
         let event_discount = self.storage_discount_for_events(event_fee);
-        let event_fee_with_discount = event_fee
+        event_fee = event_fee
             .checked_sub(event_discount)
             .expect("discount should always be less than or equal to total amount");
 
@@ -584,18 +559,14 @@ where
         let txn_fee = self.storage_fee_for_transaction_storage(txn_size);
 
         self.storage_fees = Some(StorageFees {
-            total: write_fee + event_fee + txn_fee,
             write_set_storage,
             events: event_fees,
             event_discount,
             txn_storage: txn_fee,
         });
 
-        self.charge_storage_fee(
-            write_fee + event_fee_with_discount + txn_fee,
-            gas_unit_price,
-        )
-        .map_err(|err| err.finish(Location::Undefined))?;
+        self.charge_storage_fee(write_fee + event_fee + txn_fee, gas_unit_price)
+            .map_err(|err| err.finish(Location::Undefined))?;
 
         Ok(())
     }
@@ -605,7 +576,6 @@ where
             self.delegate_charge(|base| base.charge_intrinsic_gas_for_transaction(txn_size));
 
         self.intrinsic_cost = Some(cost);
-        self.total_exec_io += cost;
 
         res
     }
@@ -623,15 +593,11 @@ where
         }
 
         TransactionGasLog {
-            exec_io: ExecutionAndIOCosts {
-                gas_scaling_factor: self.base.gas_unit_scaling_factor(),
-                total: self.total_exec_io,
-                intrinsic_cost: self.intrinsic_cost.unwrap_or_else(|| 0.into()),
-                call_graph: self.frames.pop().expect("frame must exist"),
-                write_set_transient: self.write_set_transient,
-            },
+            gas_scaling_factor: self.base.gas_unit_scaling_factor(),
+            intrinsic_cost: self.intrinsic_cost.unwrap_or_else(|| 0.into()),
+            call_graph: self.frames.pop().expect("frame must exist"),
+            write_set_transient: self.write_set_transient,
             storage: self.storage_fees.unwrap_or_else(|| StorageFees {
-                total: 0.into(),
                 write_set_storage: vec![],
                 events: vec![],
                 event_discount: 0.into(),

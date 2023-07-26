@@ -30,7 +30,7 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-#[derive(Parser, Clone, Debug, Serialize, Deserialize)]
+#[derive(Parser, Debug, Serialize, Deserialize)]
 pub struct CommandAdapterOpt {
     #[clap(
         long = "config",

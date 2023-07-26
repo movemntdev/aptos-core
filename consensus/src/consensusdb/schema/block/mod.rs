@@ -10,18 +10,21 @@
 //! | block_hash |    block    |
 //! ```
 
+use super::BLOCK_CF_NAME;
 use anyhow::Result;
 use aptos_consensus_types::block::Block;
 use aptos_crypto::HashValue;
-use aptos_schemadb::{
-    define_schema,
-    schema::{KeyCodec, ValueCodec},
-    ColumnFamilyName,
-};
+use aptos_schemadb::schema::{KeyCodec, Schema, ValueCodec};
 
-pub const BLOCK_CF_NAME: ColumnFamilyName = "block";
+#[derive(Debug)]
+pub struct BlockSchema;
 
-define_schema!(BlockSchema, HashValue, Block, BLOCK_CF_NAME);
+impl Schema for BlockSchema {
+    type Key = HashValue;
+    type Value = Block;
+
+    const COLUMN_FAMILY_NAME: aptos_schemadb::ColumnFamilyName = BLOCK_CF_NAME;
+}
 
 impl KeyCodec<BlockSchema> for HashValue {
     fn encode_key(&self) -> Result<Vec<u8>> {

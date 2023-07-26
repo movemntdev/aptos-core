@@ -5,11 +5,11 @@ mod fake_context;
 
 use anyhow::Result;
 use aptos_api::get_api_service;
-use clap::{Parser, ValueEnum};
+use clap::{ArgEnum, Parser};
 use fake_context::get_fake_context;
 use std::{path::PathBuf, sync::Arc};
 
-#[derive(ValueEnum, Clone, Debug)]
+#[derive(ArgEnum, Clone, Debug)]
 pub enum OutputFormat {
     Json,
     Yaml,
@@ -23,7 +23,7 @@ pub struct OutputArgs {
     pub output_path: Option<PathBuf>,
 
     /// What format to output the spec in.
-    #[clap(short, long, ignore_case = true, value_enum, default_value_t = OutputFormat::Yaml)]
+    #[clap(short, long, arg_enum, default_value = "yaml")]
     pub format: OutputFormat,
 }
 
@@ -53,10 +53,4 @@ pub fn main() -> Result<()> {
         OutputFormat::Yaml => api_service.spec_yaml(),
     };
     args.output_args.write(&spec)
-}
-
-#[test]
-fn verify_tool() {
-    use clap::CommandFactory;
-    Args::command().debug_assert()
 }

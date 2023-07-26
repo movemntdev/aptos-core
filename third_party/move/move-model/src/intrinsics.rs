@@ -3,13 +3,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    ast::{Address, Operation, PropertyBag, PropertyValue, QualifiedSymbol},
+    ast::{Operation, PropertyBag, PropertyValue, QualifiedSymbol},
     builder::module_builder::SpecBlockContext,
     model::{IntrinsicId, QualifiedId, SpecFunId},
     pragmas::{INTRINSIC_PRAGMA, INTRINSIC_TYPE_MAP, INTRINSIC_TYPE_MAP_ASSOC_FUNCTIONS},
     symbol::{Symbol, SymbolPool},
     FunId, GlobalEnv, Loc, ModuleBuilder, StructId,
 };
+use num::BigUint;
 use std::{collections::BTreeMap, ops::Deref};
 
 /// An information pack that holds the intrinsic declaration
@@ -24,7 +25,7 @@ pub struct IntrinsicDecl {
 }
 
 impl IntrinsicDecl {
-    pub fn get_fun_triple(&self, env: &GlobalEnv, name: &str) -> Option<(Address, String, String)> {
+    pub fn get_fun_triple(&self, env: &GlobalEnv, name: &str) -> Option<(BigUint, String, String)> {
         let symbol_pool = env.symbol_pool();
         let sym = symbol_pool.make(name);
         self.intrinsic_to_move_fun
@@ -160,7 +161,7 @@ fn populate_intrinsic_decl(
                         &format!(
                             "an intrinsic function mapping can only refer to functions \
                             declared in the same module while `{}` is not",
-                            qual_sym.display(builder.parent.env)
+                            qual_sym.display(symbol_pool)
                         ),
                     );
                     continue;
@@ -181,7 +182,7 @@ fn populate_intrinsic_decl(
                         loc,
                         &format!(
                             "unable to find move function for intrinsic mapping: {}",
-                            qualified_sym.display(builder.parent.env)
+                            qualified_sym.display(symbol_pool)
                         ),
                     );
                     continue;
@@ -197,7 +198,7 @@ fn populate_intrinsic_decl(
                             loc,
                             &format!(
                                 "duplicated intrinsic mapping for move function: {}",
-                                qualified_sym.display(builder.parent.env)
+                                qualified_sym.display(symbol_pool)
                             ),
                         );
                         continue;
@@ -211,7 +212,7 @@ fn populate_intrinsic_decl(
                         loc,
                         &format!(
                             "unable to find spec function for intrinsic mapping: {}",
-                            qualified_sym.display(builder.parent.env)
+                            qualified_sym.display(symbol_pool)
                         ),
                     );
                     continue;
@@ -222,7 +223,7 @@ fn populate_intrinsic_decl(
                             loc,
                             &format!(
                                 "unable to find a unique spec function for intrinsic mapping: {}",
-                                qualified_sym.display(builder.parent.env)
+                                qualified_sym.display(symbol_pool)
                             ),
                         );
                         continue;
@@ -232,7 +233,7 @@ fn populate_intrinsic_decl(
                     // TODO: in theory, we should also do some type checking on the function
                     // signature. This is implicitly done by Boogie right now, but we may want to
                     // make it more explicit and do the checking ourselves.
-                    if let Operation::SpecFunction(mid, fid, ..) = &entry.oper {
+                    if let Operation::Function(mid, fid, ..) = &entry.oper {
                         let qid = mid.qualified(*fid);
                         decl.intrinsic_to_spec_fun.insert(key_sym, qid);
                         if decl.spec_fun_to_intrinsic.insert(qid, key_sym).is_some() {
@@ -240,7 +241,7 @@ fn populate_intrinsic_decl(
                                 loc,
                                 &format!(
                                     "duplicated intrinsic mapping for spec function: {}",
-                                    qualified_sym.display(builder.parent.env)
+                                    qualified_sym.display(symbol_pool)
                                 ),
                             );
                             continue;

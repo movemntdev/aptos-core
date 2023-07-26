@@ -4,10 +4,7 @@
 
 //! Interface between Consensus and Network layers.
 
-use crate::{
-    dag::DAGNetworkMessage,
-    quorum_store::types::{Batch, BatchMsg, BatchRequest},
-};
+use crate::quorum_store::types::{Batch, BatchMsg, BatchRequest};
 use aptos_config::network_id::{NetworkId, PeerNetworkId};
 use aptos_consensus_types::{
     block_retrieval::{BlockRetrievalRequest, BlockRetrievalResponse},
@@ -64,8 +61,6 @@ pub enum ConsensusMsg {
     SignedBatchInfo(Box<SignedBatchInfoMsg>),
     /// Quorum Store: Broadcast a certified proof of store (a digest that received 2f+1 votes).
     ProofOfStoreMsg(Box<ProofOfStoreMsg>),
-    /// DAG protocol message
-    DAGMessage(DAGNetworkMessage),
 }
 
 /// Network type for consensus
@@ -88,7 +83,6 @@ impl ConsensusMsg {
             ConsensusMsg::BatchResponse(_) => "BatchResponse",
             ConsensusMsg::SignedBatchInfo(_) => "SignedBatchInfo",
             ConsensusMsg::ProofOfStoreMsg(_) => "ProofOfStoreMsg",
-            ConsensusMsg::DAGMessage(_) => "DAGMessage",
         }
     }
 }

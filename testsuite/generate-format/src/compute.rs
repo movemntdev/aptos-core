@@ -2,25 +2,25 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use clap::Parser;
 use generate_format::Corpus;
 use std::{fs::File, io::Write};
+use structopt::StructOpt;
 
-#[derive(Debug, Parser)]
-#[clap(
+#[derive(Debug, StructOpt)]
+#[structopt(
     name = "Aptos format generator",
     about = "Trace serde (de)serialization to generate format descriptions for Aptos types"
 )]
 struct Options {
-    #[clap(long, value_enum, default_value_t = Corpus::Aptos, ignore_case = true)]
+    #[structopt(long, possible_values = &Corpus::variants(), default_value = "Aptos", case_insensitive = true)]
     corpus: Corpus,
 
-    #[clap(long)]
+    #[structopt(long)]
     record: bool,
 }
 
 fn main() {
-    let options = Options::parse();
+    let options = Options::from_args();
 
     let registry = options.corpus.get_registry();
     let output_file = options.corpus.output_file();
@@ -37,10 +37,4 @@ fn main() {
     } else {
         println!("{}", content);
     }
-}
-
-#[test]
-fn verify_tool() {
-    use clap::CommandFactory;
-    Options::command().debug_assert()
 }

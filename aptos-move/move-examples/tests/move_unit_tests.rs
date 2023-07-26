@@ -76,11 +76,6 @@ fn test_resource_account_common(pkg: &str) {
 }
 
 #[test]
-fn test_common_account() {
-    test_common("common_account");
-}
-
-#[test]
 fn test_data_structures() {
     test_common("data_structures");
 }
@@ -108,33 +103,6 @@ fn test_marketplace() {
 #[test]
 fn test_message_board() {
     test_common("message_board");
-}
-
-#[test]
-fn test_fungible_asset() {
-    let named_address = BTreeMap::from([
-        (
-            String::from("example_addr"),
-            AccountAddress::from_hex_literal("0xcafe").unwrap(),
-        ),
-        (
-            String::from("FACoin"),
-            AccountAddress::from_hex_literal("0xcafe").unwrap(),
-        ),
-    ]);
-    run_tests_for_pkg(
-        "fungible_asset/managed_fungible_asset",
-        named_address.clone(),
-    );
-    run_tests_for_pkg(
-        "fungible_asset/managed_fungible_token",
-        named_address.clone(),
-    );
-    run_tests_for_pkg(
-        "fungible_asset/preminted_managed_coin",
-        named_address.clone(),
-    );
-    run_tests_for_pkg("fungible_asset/fa_coin", named_address);
 }
 
 #[test]
@@ -185,7 +153,6 @@ fn test_token_objects() {
         AccountAddress::from_hex_literal("0xcafe").unwrap(),
     )]);
     run_tests_for_pkg("token_objects/hero", named_address.clone());
-    run_tests_for_pkg("token_objects/token_lockup", named_address.clone());
     run_tests_for_pkg("token_objects/ambassador/move", named_address);
 }
 
@@ -208,34 +175,4 @@ fn test_nft_dao_test() {
         AccountAddress::from_hex_literal("0xcafe").unwrap(),
     )]);
     run_tests_for_pkg("dao/nft_dao", named_address);
-}
-
-#[test]
-fn test_swap() {
-    let named_address = BTreeMap::from([
-        (
-            String::from("deployer"),
-            AccountAddress::from_hex_literal("0xcafe").unwrap(),
-        ),
-        (
-            String::from("swap"),
-            AccountAddress::from_hex_literal("0xcafe").unwrap(),
-        ),
-    ]);
-    run_tests_for_pkg("swap", named_address);
-}
-
-#[test]
-fn test_package_manager() {
-    let named_address = BTreeMap::from([
-        (
-            String::from("deployer"),
-            AccountAddress::from_hex_literal("0xcafe").unwrap(),
-        ),
-        (
-            String::from("package"),
-            AccountAddress::from_hex_literal("0xcafe").unwrap(),
-        ),
-    ]);
-    run_tests_for_pkg("package_manager", named_address);
 }
