@@ -22,13 +22,7 @@ pub const URI_LENGTH: usize = 512;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Table {
-    handle: String,
-}
-
-impl Table {
-    pub fn get_handle(&self) -> String {
-        standardize_address(self.handle.as_str())
-    }
+    pub handle: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

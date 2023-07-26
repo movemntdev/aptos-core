@@ -46,7 +46,9 @@ pub fn benchmark(args: &[String]) {
             Arg::new("config")
                 .short('c')
                 .long("config")
-                .num_args(0..)
+                .takes_value(true)
+                .multiple_occurrences(true)
+                .number_of_values(1)
                 .value_name("CONFIG_PATH")
                 .help(
                     "path to a prover toml configuration file. The benchmark output will be \
@@ -64,7 +66,9 @@ pub fn benchmark(args: &[String]) {
             Arg::new("dependencies")
                 .long("dependency")
                 .short('d')
-                .num_args(0..)
+                .multiple_occurrences(true)
+                .number_of_values(1)
+                .takes_value(true)
                 .value_name("PATH_TO_DEPENDENCY")
                 .help(
                     "path to a Move file, or a directory which will be searched for \
@@ -73,8 +77,9 @@ pub fn benchmark(args: &[String]) {
         )
         .arg(
             Arg::new("sources")
+                .multiple_occurrences(true)
                 .value_name("PATH_TO_SOURCE_FILE")
-                .num_args(1..)
+                .min_values(1)
                 .help("the source files to verify"),
         );
     let matches = cmd_line_parser.get_matches_from(args);

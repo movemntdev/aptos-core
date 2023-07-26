@@ -45,7 +45,7 @@ pub struct TransactionalTestOpts {
     pub list: bool,
 
     /// Path to contain the tests
-    #[clap(long, value_parser)]
+    #[clap(long, parse(from_os_str))]
     pub root_path: PathBuf,
 
     /// Pattern to match the test files

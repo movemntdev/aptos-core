@@ -4,8 +4,7 @@
 use crate::{LoadDestination, NetworkLoadTest};
 use aptos::{account::create::DEFAULT_FUNDED_COINS, test::CliTestFramework};
 use aptos_forge::{
-    reconfig, NetworkContext, NetworkTest, NodeExt, Result, Swarm, SwarmExt, Test, TestReport,
-    FORGE_KEY_SEED,
+    reconfig, NetworkContext, NetworkTest, NodeExt, Result, Swarm, SwarmExt, Test, FORGE_KEY_SEED,
 };
 use aptos_keygen::KeyGen;
 use aptos_logger::info;
@@ -29,12 +28,7 @@ impl NetworkLoadTest for ValidatorJoinLeaveTest {
         Ok(LoadDestination::FullnodesOtherwiseValidators)
     }
 
-    fn test(
-        &self,
-        swarm: &mut dyn Swarm,
-        _report: &mut TestReport,
-        duration: Duration,
-    ) -> Result<()> {
+    fn test(&self, swarm: &mut dyn Swarm, duration: Duration) -> Result<()> {
         // Verify we have at least 7 validators (i.e., 3f+1, where f is 2)
         // so we can lose 2 validators but still make progress.
         let num_validators = swarm.validators().count();
@@ -185,7 +179,7 @@ impl NetworkLoadTest for ValidatorJoinLeaveTest {
 }
 
 impl NetworkTest for ValidatorJoinLeaveTest {
-    fn run(&self, ctx: &mut NetworkContext<'_>) -> Result<()> {
+    fn run<'t>(&self, ctx: &mut NetworkContext<'t>) -> Result<()> {
         <dyn NetworkLoadTest>::run(self, ctx)
     }
 }

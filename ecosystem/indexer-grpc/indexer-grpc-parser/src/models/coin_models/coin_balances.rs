@@ -13,7 +13,7 @@ use crate::{
     schema::{coin_balances, current_coin_balances},
     utils::util::standardize_address,
 };
-use aptos_protos::transaction::v1::WriteResource;
+use aptos_protos::transaction::testing1::v1::WriteResource;
 use bigdecimal::BigDecimal;
 use field_count::FieldCount;
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,7 @@ pub struct CurrentCoinBalance {
 }
 
 impl CoinBalance {
-    /// Getting coin balances from resources
+    /// We can find coin info from resources. If the coin info appears multiple times we will only keep the first transaction because it can't be modified.
     pub fn from_write_resource(
         write_resource: &WriteResource,
         txn_version: i64,
@@ -52,10 +52,9 @@ impl CoinBalance {
     ) -> anyhow::Result<Option<(Self, CurrentCoinBalance, EventToCoinType)>> {
         match &CoinResource::from_write_resource(write_resource, txn_version)? {
             Some(CoinResource::CoinStoreResource(inner)) => {
-                tracing::info!("CoinStoreResource found: {:?}", write_resource);
                 let coin_info_type = &CoinInfoType::from_move_type(
                     &write_resource.r#type.as_ref().unwrap().generic_type_params[0],
-                    write_resource.type_str.as_ref(),
+                    write_resource.r#type.as_ref().unwrap().address.as_str(),
                     txn_version,
                 );
                 let owner_address = standardize_address(write_resource.address.as_str());

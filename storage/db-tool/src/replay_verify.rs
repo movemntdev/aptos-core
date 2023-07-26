@@ -31,7 +31,7 @@ pub struct Opt {
     concurrent_downloads: ConcurrentDownloadsOpt,
     #[clap(flatten)]
     replay_concurrency_level: ReplayConcurrencyLevelOpt,
-    #[clap(long = "target-db-dir", value_parser)]
+    #[clap(long = "target-db-dir", parse(from_os_str))]
     pub db_dir: PathBuf,
     #[clap(flatten)]
     pub rocksdb_opt: RocksdbOpt,
@@ -50,7 +50,7 @@ pub struct Opt {
     validate_modules: bool,
     #[clap(
         long,
-        num_args = 1..,
+        multiple = true,
         help = "Skip the execution for txns that are known to break compatibility."
     )]
     txns_to_skip: Vec<Version>,

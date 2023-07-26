@@ -56,7 +56,7 @@ impl NetworkLoadTest for NetworkBandwidthTest {
 }
 
 impl NetworkTest for NetworkBandwidthTest {
-    fn run(&self, ctx: &mut NetworkContext<'_>) -> anyhow::Result<()> {
+    fn run<'t>(&self, ctx: &mut NetworkContext<'t>) -> anyhow::Result<()> {
         <dyn NetworkLoadTest>::run(self, ctx)
     }
 }

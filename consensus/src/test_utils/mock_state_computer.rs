@@ -8,7 +8,6 @@ use crate::{
     payload_manager::PayloadManager,
     state_replication::{StateComputer, StateComputerCommitCallBackType},
     test_utils::mock_storage::MockStorage,
-    transaction_deduper::TransactionDeduper,
     transaction_shuffler::TransactionShuffler,
 };
 use anyhow::{format_err, Result};
@@ -134,15 +133,7 @@ impl StateComputer for MockStateComputer {
         Ok(())
     }
 
-    fn new_epoch(
-        &self,
-        _: &EpochState,
-        _: Arc<PayloadManager>,
-        _: Arc<dyn TransactionShuffler>,
-        _: Option<u64>,
-        _: Arc<dyn TransactionDeduper>,
-    ) {
-    }
+    fn new_epoch(&self, _: &EpochState, _: Arc<PayloadManager>, _: Arc<dyn TransactionShuffler>) {}
 
     fn end_epoch(&self) {}
 }
@@ -172,15 +163,7 @@ impl StateComputer for EmptyStateComputer {
         Ok(())
     }
 
-    fn new_epoch(
-        &self,
-        _: &EpochState,
-        _: Arc<PayloadManager>,
-        _: Arc<dyn TransactionShuffler>,
-        _: Option<u64>,
-        _: Arc<dyn TransactionDeduper>,
-    ) {
-    }
+    fn new_epoch(&self, _: &EpochState, _: Arc<PayloadManager>, _: Arc<dyn TransactionShuffler>) {}
 
     fn end_epoch(&self) {}
 }
@@ -234,15 +217,7 @@ impl StateComputer for RandomComputeResultStateComputer {
         Ok(())
     }
 
-    fn new_epoch(
-        &self,
-        _: &EpochState,
-        _: Arc<PayloadManager>,
-        _: Arc<dyn TransactionShuffler>,
-        _: Option<u64>,
-        _: Arc<dyn TransactionDeduper>,
-    ) {
-    }
+    fn new_epoch(&self, _: &EpochState, _: Arc<PayloadManager>, _: Arc<dyn TransactionShuffler>) {}
 
     fn end_epoch(&self) {}
 }

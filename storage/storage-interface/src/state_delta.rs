@@ -5,12 +5,11 @@ use aptos_crypto::HashValue;
 use aptos_scratchpad::SparseMerkleTree;
 use aptos_types::{
     state_store::{
-        create_empty_sharded_state_updates, state_storage_usage::StateStorageUsage,
-        state_value::StateValue, ShardedStateUpdates,
+        state_key::StateKey, state_storage_usage::StateStorageUsage, state_value::StateValue,
     },
     transaction::Version,
 };
-use itertools::zip_eq;
+use std::collections::HashMap;
 
 /// This represents two state sparse merkle trees at their versions in memory with the updates
 /// reflecting the difference of `current` on top of `base`.
@@ -25,7 +24,7 @@ pub struct StateDelta {
     pub base_version: Option<Version>,
     pub current: SparseMerkleTree<StateValue>,
     pub current_version: Option<Version>,
-    pub updates_since_base: ShardedStateUpdates,
+    pub updates_since_base: HashMap<StateKey, Option<StateValue>>,
 }
 
 impl StateDelta {
@@ -34,7 +33,7 @@ impl StateDelta {
         base_version: Option<Version>,
         current: SparseMerkleTree<StateValue>,
         current_version: Option<Version>,
-        updates_since_base: ShardedStateUpdates,
+        updates_since_base: HashMap<StateKey, Option<StateValue>>,
     ) -> Self {
         assert!(base_version.map_or(0, |v| v + 1) <= current_version.map_or(0, |v| v + 1));
         Self {
@@ -48,13 +47,7 @@ impl StateDelta {
 
     pub fn new_empty() -> Self {
         let smt = SparseMerkleTree::new_empty();
-        Self::new(
-            smt.clone(),
-            None,
-            smt,
-            None,
-            create_empty_sharded_state_updates(),
-        )
+        Self::new(smt.clone(), None, smt, None, HashMap::new())
     }
 
     pub fn new_at_checkpoint(
@@ -68,20 +61,13 @@ impl StateDelta {
             checkpoint_version,
             smt,
             checkpoint_version,
-            create_empty_sharded_state_updates(),
+            HashMap::new(),
         )
     }
 
     pub fn merge(&mut self, other: StateDelta) {
         assert!(other.follow(self));
-        zip_eq(
-            self.updates_since_base.iter_mut(),
-            other.updates_since_base.into_iter(),
-        )
-        .for_each(|(base, delta)| {
-            base.extend(delta);
-        });
-
+        self.updates_since_base.extend(other.updates_since_base);
         self.current = other.current;
         self.current_version = other.current_version;
     }

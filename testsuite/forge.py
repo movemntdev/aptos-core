@@ -30,14 +30,14 @@ from typing import (
     Union,
 )
 from urllib.parse import ParseResult, urlunparse, urlencode
-from test_framework.logging import init_logging, log
-from test_framework.filesystem import Filesystem, LocalFilesystem
-from test_framework.git import Git
-from test_framework.process import Processes, SystemProcesses
+from applogging import logger, init_logging
+from forge_wrapper_core.filesystem import Filesystem, LocalFilesystem
+from forge_wrapper_core.git import Git
+from forge_wrapper_core.process import Processes, SystemProcesses
 
-from test_framework.shell import LocalShell, Shell
-from test_framework.time import SystemTime, Time
-from test_framework.cluster import Cloud, ForgeCluster, ForgeJob, find_forge_cluster
+from forge_wrapper_core.shell import LocalShell, Shell
+from forge_wrapper_core.time import SystemTime, Time
+from forge_wrapper_core.cluster import Cloud, ForgeCluster, ForgeJob, find_forge_cluster
 
 # map of build variant (e.g. cargo profile and feature flags)
 BUILD_VARIANT_TAG_PREFIX_MAP = {
@@ -47,19 +47,12 @@ BUILD_VARIANT_TAG_PREFIX_MAP = {
     "release": "",  # the default release profile has no tag prefix
 }
 
-VALIDATOR_IMAGE_NAME = "validator"
-VALIDATOR_TESTING_IMAGE_NAME = "validator-testing"
-FORGE_IMAGE_NAME = "forge"
-ECR_REPO_PREFIX = "aptos"
+VALIDATOR_IMAGE_NAME = "aptos/validator"
+VALIDATOR_TESTING_IMAGE_NAME = "aptos/validator-testing"
+FORGE_IMAGE_NAME = "aptos/forge"
 
 DEFAULT_CONFIG = "forge-wrapper-config"
 DEFAULT_CONFIG_KEY = "forge-wrapper-config.json"
-
-FORGE_TEST_RUNNER_TEMPLATE_PATH = "forge-test-runner-template.yaml"
-
-MULTIREGION_KUBECONFIG_DIR = "/etc/multiregion-kubeconfig"
-MULTIREGION_KUBECONFIG_PATH = f"{MULTIREGION_KUBECONFIG_DIR}/kubeconfig"
-GAR_REPO_NAME = "us-west1-docker.pkg.dev/aptos-global/aptos-internal"
 
 
 @dataclass
@@ -111,8 +104,12 @@ except ImportError:
     "--log-metadata/--no-log-metadata",
     default=True,
 )
+@logger
 def main(log_metadata: bool) -> None:
     init_logging(logger=log, print_metadata=log_metadata)
+    # Check that the current directory is the root of the repository.
+    if not os.path.exists(".git"):
+        log.fatal("This script must be run from the root of the repository.")
 
 
 def envoption(name: str, default: Optional[Any] = None) -> Any:
@@ -125,6 +122,7 @@ def envoption(name: str, default: Optional[Any] = None) -> Any:
 
 # o11y resources
 GRAFANA_BASE_URL = "https://aptoslabs.grafana.net/d/overview/overview?orgId=1&refresh=10s&var-Datasource=VictoriaMetrics%20Global%20%28Non-mainnet%29&var-BigQuery=Google%20BigQuery"
+PYROSCOPE_BASE_URL = "https://pyroscope.o11y.aptosdev.com"
 
 # helm chart default override values
 HELM_CHARTS = ["aptos-node", "aptos-genesis"]
@@ -156,19 +154,15 @@ class ForgeResult:
         assert self._end_time is not None, "end_time is not set"
         return self._end_time
 
-    @property
-    def duration(self) -> float:
-        return (self.end_time - self.start_time).total_seconds()
-
     @classmethod
-    def from_args(cls, state: ForgeState, output: str) -> ForgeResult:
+    def from_args(cls, state: ForgeState, output: str) -> "ForgeResult":
         result = cls()
         result.state = state
         result.output = output
         return result
 
     @classmethod
-    def empty(cls) -> ForgeResult:
+    def empty(cls) -> "ForgeResult":
         return cls.from_args(ForgeState.EMPTY, "")
 
     @classmethod
@@ -216,7 +210,7 @@ class ForgeResult:
         self.debugging_output = output
 
     def format(self, context: ForgeContext) -> str:
-        output_lines: List[str] = []
+        output_lines = []
         if not self.succeeded():
             output_lines.append(self.debugging_output)
         output_lines.extend(
@@ -225,13 +219,6 @@ class ForgeResult:
                 f"Forge {self.state.value.lower()}ed",
             ]
         )
-        if self.state == ForgeState.FAIL and self.duration > 3600:
-            output_lines.append(
-                "Forge took longer than 1 hour to run. This can cause the job to"
-                " fail even when the test is successful because of gcp + github"
-                " auth expiration. If you think this is the case please check the"
-                " GCP_AUTH_DURATION in the github workflow."
-            )
         return "\n".join(output_lines)
 
     def succeeded(self) -> bool:
@@ -262,7 +249,6 @@ class ForgeContext:
     upgrade_image_tag: str
     forge_cluster: ForgeCluster
     forge_test_suite: str
-    forge_username: str
     forge_blocking: bool
 
     github_actions: str
@@ -363,6 +349,28 @@ def get_dashboard_link(
         f"{GRAFANA_BASE_URL}&var-namespace={forge_namespace}&var-metrics_source=All"
         f"&var-chain_name={forge_chain_name}{grafana_time_filter}"
     )
+
+
+def shorten_link(link: str) -> str:
+    headers = {
+        "x-api-key": os.getenv("SHORTENER_API_KEY"),
+        "Content-Type": "application/json",
+    }
+    body = json.dumps(
+        {
+            "longUrl": link,
+        }
+    )
+    try:
+        import requests
+
+        response = requests.post(
+            "https://api.aws3.link/shorten", headers=headers, data=body
+        )
+        return f"https://{response.json()['shortUrl']}"
+    # Dont fail if we fail to shorten
+    except Exception:
+        return link
 
 
 def milliseconds(timestamp: datetime) -> int:
@@ -488,6 +496,13 @@ def get_humio_logs_link(
     )
 
 
+def get_pyroscope_profiling_link(
+    forge_namespace: str,
+) -> str:
+    """Get a link to the pyroscope profiling for a given test run in a given namespace. Note that there is no time filtering yet"""
+    return f'{PYROSCOPE_BASE_URL}/?query=aptos-node.cpu%7Bnamespace%3D"{forge_namespace}"%7D&from=now-24h'
+
+
 def format_github_info(context: ForgeContext) -> str:
     if not context.github_job_url:
         return ""
@@ -522,6 +537,7 @@ def format_pre_comment(context: ForgeContext) -> str:
         context.forge_namespace,
         True,
     )
+    pyroscope_profiling_link = get_pyroscope_profiling_link(context.forge_namespace)
 
     return (
         textwrap.dedent(
@@ -529,6 +545,7 @@ def format_pre_comment(context: ForgeContext) -> str:
             ### Forge is running suite `{context.forge_test_suite}` on {get_testsuite_images(context)}
             * [Grafana dashboard (auto-refresh)]({dashboard_link})
             * [Humio Logs]({humio_logs_link})
+            * [Pyroscope Profiling]({pyroscope_profiling_link})
             """
         ).lstrip()
         + format_github_info(context)
@@ -545,6 +562,7 @@ def format_comment(context: ForgeContext, result: ForgeResult) -> str:
         context.forge_namespace,
         (result.start_time, result.end_time),
     )
+    pyroscope_profiling_link = get_pyroscope_profiling_link(context.forge_namespace)
 
     if result.state == ForgeState.PASS:
         forge_comment_header = f"### :white_check_mark: Forge suite `{context.forge_test_suite}` success on {get_testsuite_images(context)}"
@@ -568,6 +586,7 @@ def format_comment(context: ForgeContext, result: ForgeResult) -> str:
         ```
         * [Grafana dashboard]({dashboard_link})
         * [Humio Logs]({humio_logs_link})
+        * [Pyroscope Profiling]({pyroscope_profiling_link})
         """
         )
         + format_github_info(context)
@@ -582,10 +601,9 @@ class ForgeRunner:
 def dump_forge_state(
     shell: Shell,
     forge_namespace: str,
-    kubeconf: Optional[str] = None,
+    kubeconf: str,
 ) -> str:
     try:
-        assert kubeconf is not None, "kubeconf is required"
         output = (
             shell.run(
                 [
@@ -648,15 +666,15 @@ class LocalForgeRunner(ForgeRunner):
 
 
 class K8sForgeRunner(ForgeRunner):
-    def delete_forge_runner_pod(self, context: ForgeContext):
-        log.info(f"Deleting forge pod for namespace {context.forge_namespace}")
-        assert context.forge_cluster.kubeconf is not None, "kubeconf is required"
+    def run(self, context: ForgeContext) -> ForgeResult:
+        forge_pod_name = sanitize_forge_resource_name(
+            f"{context.forge_namespace}-{context.time.epoch()}-{context.image_tag}"
+        )
         context.shell.run(
             [
                 "kubectl",
                 "--kubeconfig",
                 context.forge_cluster.kubeconf,
-                *context.forge_cluster.kubectl_create_context_arg,
                 "delete",
                 "pod",
                 "-n",
@@ -680,34 +698,21 @@ class K8sForgeRunner(ForgeRunner):
                 f"forge-namespace={context.forge_namespace}",
             ]
         )
-
-    def run(self, context: ForgeContext) -> ForgeResult:
-        forge_pod_name = sanitize_forge_resource_name(
-            f"{context.forge_namespace}-{context.time.epoch()}-{context.image_tag}",
-            max_length=52 if context.forge_cluster.is_multiregion else 63,
-        )
-        assert context.forge_cluster.kubeconf is not None, "kubeconf is required"
-
-        self.delete_forge_runner_pod(context)
-
-        if context.filesystem.exists(FORGE_TEST_RUNNER_TEMPLATE_PATH):
-            template = context.filesystem.read(FORGE_TEST_RUNNER_TEMPLATE_PATH)
-        else:
-            template = context.filesystem.read(
-                os.path.join("testsuite", FORGE_TEST_RUNNER_TEMPLATE_PATH)
-            )
+        template = context.filesystem.read("testsuite/forge-test-runner-template.yaml")
         forge_triggered_by = "github-actions" if context.github_actions else "other"
 
         assert context.aws_account_num is not None, "AWS account number is required"
 
         # determine the interal image repos based on the context of where the cluster is located
         if context.cloud == Cloud.AWS:
-            forge_image_full = f"{context.aws_account_num}.dkr.ecr.{context.aws_region}.amazonaws.com/{ECR_REPO_PREFIX}/forge:{context.forge_image_tag}"
+            forge_image_repo = f"{context.aws_account_num}.dkr.ecr.{context.aws_region}.amazonaws.com/aptos/forge"
             validator_node_selector = "eks.amazonaws.com/nodegroup: validators"
         elif (
             context.cloud == Cloud.GCP
         ):  # the GCP project for images is separate than the cluster
-            forge_image_full = f"{GAR_REPO_NAME}/forge:{context.forge_image_tag}"
+            forge_image_repo = (
+                f"us-west1-docker.pkg.dev/aptos-global/aptos-internal/forge"
+            )
             validator_node_selector = ""  # no selector
             # TODO: also no NAP node selector yet
             # TODO: also registries need to be set up such that the default compute service account can access it:  $PROJECT_ID-compute@developer.gserviceaccount.com
@@ -719,15 +724,11 @@ class K8sForgeRunner(ForgeRunner):
             FORGE_IMAGE_TAG=context.forge_image_tag,
             IMAGE_TAG=context.image_tag,
             UPGRADE_IMAGE_TAG=context.upgrade_image_tag,
-            FORGE_IMAGE=forge_image_full,
+            FORGE_IMAGE_REPO=forge_image_repo,
             FORGE_NAMESPACE=context.forge_namespace,
             FORGE_ARGS=" ".join(context.forge_args),
             FORGE_TRIGGERED_BY=forge_triggered_by,
-            FORGE_TEST_SUITE=sanitize_k8s_resource_name(context.forge_test_suite),
-            FORGE_USERNAME=sanitize_k8s_resource_name(context.forge_username),
             VALIDATOR_NODE_SELECTOR=validator_node_selector,
-            KUBECONFIG=MULTIREGION_KUBECONFIG_PATH,
-            MULTIREGION_KUBECONFIG_DIR=MULTIREGION_KUBECONFIG_DIR,
         )
 
         with ForgeResult.with_context(context) as forge_result:
@@ -738,7 +739,6 @@ class K8sForgeRunner(ForgeRunner):
                     "kubectl",
                     "--kubeconfig",
                     context.forge_cluster.kubeconf,
-                    *context.forge_cluster.kubectl_create_context_arg,
                     "apply",
                     "-n",
                     "default",
@@ -825,9 +825,6 @@ class K8sForgeRunner(ForgeRunner):
 
             forge_result.set_state(state)
 
-        # cleanup the pod manually
-        self.delete_forge_runner_pod(context)
-
         return forge_result
 
 
@@ -886,7 +883,6 @@ def find_recent_images_by_profile_or_features(
     num_images: int,
     enable_failpoints: Optional[bool],
     enable_performance_profile: Optional[bool],
-    cloud: Cloud = Cloud.GCP,
 ) -> Sequence[str]:
     image_tag_prefix = ""
     if enable_failpoints and enable_performance_profile:
@@ -905,7 +901,6 @@ def find_recent_images_by_profile_or_features(
         num_images,
         image_name=VALIDATOR_TESTING_IMAGE_NAME,
         image_tag_prefixes=[image_tag_prefix],
-        cloud=cloud,
     )
 
 
@@ -914,9 +909,8 @@ def find_recent_images(
     git: Git,
     num_images: int,
     image_name: str,
-    image_tag_prefixes: List[str] = [""],
+    image_tag_prefixes: Sequence[str] = [""],
     commit_threshold: int = 100,
-    cloud: Cloud = Cloud.GCP,
 ) -> Sequence[str]:
     """
     Find the last `num_images` images built from the current git repo by searching the git commit history
@@ -938,7 +932,7 @@ def find_recent_images(
         temp_ret = []  # count variants for this revision
         for prefix in image_tag_prefixes:
             image_tag = f"{prefix}{revision}"
-            exists = image_exists(shell, image_name, image_tag, cloud=cloud)
+            exists = image_exists(shell, image_name, image_tag)
             if exists:
                 temp_ret.append(image_tag)
             if len(temp_ret) >= num_variants:
@@ -953,71 +947,37 @@ def find_recent_images(
     return ret
 
 
-def image_exists(
-    shell: Shell,
-    image_name: str,
-    image_tag: str,
-    cloud: Cloud = Cloud.GCP,
-) -> bool:
-    """Check if an image exists in a given repository"""
-    if cloud == Cloud.GCP:
-        full_image = f"{GAR_REPO_NAME}/{image_name}:{image_tag}"
-        return shell.run(
-            [
-                "crane",
-                "manifest",
-                full_image,
-            ],
-            stream_output=True,
-        ).succeeded()
-    elif cloud == Cloud.AWS:
-        full_image = f"{ECR_REPO_PREFIX}/{image_name}:{image_tag}"
-        log.info(f"Checking if image exists in GCP: {full_image}")
-        return shell.run(
-            [
-                "aws",
-                "ecr",
-                "describe-images",
-                "--repository-name",
-                f"{ECR_REPO_PREFIX}/{image_name}",
-                "--image-ids",
-                f"imageTag={image_tag}",
-            ],
-            stream_output=True,
-        ).succeeded()
-    else:
-        raise Exception(f"Unknown cloud repo type: {cloud}")
+def image_exists(shell: Shell, image_name: str, image_tag: str) -> bool:
+    result = shell.run(
+        [
+            "aws",
+            "ecr",
+            "describe-images",
+            "--repository-name",
+            f"{image_name}",
+            "--image-ids",
+            f"imageTag={image_tag}",
+        ]
+    )
+    return result.exit_code == 0
 
 
-def sanitize_k8s_resource_name(resource: str, max_length: int = 63) -> str:
-    sanitized_resource = ""
-    for i, c in enumerate(resource):
+def sanitize_forge_resource_name(forge_resource: str) -> str:
+    """
+    Sanitize the intended forge resource name to be a valid k8s resource name
+    """
+    max_length = 63
+    sanitized_namespace = ""
+    for i, c in enumerate(forge_resource):
         if i >= max_length:
             break
         if c.isalnum():
-            sanitized_resource += c
+            sanitized_namespace += c
         else:
-            sanitized_resource += "-"  # Replace the invalid character with a '-'
-
-    if sanitized_resource.endswith("-"):
-        sanitized_resource = (
-            sanitized_resource[:-1] + "0"
-        )  # Set the last character to '0'
-
-    return sanitized_resource
-
-
-def sanitize_forge_resource_name(forge_resource: str, max_length: int = 63) -> str:
-    """
-    Sanitize the intended forge resource name to be a valid k8s resource name.
-    Resource names must be: (i) 63 characters or less; (ii) contain characters
-    that are alphanumeric, '-', or '.'; (iii) start and end with an alphanumeric
-    character; and (iv) start with "forge-".
-    """
+            sanitized_namespace += "-"
     if not forge_resource.startswith("forge-"):
         raise Exception("Forge resource name must start with 'forge-'")
-
-    return sanitize_k8s_resource_name(forge_resource, max_length=max_length)
+    return sanitized_namespace
 
 
 def create_forge_command(
@@ -1133,8 +1093,8 @@ async def run_multiple(
 
     for suite in forge_test_suites:
         new_namespace = f"{forge_namespace}-{suite}"
-        link = get_humio_forge_link(new_namespace, True)
-        pending_comment.append(f"Running {suite}: [Runner logs]({link})")
+        short_link = shorten_link(get_humio_forge_link(new_namespace, True))
+        pending_comment.append(f"Running {suite}: [Runner logs]({short_link})")
         if forge_runner_mode != "pre-forge":
             pending_results.append(
                 context.shell.gen_run(
@@ -1167,6 +1127,9 @@ async def run_multiple(
         failed = False
         for i, result in enumerate(results):
             suite, namespace = pending_suites[i]
+            short_link = shorten_link(
+                get_humio_forge_link(namespace, (start_time, stop_time))
+            )
             if result.succeeded():
                 final_forge_comment.append(f"{suite} succeeded")
             else:
@@ -1368,24 +1331,11 @@ def test(
     else:
         cloud_enum = Cloud.GCP
 
-    if forge_cluster_name == "forge-multiregion":
-        log.info("Using multiregion cluster")
-        forge_cluster = ForgeCluster(
-            name=forge_cluster_name,
-            cloud=Cloud.GCP,
-            region="multiregion",
-            kubeconf=context.filesystem.mkstemp(),
-            is_multiregion=True,
-        )
-    else:
-        log.info(
-            f"Looking for cluster {forge_cluster_name} in cloud {cloud_enum.value}"
-        )
-        forge_cluster = find_forge_cluster(
-            context.shell, cloud_enum, forge_cluster_name, context.filesystem.mkstemp()
-        )
-        log.info(f"Found cluster: {forge_cluster}")
-
+    log.info(f"Looking for cluster {forge_cluster_name} in cloud {cloud_enum.value}")
+    forge_cluster = find_forge_cluster(
+        context.shell, cloud_enum, forge_cluster_name, context.filesystem.mkstemp()
+    )
+    log.info(f"Found cluster: {forge_cluster}")
     asyncio.run(forge_cluster.write(context.shell))
 
     # These features and profile flags are set as strings
@@ -1410,7 +1360,6 @@ def test(
                 2,
                 enable_failpoints=enable_failpoints,
                 enable_performance_profile=enable_performance_profile,
-                cloud=cloud_enum,
             )
         )
         # This might not work as intended because we dont know if that revision
@@ -1427,7 +1376,6 @@ def test(
             1,
             enable_failpoints=enable_failpoints,
             enable_performance_profile=enable_performance_profile,
-            cloud=cloud_enum,
         )[0]
 
         image_tag = image_tag or default_latest_image
@@ -1452,13 +1400,13 @@ def test(
 
     # finally, whether we've derived the image tags or used the user-inputted ones, check if they exist
     assert image_exists(
-        shell, VALIDATOR_TESTING_IMAGE_NAME, image_tag, cloud=cloud_enum
+        shell, VALIDATOR_TESTING_IMAGE_NAME, image_tag
     ), f"swarm (validator) image does not exist: {image_tag}"
     assert image_exists(
-        shell, VALIDATOR_TESTING_IMAGE_NAME, upgrade_image_tag, cloud=cloud_enum
+        shell, VALIDATOR_TESTING_IMAGE_NAME, upgrade_image_tag
     ), f"swarm upgrade (validator) image does not exist: {upgrade_image_tag}"
     assert image_exists(
-        shell, FORGE_IMAGE_NAME, forge_image_tag, cloud=cloud_enum
+        shell, FORGE_IMAGE_NAME, forge_image_tag
     ), f"forge (test runner) image does not exist: {forge_image_tag}"
 
     forge_args = create_forge_command(
@@ -1480,8 +1428,6 @@ def test(
 
     log.debug("forge_args: %s", forge_args)
 
-    # use the github actor username if possible
-    forge_username = os.getenv("GITHUB_ACTOR") or "unknown-username"
     forge_context = ForgeContext(
         shell=shell,
         filesystem=filesystem,
@@ -1498,7 +1444,6 @@ def test(
         forge_namespace=forge_namespace,
         forge_cluster=forge_cluster,
         forge_test_suite=forge_test_suite,
-        forge_username=forge_username,
         forge_blocking=forge_blocking == "true",
         github_actions=github_actions,
         github_job_url=f"{github_server_url}/{github_repository}/actions/runs/{github_run_id}"
@@ -1662,7 +1607,6 @@ def tail(
     elif len(found_jobs) > 1:
         raise Exception(f"Found multiple jobs for name {job_name}")
     job = found_jobs[0]
-    assert job.cluster.kubeconf is not None, "kubeconf is required"
     shell.run(
         [
             "kubectl",

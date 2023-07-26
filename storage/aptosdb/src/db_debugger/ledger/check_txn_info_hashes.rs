@@ -24,8 +24,8 @@ pub struct Cmd {
 
 impl Cmd {
     pub fn run(self) -> Result<()> {
-        let ledger_db = Arc::new(self.db_dir.open_ledger_db()?);
-        let store = LedgerStore::new(Arc::clone(&ledger_db));
+        let db = Arc::new(self.db_dir.open_ledger_db()?);
+        let store = LedgerStore::new(db.clone());
         println!(
             "Latest LedgerInfo: {:?}",
             store.get_latest_ledger_info_option()
@@ -37,9 +37,8 @@ impl Cmd {
         let mut version = self.start_version;
         for res in txn_info_iter {
             let txn_info = res?;
-            let leaf_hash = ledger_db
-                .transaction_accumulator_db()
-                .get::<TransactionAccumulatorSchema>(&Position::from_leaf_index(version))?;
+            let leaf_hash =
+                db.get::<TransactionAccumulatorSchema>(&Position::from_leaf_index(version))?;
             let txn_info_hash = txn_info.hash();
 
             ensure!(

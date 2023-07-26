@@ -8,10 +8,9 @@ use aptos_infallible::RwLock;
 use aptos_logger::{sample, sample::SampleRate, warn};
 use aptos_sdk::{
     move_types::account_address::AccountAddress,
-    transaction_builder::{aptos_stdlib, TransactionFactory},
+    transaction_builder::TransactionFactory,
     types::{transaction::SignedTransaction, LocalAccount},
 };
-use args::TransactionTypeArg;
 use async_trait::async_trait;
 use std::{
     collections::HashMap,
@@ -22,19 +21,19 @@ use std::{
     time::Duration,
 };
 
-mod account_generator;
-mod accounts_pool_wrapper;
+pub mod account_generator;
+pub mod accounts_pool_wrapper;
 pub mod args;
-mod batch_transfer;
-mod call_custom_modules;
-mod entry_points;
-mod p2p_transaction_generator;
+pub mod batch_transfer;
+pub mod call_custom_modules;
+pub mod nft_mint_and_transfer;
+pub mod p2p_transaction_generator;
 pub mod publish_modules;
 mod publishing;
-mod transaction_mix_generator;
+pub mod transaction_mix_generator;
 use self::{
-    account_generator::AccountGeneratorCreator,
-    call_custom_modules::CustomModulesDelegationGeneratorCreator,
+    account_generator::AccountGeneratorCreator, call_custom_modules::CallCustomModulesCreator,
+    nft_mint_and_transfer::NFTMintAndTransferGeneratorCreator,
     p2p_transaction_generator::P2PTransactionGeneratorCreator,
     publish_modules::PublishPackageCreator,
     transaction_mix_generator::PhasedTxnMixGeneratorCreator,
@@ -42,7 +41,6 @@ use self::{
 use crate::{
     accounts_pool_wrapper::AccountsPoolWrapperCreator,
     batch_transfer::BatchTransferTransactionGeneratorCreator,
-    entry_points::EntryPointTransactionGenerator, p2p_transaction_generator::SamplingMode,
 };
 pub use publishing::module_simple::EntryPoints;
 
@@ -50,10 +48,6 @@ pub const SEND_AMOUNT: u64 = 1;
 
 #[derive(Debug, Copy, Clone)]
 pub enum TransactionType {
-    NonConflictingCoinTransfer {
-        invalid_transaction_ratio: usize,
-        sender_use_account_pool: bool,
-    },
     CoinTransfer {
         invalid_transaction_ratio: usize,
         sender_use_account_pool: bool,
@@ -63,6 +57,7 @@ pub enum TransactionType {
         max_account_working_set: usize,
         creation_balance: u64,
     },
+    NftMintAndTransfer,
     PublishPackage {
         use_account_pool: bool,
     },
@@ -76,9 +71,42 @@ pub enum TransactionType {
     },
 }
 
+impl TransactionType {
+    pub fn default_coin_transfer() -> Self {
+        Self::CoinTransfer {
+            invalid_transaction_ratio: 0,
+            sender_use_account_pool: false,
+        }
+    }
+
+    pub fn default_account_generation() -> Self {
+        Self::AccountGeneration {
+            add_created_accounts_to_pool: true,
+            max_account_working_set: 1_000_000,
+            creation_balance: 0,
+        }
+    }
+
+    pub fn default_call_custom_module() -> Self {
+        Self::CallCustomModules {
+            entry_point: EntryPoints::Nop,
+            num_modules: 1,
+            use_account_pool: false,
+        }
+    }
+
+    pub fn default_call_different_modules() -> Self {
+        Self::CallCustomModules {
+            entry_point: EntryPoints::Nop,
+            num_modules: 100,
+            use_account_pool: false,
+        }
+    }
+}
+
 impl Default for TransactionType {
     fn default() -> Self {
-        TransactionTypeArg::CoinTransfer.materialize(1, false)
+        Self::default_coin_transfer()
     }
 }
 
@@ -104,7 +132,7 @@ pub struct CounterState {
 }
 
 #[async_trait]
-pub trait ReliableTransactionSubmitter: Sync + Send {
+pub trait TransactionExecutor: Sync + Send {
     async fn get_account_balance(&self, account_address: AccountAddress) -> Result<u64>;
 
     async fn query_sequence_number(&self, account_address: AccountAddress) -> Result<u64>;
@@ -173,9 +201,10 @@ impl CounterState {
 
 pub async fn create_txn_generator_creator(
     transaction_mix_per_phase: &[Vec<(TransactionType, usize)>],
+    num_workers: usize,
     source_accounts: &mut [LocalAccount],
     initial_burner_accounts: Vec<LocalAccount>,
-    txn_executor: &dyn ReliableTransactionSubmitter,
+    txn_executor: &dyn TransactionExecutor,
     txn_factory: &TransactionFactory,
     init_txn_factory: &TransactionFactory,
     cur_phase: Arc<AtomicUsize>,
@@ -215,20 +244,6 @@ pub async fn create_txn_generator_creator(
         for (transaction_type, weight) in transaction_mix {
             let txn_generator_creator: Box<dyn TransactionGeneratorCreator> = match transaction_type
             {
-                TransactionType::NonConflictingCoinTransfer {
-                    invalid_transaction_ratio,
-                    sender_use_account_pool,
-                } => wrap_accounts_pool(
-                    Box::new(P2PTransactionGeneratorCreator::new(
-                        txn_factory.clone(),
-                        SEND_AMOUNT,
-                        addresses_pool.clone(),
-                        *invalid_transaction_ratio,
-                        SamplingMode::BurnAndRecycle(addresses_pool.read().len() / 2),
-                    )),
-                    *sender_use_account_pool,
-                    accounts_pool.clone(),
-                ),
                 TransactionType::CoinTransfer {
                     invalid_transaction_ratio,
                     sender_use_account_pool,
@@ -238,7 +253,6 @@ pub async fn create_txn_generator_creator(
                         SEND_AMOUNT,
                         addresses_pool.clone(),
                         *invalid_transaction_ratio,
-                        SamplingMode::Basic,
                     )),
                     *sender_use_account_pool,
                     accounts_pool.clone(),
@@ -255,6 +269,16 @@ pub async fn create_txn_generator_creator(
                     *max_account_working_set,
                     *creation_balance,
                 )),
+                TransactionType::NftMintAndTransfer => Box::new(
+                    NFTMintAndTransferGeneratorCreator::new(
+                        txn_factory.clone(),
+                        init_txn_factory.clone(),
+                        source_accounts.get_mut(0).unwrap(),
+                        txn_executor,
+                        num_workers,
+                    )
+                    .await,
+                ),
                 TransactionType::PublishPackage { use_account_pool } => wrap_accounts_pool(
                     Box::new(PublishPackageCreator::new(txn_factory.clone())),
                     *use_account_pool,
@@ -266,16 +290,13 @@ pub async fn create_txn_generator_creator(
                     use_account_pool,
                 } => wrap_accounts_pool(
                     Box::new(
-                        CustomModulesDelegationGeneratorCreator::new(
+                        CallCustomModulesCreator::new(
                             txn_factory.clone(),
                             init_txn_factory.clone(),
                             source_accounts,
                             txn_executor,
+                            *entry_point,
                             *num_modules,
-                            entry_point.package_name(),
-                            &mut EntryPointTransactionGenerator {
-                                entry_point: *entry_point,
-                            },
                         )
                         .await,
                     ),
@@ -322,19 +343,4 @@ fn get_account_to_burn_from_pool(
     accounts_pool
         .drain((num_in_pool - needed)..)
         .collect::<Vec<_>>()
-}
-
-pub fn create_account_transaction(
-    from: &mut LocalAccount,
-    to: AccountAddress,
-    txn_factory: &TransactionFactory,
-    creation_balance: u64,
-) -> SignedTransaction {
-    from.sign_with_transaction_builder(txn_factory.payload(
-        if creation_balance > 0 {
-            aptos_stdlib::aptos_account_transfer(to, creation_balance)
-        } else {
-            aptos_stdlib::aptos_account_create_account(to)
-        },
-    ))
 }

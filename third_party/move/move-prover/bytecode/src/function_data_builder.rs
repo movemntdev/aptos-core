@@ -95,10 +95,8 @@ impl<'env> FunctionDataBuilder<'env> {
 
     /// Add a return parameter.
     pub fn add_return(&mut self, ty: Type) -> usize {
-        let mut types = self.data.result_type.clone().flatten();
-        let idx = types.len();
-        types.push(ty);
-        self.data.result_type = Type::tuple(types);
+        let idx = self.data.return_types.len();
+        self.data.return_types.push(ty);
         idx
     }
 

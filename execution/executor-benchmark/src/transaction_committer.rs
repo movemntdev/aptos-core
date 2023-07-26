@@ -2,7 +2,6 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::pipeline::CommitBlockMessage;
 use aptos_crypto::hash::HashValue;
 use aptos_db::metrics::API_LATENCY_SECONDS;
 use aptos_executor::{
@@ -47,20 +46,21 @@ pub(crate) fn gen_li_with_sigs(
     )
 }
 
-pub struct TransactionCommitter<V> {
-    executor: Arc<BlockExecutor<V>>,
+pub struct TransactionCommitter<V, T> {
+    executor: Arc<BlockExecutor<V, T>>,
     version: Version,
-    block_receiver: mpsc::Receiver<CommitBlockMessage>,
+    block_receiver: mpsc::Receiver<(HashValue, HashValue, Instant, Instant, Duration, usize)>,
 }
 
-impl<V> TransactionCommitter<V>
+impl<V, T> TransactionCommitter<V, T>
 where
-    V: TransactionBlockExecutor,
+    V: TransactionBlockExecutor<T>,
+    T: Send + Sync,
 {
     pub fn new(
-        executor: Arc<BlockExecutor<V>>,
+        executor: Arc<BlockExecutor<V, T>>,
         version: Version,
-        block_receiver: mpsc::Receiver<CommitBlockMessage>,
+        block_receiver: mpsc::Receiver<(HashValue, HashValue, Instant, Instant, Duration, usize)>,
     ) -> Self {
         Self {
             version,
@@ -73,16 +73,15 @@ where
         let start_version = self.version;
         info!("Start with version: {}", start_version);
 
-        while let Ok(msg) = self.block_receiver.recv() {
-            let CommitBlockMessage {
-                block_id,
-                root_hash,
-                first_block_start_time,
-                current_block_start_time,
-                partition_time,
-                execution_time,
-                num_txns,
-            } = msg;
+        while let Ok((
+            block_id,
+            root_hash,
+            global_start_time,
+            execution_start_time,
+            execution_time,
+            num_txns,
+        )) = self.block_receiver.recv()
+        {
             self.version += num_txns as u64;
             let commit_start = std::time::Instant::now();
             let ledger_info_with_sigs = gen_li_with_sigs(block_id, root_hash, self.version);
@@ -93,9 +92,8 @@ where
             report_block(
                 start_version,
                 self.version,
-                first_block_start_time,
-                current_block_start_time,
-                partition_time,
+                global_start_time,
+                execution_start_time,
                 execution_time,
                 Instant::now().duration_since(commit_start),
                 num_txns,
@@ -107,26 +105,23 @@ where
 fn report_block(
     start_version: Version,
     version: Version,
-    first_block_start_time: Instant,
-    current_block_start_time: Instant,
-    partition_time: Duration,
+    global_start_time: Instant,
+    execution_start_time: Instant,
     execution_time: Duration,
     commit_time: Duration,
     block_size: usize,
 ) {
     let total_versions = (version - start_version) as f64;
     info!(
-        "Version: {}. latency: {} ms, partition time: {} ms, execute time: {} ms. commit time: {} ms. TPS: {:.0} (partition: {:.0}, execution: {:.0}, commit: {:.0}). Accumulative TPS: {:.0}",
+        "Version: {}. latency: {} ms, execute time: {} ms. commit time: {} ms. TPS: {:.0} (execution: {:.0}, commit: {:.0}). Accumulative TPS: {:.0}",
         version,
-        Instant::now().duration_since(current_block_start_time).as_millis(),
-        partition_time.as_millis(),
+        Instant::now().duration_since(execution_start_time).as_millis(),
         execution_time.as_millis(),
         commit_time.as_millis(),
-        block_size as f64 / (std::cmp::max(std::cmp::max(partition_time, execution_time), commit_time)).as_secs_f64(),
-        block_size as f64 / partition_time.as_secs_f64(),
+        block_size as f64 / (std::cmp::max(execution_time, commit_time)).as_secs_f64(),
         block_size as f64 / execution_time.as_secs_f64(),
         block_size as f64 / commit_time.as_secs_f64(),
-        total_versions / first_block_start_time.elapsed().as_secs_f64(),
+        total_versions / global_start_time.elapsed().as_secs_f64(),
     );
     info!(
             "Accumulative total: VM time: {:.0} secs, executor time: {:.0} secs, commit time: {:.0} secs, DB commit time: {:.0} secs",

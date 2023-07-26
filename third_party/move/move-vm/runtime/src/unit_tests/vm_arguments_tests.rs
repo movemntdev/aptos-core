@@ -18,7 +18,6 @@ use move_core_types::{
     ident_str,
     identifier::Identifier,
     language_storage::{ModuleId, StructTag, TypeTag},
-    metadata::Metadata,
     resolver::{ModuleResolver, ResourceResolver},
     u256::U256,
     value::{serialize_values, MoveValue},
@@ -250,23 +249,18 @@ impl RemoteStore {
 }
 
 impl ModuleResolver for RemoteStore {
-    fn get_module_metadata(&self, _module_id: &ModuleId) -> Vec<Metadata> {
-        vec![]
-    }
-
     fn get_module(&self, module_id: &ModuleId) -> Result<Option<Vec<u8>>, anyhow::Error> {
         Ok(self.modules.get(module_id).cloned())
     }
 }
 
 impl ResourceResolver for RemoteStore {
-    fn get_resource_with_metadata(
+    fn get_resource(
         &self,
         _address: &AccountAddress,
         _tag: &StructTag,
-        _metadata: &[Metadata],
-    ) -> anyhow::Result<(Option<Vec<u8>>, usize)> {
-        Ok((None, 0))
+    ) -> Result<Option<Vec<u8>>, anyhow::Error> {
+        Ok(None)
     }
 }
 

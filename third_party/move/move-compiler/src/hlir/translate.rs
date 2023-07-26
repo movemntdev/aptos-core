@@ -478,9 +478,12 @@ fn base_type(context: &Context, sp!(loc, nb_): N::Type) -> H::BaseType {
         NT::UnresolvedError => HB::UnresolvedError,
         NT::Anything => HB::Unreachable,
         NT::Ref(_, _) | NT::Unit => {
-            // This can happen in bad source code; upstream constraint
-            // will fail and generate an appropriate error message.
-            HB::UnresolvedError
+            panic!(
+                "ICE type constraints failed {}:{}-{}",
+                loc.file_hash(),
+                loc.start(),
+                loc.end(),
+            )
         },
     };
     sp(loc, b_)
@@ -801,8 +804,8 @@ fn exp(
     Box::new(exp_(context, result, expected_type_opt, te))
 }
 
-fn exp_(
-    context: &mut Context<'_>,
+fn exp_<'env>(
+    context: &mut Context<'env>,
     result: &mut Block,
     initial_expected_type_opt: Option<&H::Type>,
     initial_e: T::Exp,

@@ -17,7 +17,7 @@ use crate::{
         AbortAction, AssignKind, AttrId, BorrowEdge, BorrowNode, Bytecode, HavocKind, Label,
         Operation, PropKind,
     },
-    usage_analysis, verification_analysis, COMPILED_MODULE_AVAILABLE,
+    usage_analysis, verification_analysis,
 };
 use itertools::Itertools;
 use move_model::{
@@ -27,7 +27,7 @@ use move_model::{
     model::{FunId, FunctionEnv, GlobalEnv, Loc, ModuleId, QualifiedId, QualifiedInstId, StructId},
     pragmas::{ABORTS_IF_IS_PARTIAL_PRAGMA, EMITS_IS_PARTIAL_PRAGMA, EMITS_IS_STRICT_PRAGMA},
     spec_translator::{SpecTranslator, TranslatedSpec},
-    ty::{ReferenceKind, Type, TypeDisplayContext, BOOL_TYPE, NUM_TYPE},
+    ty::{Type, TypeDisplayContext, BOOL_TYPE, NUM_TYPE},
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -51,7 +51,10 @@ fn modify_check_fails_message(
     let targs_str = if targs.is_empty() {
         "".to_string()
     } else {
-        let tctx = TypeDisplayContext::new(env);
+        let tctx = TypeDisplayContext::WithEnv {
+            env,
+            type_param_names: None,
+        };
         format!(
             "<{}>",
             targs
@@ -63,7 +66,7 @@ fn modify_check_fails_message(
     let module_env = env.get_module(mem.module_id);
     format!(
         "caller does not have permission to modify `{}::{}{}` at given address",
-        module_env.get_name().display(env),
+        module_env.get_name().display(env.symbol_pool()),
         module_env
             .get_struct(mem.id)
             .get_name()
@@ -211,9 +214,8 @@ impl<'a> Instrumenter<'a> {
         // instruction into `Assign(r.., t..); Jump(RetLab)`.
         let ret_locals = builder
             .data
-            .result_type
+            .return_types
             .clone()
-            .flatten()
             .into_iter()
             .map(|ty| builder.new_temp(ty))
             .collect_vec();
@@ -242,7 +244,7 @@ impl<'a> Instrumenter<'a> {
         );
 
         // Translate inlined properties. This deals with elimination of `old(..)` expressions in
-        // ilined spec blocks
+        // inlined spec blocks
         let inlined_props: BTreeMap<_, _> = props
             .into_iter()
             .map(|(id, prop)| {
@@ -757,10 +759,9 @@ impl<'a> Instrumenter<'a> {
 
             // Update memory. We create a mut ref for the location then write the value back to it.
             let (addr_temp, _) = self.builder.emit_let(addr);
-            let mem_ref = self.builder.new_temp(Type::Reference(
-                ReferenceKind::Mutable,
-                Box::new(ghost_mem_ty),
-            ));
+            let mem_ref = self
+                .builder
+                .new_temp(Type::Reference(true, Box::new(ghost_mem_ty)));
             // mem_ref = borrow_global_mut<ghost_mem>(addr)
             self.builder.emit_with(|id| {
                 Bytecode::Call(
@@ -1093,10 +1094,8 @@ fn check_modifies(env: &GlobalEnv, targets: &FunctionTargetsHolder) {
     for module_env in env.get_modules() {
         if module_env.is_target() {
             for fun_env in module_env.get_functions() {
-                if !fun_env.is_inline() {
-                    check_caller_callee_modifies_relation(env, targets, &fun_env);
-                    check_opaque_modifies_completeness(env, targets, &fun_env);
-                }
+                check_caller_callee_modifies_relation(env, targets, &fun_env);
+                check_opaque_modifies_completeness(env, targets, &fun_env);
             }
         }
     }
@@ -1111,11 +1110,8 @@ fn check_caller_callee_modifies_relation(
         return;
     }
     let caller_func_target = targets.get_target(fun_env, &FunctionVariant::Baseline);
-    for callee in fun_env
-        .get_called_functions()
-        .expect(COMPILED_MODULE_AVAILABLE)
-    {
-        let callee_fun_env = env.get_function(*callee);
+    for callee in fun_env.get_called_functions() {
+        let callee_fun_env = env.get_function(callee);
         if callee_fun_env.is_native() || callee_fun_env.is_intrinsic() {
             continue;
         }

@@ -68,9 +68,7 @@ impl FunctionTargetProcessor for DebugInstrumenter {
                     builder.emit_with(|id| Call(id, vec![], Operation::TraceAbort, vec![*l], None));
                     builder.emit(bc);
                 },
-                Call(_, _, Operation::WriteRef, srcs, _)
-                    if srcs[0] < fun_env.get_local_count().unwrap_or_default() =>
-                {
+                Call(_, _, Operation::WriteRef, srcs, _) if srcs[0] < fun_env.get_local_count() => {
                     builder.set_loc_from_attr(bc.get_attr_id());
                     builder.emit(bc.clone());
                     builder.emit_with(|id| {
@@ -95,7 +93,7 @@ impl FunctionTargetProcessor for DebugInstrumenter {
                     for idx in affected_variables {
                         // Only emit this for user declared locals, not for ones introduced
                         // by stack elimination.
-                        if !fun_env.is_temporary(idx).unwrap_or_default() {
+                        if !fun_env.is_temporary(idx) {
                             builder.emit_with(|id| {
                                 Call(id, vec![], Operation::TraceLocal(idx), vec![idx], None)
                             });

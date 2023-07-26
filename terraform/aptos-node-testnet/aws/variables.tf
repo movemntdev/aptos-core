@@ -71,6 +71,7 @@ variable "chain_id" {
   default     = 4
 }
 
+
 variable "era" {
   description = "Chain era, used to start a clean chain"
   default     = 15
@@ -113,7 +114,7 @@ variable "logger_helm_values" {
 
 variable "enable_monitoring" {
   description = "Enable monitoring helm chart"
-  default     = false
+  default     = true
 }
 
 variable "monitoring_helm_values" {
@@ -124,12 +125,12 @@ variable "monitoring_helm_values" {
 
 variable "enable_prometheus_node_exporter" {
   description = "Enable prometheus-node-exporter within monitoring helm chart"
-  default     = false
+  default     = true
 }
 
 variable "enable_kube_state_metrics" {
   description = "Enable kube-state-metrics within monitoring helm chart"
-  default     = false
+  default     = true
 }
 
 variable "testnet_addons_helm_values" {

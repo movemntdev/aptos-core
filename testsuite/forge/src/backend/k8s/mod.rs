@@ -11,7 +11,6 @@ use std::{convert::TryInto, num::NonZeroUsize, time::Duration};
 pub mod chaos;
 mod cluster_helper;
 pub mod constants;
-mod fullnode;
 pub mod kube_api;
 pub mod node;
 pub mod prometheus;
@@ -21,9 +20,6 @@ mod swarm;
 use aptos_sdk::crypto::ed25519::ED25519_PRIVATE_KEY_LENGTH;
 pub use cluster_helper::*;
 pub use constants::*;
-pub use fullnode::*;
-#[cfg(test)]
-pub use kube_api::mocks::*;
 pub use kube_api::*;
 pub use node::K8sNode;
 pub use stateful_set::*;
@@ -114,9 +110,9 @@ impl Factory for K8sFactory {
             None => None,
         };
 
-        let kube_client = create_k8s_client().await?;
-        let (new_era, validators, fullnodes) = if self.reuse {
-            let (validators, fullnodes) = match collect_running_nodes(
+        let kube_client = create_k8s_client().await;
+        let (validators, fullnodes) = if self.reuse {
+            match collect_running_nodes(
                 &kube_client,
                 self.kube_namespace.clone(),
                 self.use_port_forward,
@@ -128,15 +124,15 @@ impl Factory for K8sFactory {
                 Err(e) => {
                     bail!(e);
                 },
-            };
-            let new_era = None; // TODO: get the actual era
-            (new_era, validators, fullnodes)
+            }
         } else {
             // clear the cluster of resources
             delete_k8s_resources(kube_client.clone(), &self.kube_namespace).await?;
             // create the forge-management configmap before installing anything
             create_management_configmap(self.kube_namespace.clone(), self.keep, cleanup_duration)
                 .await?;
+            // create a secret to access pyroscope
+            create_pyroscope_secret(self.kube_namespace.clone()).await?;
             if let Some(existing_db_tag) = existing_db_tag {
                 // TODO(prod-eng): For now we are managing PVs out of forge, and bind them manually
                 // with the volume. Going forward we should consider automate this process.
@@ -168,7 +164,7 @@ impl Factory for K8sFactory {
             )
             .await
             {
-                Ok(res) => (Some(res.0), res.1, res.2),
+                Ok(res) => res,
                 Err(e) => {
                     uninstall_testnet_resources(self.kube_namespace.clone()).await?;
                     bail!(e);
@@ -184,8 +180,6 @@ impl Factory for K8sFactory {
             validators,
             fullnodes,
             self.keep,
-            new_era,
-            self.use_port_forward,
         )
         .await
         .unwrap();

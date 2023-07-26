@@ -3,7 +3,10 @@
 
 use crate::{
     get_first_seq_num_and_limit,
-    pruner::{LedgerPrunerManager, StateMerklePrunerManager},
+    pruner::{
+        ledger_pruner_manager::LedgerPrunerManager,
+        state_merkle_pruner_manager::StateMerklePrunerManager,
+    },
     test_helper,
     test_helper::{arb_blocks_to_commit, put_as_state_root, put_transaction_info},
     AptosDB, PrunerManager, StaleNodeIndexSchema,
@@ -119,9 +122,8 @@ fn test_error_if_version_pruned() {
     db.state_store
         .state_db
         .state_merkle_pruner
-        .save_min_readable_version(5)
-        .unwrap();
-    db.ledger_pruner.save_min_readable_version(10).unwrap();
+        .testonly_update_min_version(5);
+    db.ledger_pruner.testonly_update_min_version(10);
     assert_eq!(
         db.error_if_state_merkle_pruned("State", 4)
             .unwrap_err()
@@ -250,11 +252,15 @@ pub fn test_state_merkle_pruning_impl(
         // Prune till the oldest snapshot readable.
         let pruner = &db.state_store.state_db.state_merkle_pruner;
         let epoch_snapshot_pruner = &db.state_store.state_db.epoch_snapshot_pruner;
-        pruner.set_worker_target_version(*snapshots.first().unwrap());
-        epoch_snapshot_pruner.set_worker_target_version(std::cmp::min(
-            *snapshots.first().unwrap(),
-            *epoch_snapshots.first().unwrap_or(&Version::MAX),
-        ));
+        pruner
+            .pruner_worker
+            .set_target_db_version(*snapshots.first().unwrap());
+        epoch_snapshot_pruner
+            .pruner_worker
+            .set_target_db_version(std::cmp::min(
+                *snapshots.first().unwrap(),
+                *epoch_snapshots.first().unwrap_or(&Version::MAX),
+            ));
         pruner.wait_for_pruner().unwrap();
         epoch_snapshot_pruner.wait_for_pruner().unwrap();
 
@@ -285,7 +291,6 @@ proptest! {
 
     #[test]
     fn test_state_merkle_pruning(input in arb_blocks_to_commit()) {
-        aptos_logger::Logger::new().init();
         test_state_merkle_pruning_impl(input);
     }
 }

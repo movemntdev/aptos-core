@@ -10,7 +10,7 @@ use crate::{
     schema::token_activities,
     utils::util::{parse_timestamp, standardize_address},
 };
-use aptos_protos::transaction::v1::{transaction::TxnData, Event, Transaction};
+use aptos_protos::transaction::testing1::v1::{transaction::TxnData, Event, Transaction};
 use bigdecimal::{BigDecimal, Zero};
 use field_count::FieldCount;
 use serde::{Deserialize, Serialize};
@@ -148,7 +148,7 @@ impl TokenActivity {
                 token_data_id: &inner.token_id.token_data_id,
                 property_version: inner.token_id.property_version.clone(),
                 from_address: Some(event_account_address.clone()),
-                to_address: Some(inner.get_to_address()),
+                to_address: Some(standardize_address(&inner.to_address)),
                 token_amount: inner.amount.clone(),
                 coin_type: None,
                 coin_amount: None,
@@ -157,7 +157,7 @@ impl TokenActivity {
                 token_data_id: &inner.token_id.token_data_id,
                 property_version: inner.token_id.property_version.clone(),
                 from_address: Some(event_account_address.clone()),
-                to_address: Some(inner.get_to_address()),
+                to_address: Some(standardize_address(&inner.to_address)),
                 token_amount: inner.amount.clone(),
                 coin_type: None,
                 coin_amount: None,
@@ -166,7 +166,7 @@ impl TokenActivity {
                 token_data_id: &inner.token_id.token_data_id,
                 property_version: inner.token_id.property_version.clone(),
                 from_address: Some(event_account_address.clone()),
-                to_address: Some(inner.get_to_address()),
+                to_address: Some(standardize_address(&inner.to_address)),
                 token_amount: inner.amount.clone(),
                 coin_type: None,
                 coin_amount: None,
@@ -180,7 +180,7 @@ impl TokenActivity {
             token_data_id_hash: token_data_id.to_hash(),
             property_version: token_activity_helper.property_version,
             collection_data_id_hash: token_data_id.get_collection_data_id_hash(),
-            creator_address: token_data_id.get_creator_address(),
+            creator_address: standardize_address(&token_data_id.creator),
             collection_name: token_data_id.get_collection_trunc(),
             name: token_data_id.get_name_trunc(),
             transaction_version: txn_version,

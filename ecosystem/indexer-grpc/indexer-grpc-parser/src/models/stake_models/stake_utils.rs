@@ -3,47 +3,27 @@
 
 use crate::{
     models::{default_models::move_resources::MoveResource, token_models::token_utils::Table},
-    utils::util::{deserialize_from_string, standardize_address},
+    utils::util::deserialize_from_string,
 };
 use anyhow::{Context, Result};
-use aptos_protos::transaction::v1::WriteResource;
+use aptos_protos::transaction::testing1::v1::WriteResource;
 use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
 
 const STAKE_ADDR: &str = "0x0000000000000000000000000000000000000000000000000000000000000001";
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StakePoolResource {
-    delegated_voter: String,
-    operator_address: String,
-}
-
-impl StakePoolResource {
-    pub fn get_delegated_voter(&self) -> String {
-        standardize_address(&self.delegated_voter)
-    }
-
-    pub fn get_operator_address(&self) -> String {
-        standardize_address(&self.operator_address)
-    }
+    pub delegated_voter: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DelegationPoolResource {
-    pub active_shares: PoolResource,
-    pub inactive_shares: Table,
-    #[serde(deserialize_with = "deserialize_from_string")]
-    pub operator_commission_percentage: BigDecimal,
+    pub active_shares: SharesResource,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct PoolResource {
+pub struct SharesResource {
     pub shares: SharesInnerResource,
-    #[serde(deserialize_with = "deserialize_from_string")]
-    pub total_coins: BigDecimal,
-    #[serde(deserialize_with = "deserialize_from_string")]
-    pub total_shares: BigDecimal,
-    #[serde(deserialize_with = "deserialize_from_string")]
-    pub scaling_factor: BigDecimal,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -99,30 +79,6 @@ pub struct ReactivateStakeEvent {
     pub amount_reactivated: u64,
     pub delegator_address: String,
     pub pool_address: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum StakeTableItem {
-    Pool(PoolResource),
-}
-
-impl StakeTableItem {
-    pub fn from_table_item_type(
-        data_type: &str,
-        data: &str,
-        txn_version: i64,
-    ) -> Result<Option<Self>> {
-        match data_type {
-            "0x1::pool_u64_unbound::Pool" => {
-                serde_json::from_str(data).map(|inner| Some(StakeTableItem::Pool(inner)))
-            },
-            _ => Ok(None),
-        }
-        .context(format!(
-            "version {} failed! failed to parse type {}, data {:?}",
-            txn_version, data_type, data
-        ))
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

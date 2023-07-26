@@ -20,7 +20,7 @@ use std::{collections::HashMap, convert::TryFrom, path::PathBuf};
 #[derive(Debug, Parser)]
 pub struct BigQueryArgs {
     /// Path to the BigQuery key file.
-    #[clap(long, value_parser)]
+    #[clap(long, parse(from_os_str))]
     pub big_query_key_path: PathBuf,
 
     /// GCP project ID.

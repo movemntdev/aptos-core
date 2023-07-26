@@ -7,7 +7,7 @@ use aptos_forge::{
     test_utils::consensus_utils::{
         test_consensus_fault_tolerance, FailPointFailureInjection, NodeState,
     },
-    NetworkContext, NetworkTest, Result, Swarm, SwarmExt, Test, TestReport,
+    NetworkContext, NetworkTest, Result, Swarm, SwarmExt, Test,
 };
 use aptos_logger::{info, warn};
 use rand::Rng;
@@ -51,12 +51,7 @@ impl NetworkLoadTest for ChangingWorkingQuorumTest {
         }
     }
 
-    fn test(
-        &self,
-        swarm: &mut dyn Swarm,
-        _report: &mut TestReport,
-        duration: Duration,
-    ) -> Result<()> {
+    fn test(&self, swarm: &mut dyn Swarm, duration: Duration) -> Result<()> {
         let runtime = Runtime::new().unwrap();
 
         let validators = swarm.get_validator_clients_with_names();
@@ -296,7 +291,7 @@ impl NetworkLoadTest for ChangingWorkingQuorumTest {
 }
 
 impl NetworkTest for ChangingWorkingQuorumTest {
-    fn run(&self, ctx: &mut NetworkContext<'_>) -> Result<()> {
+    fn run<'t>(&self, ctx: &mut NetworkContext<'t>) -> Result<()> {
         <dyn NetworkLoadTest>::run(self, ctx)
     }
 }

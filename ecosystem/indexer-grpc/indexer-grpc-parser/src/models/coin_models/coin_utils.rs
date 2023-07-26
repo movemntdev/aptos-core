@@ -9,13 +9,12 @@ use crate::{
     utils::util::{deserialize_from_string, hash_str, standardize_address, truncate_str},
 };
 use anyhow::{Context, Result};
-use aptos_protos::transaction::v1::{move_type::Content, MoveType, WriteResource};
+use aptos_logger::error;
+use aptos_protos::transaction::testing1::v1::{move_type::Content, MoveType, WriteResource};
 use bigdecimal::BigDecimal;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
-use tracing::error;
 
-pub const COIN_ADDR: &str = "0x0000000000000000000000000000000000000000000000000000000000000001";
+const COIN_ADDR: &str = "0x0000000000000000000000000000000000000000000000000000000000000001";
 const COIN_TYPE_HASH_LENGTH: usize = 5000;
 /**
  * This file defines deserialized coin types as defined in our 0x1 contracts.
@@ -77,7 +76,7 @@ pub struct IntegerWrapperResource {
 
 impl IntegerWrapperResource {
     /// In case we do want to track supply
-    pub fn get_supply(&self) -> Option<BigDecimal> {
+    pub fn _get_supply(&self) -> Option<BigDecimal> {
         self.vec.get(0).map(|inner| inner.value.clone())
     }
 }
@@ -130,13 +129,9 @@ pub struct EventGuidResource {
 }
 
 impl EventGuidResource {
-    pub fn get_address(&self) -> String {
-        standardize_address(&self.addr)
-    }
-
     pub fn get_standardized(&self) -> Self {
         Self {
-            addr: self.get_address(),
+            addr: standardize_address(&self.addr),
             creation_num: self.creation_num,
         }
     }
@@ -156,38 +151,23 @@ pub struct DepositCoinEvent {
 
 pub struct CoinInfoType {
     coin_type: String,
-    creator_address: String,
+    pub creator_address: String,
 }
 
 impl CoinInfoType {
-    /// get creator address from move_type, and get coin type from move_type_str
-    /// Since move_type_str will contain things we don't need, e.g. 0x1::coin::CoinInfo<T>. We will use
-    /// regex to extract T.
-    pub fn from_move_type(move_type: &MoveType, move_type_str: &str, txn_version: i64) -> Self {
+    pub fn from_move_type(move_type: &MoveType, address: &str, txn_version: i64) -> Self {
         if let Content::Struct(struct_tag) = move_type.content.as_ref().unwrap() {
-            let re = Regex::new(r"(<(.*)>)").unwrap();
-
-            let matched = re.captures(move_type_str).unwrap_or_else(|| {
-                error!(
-                    txn_version = txn_version,
-                    move_type_str = move_type_str,
-                    "move_type should look like 0x1::coin::CoinInfo<T>"
-                );
-                panic!();
-            });
-            let coin_type = matched.get(2).unwrap().as_str();
             Self {
-                coin_type: coin_type.to_string(),
-                creator_address: struct_tag.address.clone(),
+                coin_type: format!(
+                    "{}::{}::{}",
+                    struct_tag.address, struct_tag.module, struct_tag.name
+                ),
+                creator_address: standardize_address(address),
             }
         } else {
             error!(txn_version = txn_version, move_type = ?move_type, "Expected struct tag");
             panic!();
         }
-    }
-
-    pub fn get_creator_address(&self) -> String {
-        standardize_address(&self.creator_address)
     }
 
     pub fn to_hash(&self) -> String {

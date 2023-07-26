@@ -32,7 +32,7 @@ struct Args {
     #[clap(long = "no-verify")]
     pub no_verify: bool,
     /// Path to the Move IR source to compile
-    #[clap(value_parser)]
+    #[clap(parse(from_os_str))]
     pub source_path: PathBuf,
     /// Instead of compiling the source, emit a dependency list of the compiled source
     #[clap(short = 'l', long = "list-dependencies")]
@@ -168,10 +168,4 @@ fn main() {
             .expect("Unable to serialize script");
         write_output(&source_path.with_extension(mv_extension), &script);
     }
-}
-
-#[test]
-fn verify_tool() {
-    use clap::CommandFactory;
-    Args::command().debug_assert()
 }

@@ -10,6 +10,6 @@ mod transaction_store;
 pub use self::{
     index::TxnPointer,
     mempool::Mempool as CoreMempool,
-    transaction::{MempoolTransaction, SubmittedBy, TimelineState},
+    transaction::{MempoolTransaction, TimelineState},
     transaction_store::TXN_INDEX_ESTIMATED_BYTES,
 };

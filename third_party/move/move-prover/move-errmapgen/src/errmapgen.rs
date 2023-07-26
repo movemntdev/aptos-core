@@ -7,9 +7,11 @@ use move_command_line_common::files::MOVE_ERROR_DESC_EXTENSION;
 use move_core_types::{
     account_address::AccountAddress,
     errmap::{ErrorDescription, ErrorMapping},
+    identifier::Identifier,
+    language_storage::ModuleId,
 };
 use move_model::{
-    ast::{Address, Value},
+    ast::Value,
     model::{GlobalEnv, ModuleEnv, NamedConstantEnv},
     symbol::Symbol,
 };
@@ -20,8 +22,8 @@ use std::{convert::TryFrom, rc::Rc};
 pub struct ErrmapOptions {
     /// The constant prefix that determines if a constant is an error or not
     pub error_prefix: String,
-    /// A different name for the error module than the default.
-    pub error_category_module: Option<String>,
+    /// The module ID of the error category module
+    pub error_category_module: ModuleId,
     /// In which file to store the output
     pub output_file: String,
 }
@@ -30,7 +32,10 @@ impl Default for ErrmapOptions {
     fn default() -> Self {
         Self {
             error_prefix: "E".to_string(),
-            error_category_module: None,
+            error_category_module: ModuleId::new(
+                AccountAddress::from_hex_literal("0x1").unwrap(),
+                Identifier::new("errors").unwrap(),
+            ),
             output_file: MOVE_ERROR_DESC_EXTENSION.to_string(),
         }
     }
@@ -67,13 +72,11 @@ impl<'env> ErrmapGen<'env> {
     }
 
     fn build_error_map(&mut self, module: &ModuleEnv<'_>) -> Result<()> {
-        let module_name = module.get_name();
-        if matches!(module_name.addr(), Address::Numerical(AccountAddress::ONE))
-            && module.symbol_pool().string(module_name.name()).as_str() == "error"
-        {
+        let module_id = self.get_module_id_for_name(module);
+        if module_id == self.options.error_category_module {
             self.build_error_categories(module)?
         } else {
-            self.build_error_map_for_module(module)?
+            self.build_error_map_for_module(&module_id, module)?
         }
         Ok(())
     }
@@ -91,19 +94,20 @@ impl<'env> ErrmapGen<'env> {
         Ok(())
     }
 
-    fn build_error_map_for_module(&mut self, module: &ModuleEnv<'_>) -> Result<()> {
+    fn build_error_map_for_module(
+        &mut self,
+        module_id: &ModuleId,
+        module: &ModuleEnv<'_>,
+    ) -> Result<()> {
         for named_constant in module.get_named_constants() {
             let name = self.name_string(named_constant.get_name());
             if name.starts_with(&self.options.error_prefix) {
                 let abort_code = self.get_abort_code(&named_constant)?;
-                self.output.add_module_error(
-                    &module.get_full_name_str(),
-                    abort_code,
-                    ErrorDescription {
+                self.output
+                    .add_module_error(module_id.clone(), abort_code, ErrorDescription {
                         code_name: name.to_string(),
                         code_description: named_constant.get_doc().to_string(),
-                    },
-                )?
+                    })?
             }
         }
         Ok(())
@@ -114,10 +118,17 @@ impl<'env> ErrmapGen<'env> {
             Value::Number(big_int) => u64::try_from(big_int).map_err(|err| err.into()),
             x => bail!(
                 "Invalid abort code constant {} found for code {}",
-                self.env.display(&x),
+                x,
                 self.name_string(constant.get_name())
             ),
         }
+    }
+
+    fn get_module_id_for_name(&self, module: &ModuleEnv<'_>) -> ModuleId {
+        let name = module.get_name();
+        let addr = AccountAddress::from_hex_literal(&format!("0x{:x}", name.addr())).unwrap();
+        let name = Identifier::new(self.name_string(name.name()).to_string()).unwrap();
+        ModuleId::new(addr, name)
     }
 
     fn name_string(&self, symbol: Symbol) -> Rc<String> {

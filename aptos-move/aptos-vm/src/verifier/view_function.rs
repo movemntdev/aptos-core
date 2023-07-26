@@ -9,6 +9,7 @@ use aptos_framework::RuntimeModuleMetadataV1;
 use move_binary_format::errors::{PartialVMError, PartialVMResult};
 use move_core_types::{identifier::IdentStr, vm_status::StatusCode};
 use move_vm_runtime::session::LoadedFunctionInstantiation;
+use move_vm_types::loaded_data::runtime_types::Type;
 
 /// Based on the function attributes in the module metadata, determine whether a
 /// function is a view function.
@@ -30,7 +31,7 @@ pub fn determine_is_view(
 /// function, and validates the arguments.
 pub(crate) fn validate_view_function(
     session: &mut SessionExt,
-    args: Vec<Vec<u8>>,
+    mut args: Vec<Vec<u8>>,
     fun_name: &IdentStr,
     fun_inst: &LoadedFunctionInstantiation,
     module_metadata: Option<&RuntimeModuleMetadataV1>,
@@ -54,14 +55,43 @@ pub(crate) fn validate_view_function(
     }
 
     let allowed_structs = get_allowed_structs(struct_constructors_feature);
-    let args = transaction_arg_validation::construct_args(
-        session,
-        &fun_inst.parameters,
-        args,
-        &fun_inst.type_arguments,
-        allowed_structs,
-        true,
-    )
-    .map_err(|e| PartialVMError::new(e.status_code()))?;
+    // Validate arguments. We allow all what transaction allows, in addition, signers can
+    // be passed. Some arguments (e.g. utf8 strings) need validation which happens here.
+    let mut needs_construction = vec![];
+    for (idx, ty) in fun_inst.parameters.iter().enumerate() {
+        match ty {
+            Type::Signer => continue,
+            Type::Reference(inner_type) if matches!(&**inner_type, Type::Signer) => continue,
+            _ => {
+                let (valid, construction) =
+                    transaction_arg_validation::is_valid_txn_arg(session, ty, allowed_structs);
+                if !valid {
+                    return Err(
+                        PartialVMError::new(StatusCode::INVALID_MAIN_FUNCTION_SIGNATURE)
+                            .with_message("invalid view function argument".to_string()),
+                    );
+                }
+                if construction {
+                    needs_construction.push(idx);
+                }
+            },
+        }
+    }
+    if !needs_construction.is_empty()
+        && transaction_arg_validation::construct_args(
+            session,
+            &needs_construction,
+            &mut args,
+            fun_inst,
+            allowed_structs,
+        )
+        .is_err()
+    {
+        return Err(
+            PartialVMError::new(StatusCode::INVALID_MAIN_FUNCTION_SIGNATURE)
+                .with_message("invalid view function argument: failed validation".to_string()),
+        );
+    }
+
     Ok(args)
 }

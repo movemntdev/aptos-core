@@ -361,15 +361,6 @@ b.navbar__title{
   margin-bottom: 0;
   border-radius: 0.25rem;
 }
-
-.list-group-item small {
-  color: black;
-}
-
-html[data-theme='dark'] .list-group-item small {
-  color: white;
-}
-
 .list-group-item-action {
   width: 100%;
   /* color: #495057; */
@@ -1241,10 +1232,6 @@ html[data-theme='dark'] .sidebar-divider {
 .move-content {
   padding: 20px;
   width: 80%;
-}
-
-.move-content a[name] {
-  scroll-margin-top: calc(var(--ifm-navbar-height) + 0.5rem);
 }
 
 .move-sidebar {

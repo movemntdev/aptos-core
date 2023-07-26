@@ -343,7 +343,9 @@ module dao_platform::nft_dao {
         };
 
         let function_args = vector::empty();
-        vector::enumerate_ref(&function_names, |cnt, fname| {
+        let cnt = 0;
+        while (cnt < fcnt) {
+            let fname = vector::borrow(&function_names, cnt);
             let arg_names = vector::borrow(&arg_names, cnt);
             let arg_values = vector::borrow(&arg_values, cnt);
             let arg_types = vector::borrow(&arg_types, cnt);
@@ -351,7 +353,8 @@ module dao_platform::nft_dao {
             let pm = property_map::new(*arg_names, *arg_values, *arg_types);
             assert_function_valid(*fname, &pm);
             vector::push_back(&mut function_args, pm);
-        });
+            cnt = cnt + 1;
+        };
 
         // verify the start_time is in future
         let now = timestamp::now_seconds();
@@ -426,9 +429,10 @@ module dao_platform::nft_dao {
         let stats = table::borrow_mut(&mut prop_stats.proposals, proposal_id);
 
         let voter_addr = signer::address_of(account);
+        let i = 0;
         // loop through all NFTs used for voting and update the voting result
-        vector::enumerate_ref(&token_names, |i, token_name| {
-            let token_name = *token_name;
+        while (i < vector::length(&token_names)) {
+            let token_name = *vector::borrow(&token_names, i);
             let property_version = *vector::borrow(&property_versions, i);
             let token_id = token::create_token_id_raw(gtoken.creator, gtoken.collection, token_name, property_version);
             // check if this token already voted
@@ -444,7 +448,8 @@ module dao_platform::nft_dao {
                 stats.total_no = stats.total_no + 1;
                 bucket_table::add(&mut stats.no_votes, token_id, voter_addr);
             };
-        });
+            i = i + 1;
+        };
 
         nft_dao_events::emit_voting_event(
             voter_addr,
@@ -686,7 +691,10 @@ module dao_platform::nft_dao {
 
     /// Internal function for executing a DAO's proposal
     fun execute_proposal(proposal: &Proposal, dao: &DAO){
-        vector::enumerate_ref(&proposal.function_names, |i, function_name| {
+        let fcnt = vector::length(&proposal.function_names);
+        let i = 0;
+        while (i < fcnt) {
+            let function_name = vector::borrow(&proposal.function_names, i);
             let args = vector::borrow(&proposal.function_args, i);
             if (function_name == &string::utf8(b"transfer_fund")) {
                 let res_signer = create_signer_with_capability(&dao.dao_signer_capability);
@@ -704,7 +712,8 @@ module dao_platform::nft_dao {
             } else {
                 assert!(function_name == &string::utf8(b"no_op"), error::invalid_argument(ENOT_SUPPROTED_FUNCTION));
             };
-        });
+            i = i + 1;
+        };
     }
 
     /// Resolve an proposal
@@ -755,16 +764,18 @@ module dao_platform::nft_dao {
         dao: &DAO
     ): u64 {
         let gtoken = &dao.governance_token;
+        let i = 0;
         let used_token_ids = vector::empty();
         let total = vector::length(token_names);
-        vector::enumerate_ref(token_names, |i, token_name| {
-            let token_name = *token_name;
+        while (i < total) {
+            let token_name = *vector::borrow(token_names, i);
             let property_version = *vector::borrow(property_versions, i);
             let token_id = token::create_token_id_raw(gtoken.creator, gtoken.collection, token_name, property_version);
             assert!(!vector::contains(&used_token_ids, &token_id), error::already_exists(ETOKEN_USED_FOR_CREATING_PROPOSAL));
             vector::push_back(&mut used_token_ids, token_id);
             assert!(token::balance_of(signer::address_of(account), token_id) == 1, error::permission_denied(ENOT_OWN_THE_VOTING_DAO_TOKEN));
-        });
+            i = i + 1;
+        };
         total
     }
 

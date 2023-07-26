@@ -15,18 +15,12 @@ impl serde::Serialize for GetTransactionsRequest {
         if self.transactions_count.is_some() {
             len += 1;
         }
-        if self.batch_size.is_some() {
-            len += 1;
-        }
         let mut struct_ser = serializer.serialize_struct("aptos.indexer.v1.GetTransactionsRequest", len)?;
         if let Some(v) = self.starting_version.as_ref() {
             struct_ser.serialize_field("startingVersion", ToString::to_string(&v).as_str())?;
         }
         if let Some(v) = self.transactions_count.as_ref() {
             struct_ser.serialize_field("transactionsCount", ToString::to_string(&v).as_str())?;
-        }
-        if let Some(v) = self.batch_size.as_ref() {
-            struct_ser.serialize_field("batchSize", ToString::to_string(&v).as_str())?;
         }
         struct_ser.end()
     }
@@ -42,15 +36,12 @@ impl<'de> serde::Deserialize<'de> for GetTransactionsRequest {
             "startingVersion",
             "transactions_count",
             "transactionsCount",
-            "batch_size",
-            "batchSize",
         ];
 
         #[allow(clippy::enum_variant_names)]
         enum GeneratedField {
             StartingVersion,
             TransactionsCount,
-            BatchSize,
         }
         impl<'de> serde::Deserialize<'de> for GeneratedField {
             fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
@@ -74,7 +65,6 @@ impl<'de> serde::Deserialize<'de> for GetTransactionsRequest {
                         match value {
                             "startingVersion" | "starting_version" => Ok(GeneratedField::StartingVersion),
                             "transactionsCount" | "transactions_count" => Ok(GeneratedField::TransactionsCount),
-                            "batchSize" | "batch_size" => Ok(GeneratedField::BatchSize),
                             _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
                         }
                     }
@@ -96,7 +86,6 @@ impl<'de> serde::Deserialize<'de> for GetTransactionsRequest {
             {
                 let mut starting_version__ = None;
                 let mut transactions_count__ = None;
-                let mut batch_size__ = None;
                 while let Some(k) = map.next_key()? {
                     match k {
                         GeneratedField::StartingVersion => {
@@ -115,20 +104,11 @@ impl<'de> serde::Deserialize<'de> for GetTransactionsRequest {
                                 map.next_value::<::std::option::Option<::pbjson::private::NumberDeserialize<_>>>()?.map(|x| x.0)
                             ;
                         }
-                        GeneratedField::BatchSize => {
-                            if batch_size__.is_some() {
-                                return Err(serde::de::Error::duplicate_field("batchSize"));
-                            }
-                            batch_size__ =
-                                map.next_value::<::std::option::Option<::pbjson::private::NumberDeserialize<_>>>()?.map(|x| x.0)
-                            ;
-                        }
                     }
                 }
                 Ok(GetTransactionsRequest {
                     starting_version: starting_version__,
                     transactions_count: transactions_count__,
-                    batch_size: batch_size__,
                 })
             }
         }

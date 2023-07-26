@@ -16,7 +16,7 @@ use aptos_sdk::{
         AccountKey, LocalAccount,
     },
 };
-use aptos_transaction_generator_lib::{CounterState, ReliableTransactionSubmitter, SEND_AMOUNT};
+use aptos_transaction_generator_lib::{CounterState, TransactionExecutor, SEND_AMOUNT};
 use core::{
     cmp::min,
     result::Result::{Err, Ok},
@@ -57,7 +57,7 @@ impl<'t> AccountMinter<'t> {
     /// will create 10 seed accounts, each seed account create 10 new accounts
     pub async fn create_accounts(
         &mut self,
-        txn_executor: &dyn ReliableTransactionSubmitter,
+        txn_executor: &dyn TransactionExecutor,
         req: &EmitJobRequest,
         mode_params: &EmitModeParams,
         total_requested_accounts: usize,
@@ -69,11 +69,7 @@ impl<'t> AccountMinter<'t> {
         let coins_per_account = (req.expected_max_txns / total_requested_accounts as u64)
             .checked_mul(SEND_AMOUNT + req.expected_gas_per_txn * req.gas_price)
             .unwrap()
-            .checked_add(
-                req.max_gas_per_txn * req.gas_price
-                // for module publishing
-                + 2 * req.max_gas_per_txn * req.gas_price * req.init_gas_price_multiplier,
-            )
+            .checked_add(req.max_gas_per_txn * req.gas_price)
             .unwrap(); // extra coins for secure to pay none zero gas price
         let txn_factory = self.txn_factory.clone();
         let expected_children_per_seed_account =
@@ -125,21 +121,11 @@ impl<'t> AccountMinter<'t> {
                 .get_account_balance(self.source_account.address())
                 .await?;
             info!(
-                "Source account {} current balance is {}, needed {} coins, or {:.3}% of its balance",
+                "Source account {} current balance is {}, needed {} coins",
                 self.source_account.address(),
                 balance,
-                coins_for_source,
-                coins_for_source as f64 / balance as f64 * 100.0,
+                coins_for_source
             );
-
-            if balance < coins_for_source {
-                return Err(anyhow!(
-                    "Source ({}) doesn't have enough coins, balance {} < needed {}",
-                    self.source_account.address(),
-                    balance,
-                    coins_for_source
-                ));
-            }
 
             if req.prompt_before_spending {
                 if !prompt_yes(&format!(
@@ -157,6 +143,15 @@ impl<'t> AccountMinter<'t> {
                     coins_for_source,
                     max_allowed,
                 );
+            }
+
+            if balance < coins_for_source {
+                return Err(anyhow!(
+                    "Source ({}) doesn't have enough coins, balance {} < needed {}",
+                    self.source_account.address(),
+                    balance,
+                    coins_for_source
+                ));
             }
         }
 
@@ -196,10 +191,8 @@ impl<'t> AccountMinter<'t> {
             request_counters.show_simple(),
         );
         info!(
-            "Creating additional {} accounts with {} coins each (txn {} gas price)",
-            num_accounts,
-            coins_per_account,
-            txn_factory.get_gas_unit_price(),
+            "Creating additional {} accounts with {} coins each",
+            num_accounts, coins_per_account
         );
 
         let seed_rngs = gen_rng_for_reusable_account(actual_num_seed_accounts);
@@ -260,7 +253,7 @@ impl<'t> AccountMinter<'t> {
 
     pub async fn mint_to_root(
         &mut self,
-        txn_executor: &dyn ReliableTransactionSubmitter,
+        txn_executor: &dyn TransactionExecutor,
         amount: u64,
     ) -> Result<()> {
         info!("Minting new coins to root");
@@ -277,16 +270,13 @@ impl<'t> AccountMinter<'t> {
     pub async fn create_and_fund_seed_accounts(
         &mut self,
         mut new_source_account: Option<LocalAccount>,
-        txn_executor: &dyn ReliableTransactionSubmitter,
+        txn_executor: &dyn TransactionExecutor,
         seed_account_num: usize,
         coins_per_seed_account: u64,
         max_submit_batch_size: usize,
         counters: &CounterState,
     ) -> Result<Vec<LocalAccount>> {
-        info!(
-            "Creating and funding seeds accounts (txn {} gas price)",
-            self.txn_factory.get_gas_unit_price()
-        );
+        info!("Creating and funding seeds accounts");
         let mut i = 0;
         let mut seed_accounts = vec![];
         while i < seed_account_num {
@@ -322,7 +312,7 @@ impl<'t> AccountMinter<'t> {
 
     pub async fn load_vasp_account(
         &self,
-        txn_executor: &dyn ReliableTransactionSubmitter,
+        txn_executor: &dyn TransactionExecutor,
         index: usize,
     ) -> Result<LocalAccount> {
         let file = "vasp".to_owned() + index.to_string().as_str() + ".key";
@@ -346,7 +336,7 @@ impl<'t> AccountMinter<'t> {
 
     pub async fn create_new_source_account(
         &mut self,
-        txn_executor: &dyn ReliableTransactionSubmitter,
+        txn_executor: &dyn TransactionExecutor,
         coins_for_source: u64,
     ) -> Result<LocalAccount> {
         for i in 0..3 {
@@ -406,7 +396,7 @@ async fn create_and_fund_new_accounts<R>(
     num_new_accounts: usize,
     coins_per_new_account: u64,
     max_num_accounts_per_batch: usize,
-    txn_executor: &dyn ReliableTransactionSubmitter,
+    txn_executor: &dyn TransactionExecutor,
     txn_factory: &TransactionFactory,
     reuse_account: bool,
     mut rng: R,
@@ -453,7 +443,7 @@ where
 }
 
 async fn gen_reusable_accounts<R>(
-    txn_executor: &dyn ReliableTransactionSubmitter,
+    txn_executor: &dyn TransactionExecutor,
     num_accounts: usize,
     rng: &mut R,
 ) -> Result<Vec<LocalAccount>>
@@ -470,7 +460,7 @@ where
 }
 
 async fn gen_reusable_account<R>(
-    txn_executor: &dyn ReliableTransactionSubmitter,
+    txn_executor: &dyn TransactionExecutor,
     rng: &mut R,
 ) -> Result<LocalAccount>
 where

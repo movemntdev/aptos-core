@@ -6,7 +6,6 @@
 #![allow(clippy::unused_unit)]
 
 use super::{
-    collection_datas::{QUERY_RETRIES, QUERY_RETRY_DELAY_MS},
     token_utils::{CollectionDataIdType, TokenWriteSet},
     tokens::TableHandleToOwner,
     v2_token_utils::{TokenStandard, TokenV2AggregatedDataMapping, V2TokenResource},
@@ -26,6 +25,9 @@ use serde::{Deserialize, Serialize};
 
 // PK of current_collections_v2, i.e. collection_id
 pub type CurrentCollectionV2PK = String;
+
+const QUERY_RETRIES: u32 = 5;
+const QUERY_RETRY_DELAY_MS: u64 = 500;
 
 #[derive(Debug, Deserialize, FieldCount, Identifiable, Insertable, Serialize)]
 #[diesel(primary_key(transaction_version, write_set_change_index))]
@@ -98,11 +100,9 @@ impl CollectionV2 {
             0, // Placeholder, this isn't used anyway
         );
 
-        if let V2TokenResource::Collection(inner) = &V2TokenResource::from_resource(
-            &type_str,
-            resource.data.as_ref().unwrap(),
-            txn_version,
-        )? {
+        if let V2TokenResource::Collection(inner) =
+            V2TokenResource::from_resource(&type_str, resource.data.as_ref().unwrap(), txn_version)?
+        {
             let (mut current_supply, mut max_supply, mut total_minted_v2) =
                 (BigDecimal::zero(), None, None);
             let (mut mutable_description, mut mutable_uri) = (None, None);
@@ -137,7 +137,7 @@ impl CollectionV2 {
             }
 
             let collection_id = resource.address.clone();
-            let creator_address = inner.get_creator_address();
+            let creator_address = inner.creator.clone();
             let collection_name = inner.get_name_trunc();
             let description = inner.description.clone();
             let uri = inner.get_uri_trunc();
@@ -264,7 +264,7 @@ impl CollectionV2 {
     /// If collection data is not in resources of the same transaction, then try looking for it in the database. Since collection owner
     /// cannot change, we can just look in the current_collection_datas table.
     /// Retrying a few times since this collection could've been written in a separate thread.
-    fn get_collection_creator_for_v1(
+    pub fn get_collection_creator_for_v1(
         conn: &mut PgPoolConnection,
         table_handle: &str,
     ) -> anyhow::Result<String> {
@@ -282,7 +282,7 @@ impl CollectionV2 {
     }
 
     /// TODO: Change this to a KV store
-    fn get_by_table_handle(
+    pub fn get_by_table_handle(
         conn: &mut PgPoolConnection,
         table_handle: &str,
     ) -> anyhow::Result<String> {

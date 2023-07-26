@@ -8,8 +8,7 @@ use move_core_types::{
     effects::{AccountChangeSet, ChangeSet, Op},
     identifier::Identifier,
     language_storage::{ModuleId, StructTag},
-    metadata::Metadata,
-    resolver::{resource_size, ModuleResolver, MoveResolver, ResourceResolver},
+    resolver::{ModuleResolver, MoveResolver, ResourceResolver},
 };
 #[cfg(feature = "table-extension")]
 use move_table_extension::{TableChangeSet, TableHandle, TableResolver};
@@ -29,23 +28,14 @@ impl BlankStorage {
 }
 
 impl ModuleResolver for BlankStorage {
-    fn get_module_metadata(&self, _module_id: &ModuleId) -> Vec<Metadata> {
-        vec![]
-    }
-
     fn get_module(&self, _module_id: &ModuleId) -> Result<Option<Vec<u8>>> {
         Ok(None)
     }
 }
 
 impl ResourceResolver for BlankStorage {
-    fn get_resource_with_metadata(
-        &self,
-        _address: &AccountAddress,
-        _tag: &StructTag,
-        _metadata: &[Metadata],
-    ) -> Result<(Option<Vec<u8>>, usize)> {
-        Ok((None, 0))
+    fn get_resource(&self, _address: &AccountAddress, _tag: &StructTag) -> Result<Option<Vec<u8>>> {
+        Ok(None)
     }
 }
 
@@ -69,10 +59,6 @@ pub struct DeltaStorage<'a, 'b, S> {
 }
 
 impl<'a, 'b, S: ModuleResolver> ModuleResolver for DeltaStorage<'a, 'b, S> {
-    fn get_module_metadata(&self, _module_id: &ModuleId) -> Vec<Metadata> {
-        vec![]
-    }
-
     fn get_module(&self, module_id: &ModuleId) -> Result<Option<Vec<u8>>, Error> {
         if let Some(account_storage) = self.delta.accounts().get(module_id.address()) {
             if let Some(blob_opt) = account_storage.modules().get(module_id.name()) {
@@ -85,22 +71,18 @@ impl<'a, 'b, S: ModuleResolver> ModuleResolver for DeltaStorage<'a, 'b, S> {
 }
 
 impl<'a, 'b, S: ResourceResolver> ResourceResolver for DeltaStorage<'a, 'b, S> {
-    fn get_resource_with_metadata(
+    fn get_resource(
         &self,
         address: &AccountAddress,
         tag: &StructTag,
-        metadata: &[Metadata],
-    ) -> Result<(Option<Vec<u8>>, usize)> {
+    ) -> Result<Option<Vec<u8>>, Error> {
         if let Some(account_storage) = self.delta.accounts().get(address) {
             if let Some(blob_opt) = account_storage.resources().get(tag) {
-                let buf = blob_opt.clone().ok();
-                let buf_size = resource_size(&buf);
-                return Ok((buf, buf_size));
+                return Ok(blob_opt.clone().ok());
             }
         }
 
-        // TODO
-        self.base.get_resource_with_metadata(address, tag, metadata)
+        self.base.get_resource(address, tag)
     }
 }
 
@@ -243,8 +225,12 @@ impl InMemoryStorage {
             changes,
         } = changes;
         self.tables.retain(|h, _| !removed_tables.contains(h));
-        self.tables
-            .extend(new_tables.keys().map(|h| (*h, BTreeMap::default())));
+        self.tables.extend(
+            new_tables
+                .keys()
+                .into_iter()
+                .map(|h| (*h, BTreeMap::default())),
+        );
         for (h, c) in changes {
             assert!(
                 self.tables.contains_key(&h),
@@ -283,10 +269,6 @@ impl InMemoryStorage {
 }
 
 impl ModuleResolver for InMemoryStorage {
-    fn get_module_metadata(&self, _module_id: &ModuleId) -> Vec<Metadata> {
-        vec![]
-    }
-
     fn get_module(&self, module_id: &ModuleId) -> Result<Option<Vec<u8>>, Error> {
         if let Some(account_storage) = self.accounts.get(module_id.address()) {
             return Ok(account_storage.modules.get(module_id.name()).cloned());
@@ -296,18 +278,15 @@ impl ModuleResolver for InMemoryStorage {
 }
 
 impl ResourceResolver for InMemoryStorage {
-    fn get_resource_with_metadata(
+    fn get_resource(
         &self,
         address: &AccountAddress,
         tag: &StructTag,
-        _metadata: &[Metadata],
-    ) -> Result<(Option<Vec<u8>>, usize)> {
+    ) -> Result<Option<Vec<u8>>, Error> {
         if let Some(account_storage) = self.accounts.get(address) {
-            let buf = account_storage.resources.get(tag).cloned();
-            let buf_size = resource_size(&buf);
-            return Ok((buf, buf_size));
+            return Ok(account_storage.resources.get(tag).cloned());
         }
-        Ok((None, 0))
+        Ok(None)
     }
 }
 

@@ -12,7 +12,7 @@ pub struct Cmd {
     #[clap(flatten)]
     db_dir: DbDir,
 
-    #[clap(long, value_parser)]
+    #[clap(long, parse(from_os_str))]
     output_dir: PathBuf,
 }
 
@@ -21,7 +21,7 @@ impl Cmd {
         ensure!(!self.output_dir.exists(), "Output dir already exists.");
         fs::create_dir_all(&self.output_dir)?;
 
-        // TODO(grao): Support sharded state merkle db and split_ledger_db here.
-        AptosDB::create_checkpoint(self.db_dir, self.output_dir, false, false)
+        // TODO(grao): Support sharded state merkle db here.
+        AptosDB::create_checkpoint(self.db_dir, self.output_dir, false)
     }
 }

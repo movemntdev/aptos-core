@@ -3,28 +3,25 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    check_for_container_restart, create_k8s_client, delete_all_chaos, get_default_pfn_node_config,
-    get_free_port, get_stateful_set_image, install_public_fullnode,
+    check_for_container_restart, create_k8s_client, delete_all_chaos, get_free_port,
+    get_stateful_set_image,
     interface::system_metrics::{query_prometheus_system_metrics, SystemMetricsThreshold},
     node::K8sNode,
     prometheus::{self, query_with_metadata},
     query_sequence_number, set_stateful_set_image_tag, uninstall_testnet_resources, ChainInfo,
-    FullNode, K8sApi, Node, Result, Swarm, SwarmChaos, Validator, Version, HAPROXY_SERVICE_SUFFIX,
+    FullNode, Node, Result, Swarm, SwarmChaos, Validator, Version, HAPROXY_SERVICE_SUFFIX,
     REST_API_HAPROXY_SERVICE_PORT, REST_API_SERVICE_PORT,
 };
 use ::aptos_logger::*;
 use anyhow::{anyhow, bail, format_err};
 use aptos_config::config::NodeConfig;
-use aptos_retrier::fixed_retry_strategy;
+use aptos_retrier::ExponentWithLimitDelay;
 use aptos_sdk::{
     crypto::ed25519::Ed25519PrivateKey,
     move_types::account_address::AccountAddress,
     types::{chain_id::ChainId, AccountKey, LocalAccount, PeerId},
 };
-use k8s_openapi::api::{
-    apps::v1::StatefulSet,
-    core::v1::{ConfigMap, PersistentVolumeClaim, Service},
-};
+use k8s_openapi::api::apps::v1::StatefulSet;
 use kube::{
     api::{Api, ListParams},
     client::Client as K8sClient,
@@ -50,8 +47,6 @@ pub struct K8sSwarm {
     keep: bool,
     chaoses: HashSet<SwarmChaos>,
     prom_client: Option<PrometheusClient>,
-    era: Option<String>,
-    use_port_forward: bool,
 }
 
 impl K8sSwarm {
@@ -63,10 +58,8 @@ impl K8sSwarm {
         validators: HashMap<AccountAddress, K8sNode>,
         fullnodes: HashMap<AccountAddress, K8sNode>,
         keep: bool,
-        era: Option<String>,
-        use_port_forward: bool,
     ) -> Result<Self> {
-        let kube_client = create_k8s_client().await?;
+        let kube_client = create_k8s_client().await;
 
         let client = validators.values().next().unwrap().rest_client();
         let key = load_root_key(root_key);
@@ -106,8 +99,6 @@ impl K8sSwarm {
             keep,
             chaoses: HashSet::new(),
             prom_client,
-            era,
-            use_port_forward,
         };
 
         // test hitting the configured prometheus endpoint
@@ -130,61 +121,9 @@ impl K8sSwarm {
             .to_string()
     }
 
-    fn get_inspection_service_url(&self, idx: usize) -> String {
-        self.validators
-            .values()
-            .nth(idx)
-            .unwrap()
-            .inspection_service_endpoint()
-            .to_string()
-    }
-
     #[allow(dead_code)]
     fn get_kube_client(&self) -> K8sClient {
         self.kube_client.clone()
-    }
-
-    /// Installs a PFN with the given version and node config
-    async fn install_public_fullnode_resources<'a>(
-        &mut self,
-        version: &'a Version,
-        node_config: &'a NodeConfig,
-    ) -> Result<(PeerId, K8sNode)> {
-        // create APIs
-        let stateful_set_api: Arc<K8sApi<_>> = Arc::new(K8sApi::<StatefulSet>::from_client(
-            self.get_kube_client(),
-            Some(self.kube_namespace.clone()),
-        ));
-        let configmap_api: Arc<K8sApi<_>> = Arc::new(K8sApi::<ConfigMap>::from_client(
-            self.get_kube_client(),
-            Some(self.kube_namespace.clone()),
-        ));
-        let persistent_volume_claim_api: Arc<K8sApi<_>> =
-            Arc::new(K8sApi::<PersistentVolumeClaim>::from_client(
-                self.get_kube_client(),
-                Some(self.kube_namespace.clone()),
-            ));
-        let service_api: Arc<K8sApi<_>> = Arc::new(K8sApi::<Service>::from_client(
-            self.get_kube_client(),
-            Some(self.kube_namespace.clone()),
-        ));
-        let (peer_id, mut k8snode) = install_public_fullnode(
-            stateful_set_api,
-            configmap_api,
-            persistent_volume_claim_api,
-            service_api,
-            version,
-            node_config,
-            self.era
-                .as_ref()
-                .expect("Installing PFN requires acquiring the current chain era")
-                .clone(),
-            self.kube_namespace.clone(),
-            self.use_port_forward,
-        )
-        .await?;
-        k8snode.start().await?; // actually start the node. if port-forward is enabled, this is when it gets its ephemeral port
-        Ok((peer_id, k8snode))
     }
 }
 
@@ -297,13 +236,8 @@ impl Swarm for K8sSwarm {
         todo!()
     }
 
-    async fn add_full_node(&mut self, version: &Version, template: NodeConfig) -> Result<PeerId> {
-        self.install_public_fullnode_resources(version, &template)
-            .await
-            .map(|(peer_id, node)| {
-                self.fullnodes.insert(peer_id, node);
-                peer_id
-            })
+    fn add_full_node(&mut self, _version: &Version, _template: NodeConfig) -> Result<PeerId> {
+        todo!()
     }
 
     fn remove_full_node(&mut self, _id: PeerId) -> Result<()> {
@@ -316,13 +250,7 @@ impl Swarm for K8sSwarm {
 
     fn chain_info(&mut self) -> ChainInfo<'_> {
         let rest_api_url = self.get_rest_api_url(0);
-        let inspection_service_url = self.get_inspection_service_url(0);
-        ChainInfo::new(
-            &mut self.root_account,
-            rest_api_url,
-            inspection_service_url,
-            self.chain_id,
-        )
+        ChainInfo::new(&mut self.root_account, rest_api_url, self.chain_id)
     }
 
     // returns a kubectl logs command to retrieve the logs manually
@@ -423,30 +351,19 @@ impl Swarm for K8sSwarm {
 
     fn chain_info_for_node(&mut self, idx: usize) -> ChainInfo<'_> {
         let rest_api_url = self.get_rest_api_url(idx);
-        let inspection_service_url = self.get_inspection_service_url(idx);
-        ChainInfo::new(
-            &mut self.root_account,
-            rest_api_url,
-            inspection_service_url,
-            self.chain_id,
-        )
-    }
-
-    fn get_default_pfn_node_config(&self) -> NodeConfig {
-        get_default_pfn_node_config()
+        ChainInfo::new(&mut self.root_account, rest_api_url, self.chain_id)
     }
 }
 
 /// Amount of time to wait for genesis to complete
 pub fn k8s_wait_genesis_strategy() -> impl Iterator<Item = Duration> {
-    // retry every 10 seconds for 10 minutes
-    fixed_retry_strategy(10 * 1000, 60)
+    // FIXME: figure out why Genesis doesn't finish in 10 minutes, increasing timeout to 20.
+    ExponentWithLimitDelay::new(1000, 10 * 1000, 20 * 60 * 1000)
 }
 
-/// Amount of time to wait for nodes to spin up, from provisioning to API ready
+/// Amount of time to wait for nodes to respond on the REST API
 pub fn k8s_wait_nodes_strategy() -> impl Iterator<Item = Duration> {
-    // retry every 10 seconds for 20 minutes
-    fixed_retry_strategy(10 * 1000, 120)
+    ExponentWithLimitDelay::new(1000, 10 * 1000, 15 * 60 * 1000)
 }
 
 async fn list_stateful_sets(client: K8sClient, kube_namespace: &str) -> Result<Vec<StatefulSet>> {
@@ -496,18 +413,6 @@ fn get_k8s_node_from_stateful_set(
     if !use_port_forward {
         service_name = format!("{}.{}.svc", &service_name, &namespace);
     }
-
-    // Append the cluster name if its a multi-cluster deployment
-    let service_name = if let Some(target_cluster_name) = sts
-        .metadata
-        .labels
-        .as_ref()
-        .and_then(|labels| labels.get("multicluster/targetcluster"))
-    {
-        format!("{}.{}", &service_name, &target_cluster_name)
-    } else {
-        service_name
-    };
 
     // If HAProxy is enabled, use the port on its Service. Otherwise use the port on the validator Service
     let mut rest_api_port = if enable_haproxy {

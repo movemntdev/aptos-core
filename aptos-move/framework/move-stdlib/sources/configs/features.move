@@ -174,39 +174,12 @@ module std::features {
         is_enabled(PERIODICAL_REWARD_RATE_DECREASE)
     }
 
-    /// Whether enable paritial governance voting on aptos_governance.
+    /// Whether enable paritial governance voting.
     /// Lifetime: transient
     const PARTIAL_GOVERNANCE_VOTING: u64 = 17;
     public fun get_partial_governance_voting(): u64 { PARTIAL_GOVERNANCE_VOTING }
     public fun partial_governance_voting_enabled(): bool acquires Features {
         is_enabled(PARTIAL_GOVERNANCE_VOTING)
-    }
-
-    /// Charge invariant violation error.
-    /// Lifetime: transient
-    const CHARGE_INVARIANT_VIOLATION: u64 = 20;
-
-    /// Whether enable paritial governance voting on delegation_pool.
-    /// Lifetime: transient
-    const DELEGATION_POOL_PARTIAL_GOVERNANCE_VOTING: u64 = 21;
-    public fun get_delegation_pool_partial_governance_voting(): u64 { DELEGATION_POOL_PARTIAL_GOVERNANCE_VOTING }
-    public fun delegation_pool_partial_governance_voting_enabled(): bool acquires Features {
-        is_enabled(DELEGATION_POOL_PARTIAL_GOVERNANCE_VOTING)
-    }
-
-    /// Whether alternate gas payer is supported
-    /// Lifetime: transient
-    const FEE_PAYER_ENABLED: u64 = 22;
-    public fun fee_payer_enabled(): bool acquires Features {
-        is_enabled(FEE_PAYER_ENABLED)
-    }
-
-    /// Whether enable MOVE functions to call create_auid method to create AUIDs.
-    /// Lifetime: transient
-    const APTOS_UNIQUE_IDENTIFIERS: u64 = 23;
-    public fun get_auids(): u64 { APTOS_UNIQUE_IDENTIFIERS }
-    public fun auids_enabled(): bool acquires Features {
-        is_enabled(APTOS_UNIQUE_IDENTIFIERS)
     }
 
     // ============================================================================================
@@ -228,12 +201,18 @@ module std::features {
             move_to<Features>(framework, Features{features: vector[]})
         };
         let features = &mut borrow_global_mut<Features>(@std).features;
-        vector::for_each_ref(&enable, |feature| {
-            set(features, *feature, true);
-        });
-        vector::for_each_ref(&disable, |feature| {
-            set(features, *feature, false);
-        });
+        let i = 0;
+        let n = vector::length(&enable);
+        while (i < n) {
+            set(features, *vector::borrow(&enable, i), true);
+            i = i + 1
+        };
+        let i = 0;
+        let n = vector::length(&disable);
+        while (i < n) {
+            set(features, *vector::borrow(&disable, i), false);
+            i = i + 1
+        };
     }
 
     /// Check whether the feature is enabled.

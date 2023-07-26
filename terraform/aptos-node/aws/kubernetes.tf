@@ -83,9 +83,9 @@ resource "kubernetes_namespace" "tigera-operator" {
 resource "helm_release" "calico" {
   count      = var.enable_calico ? 1 : 0
   name       = "calico"
-  repository = "https://docs.tigera.io/calico/charts"
+  repository = "https://docs.projectcalico.org/charts"
   chart      = "tigera-operator"
-  version    = "3.26.0"
+  version    = "3.23.3"
   namespace  = "tigera-operator"
 }
 
@@ -94,7 +94,7 @@ locals {
     numValidators     = var.num_validators
     numFullnodeGroups = var.num_fullnode_groups
     imageTag          = var.image_tag
-    manageImages      = var.manage_via_tf # if we're managing the entire deployment via terraform, override the images as well
+    mangeImages       = var.manage_via_tf # if we're managing the entire deployment via terraform, override the images as well
     chain = {
       era      = var.era
       chain_id = var.chain_id

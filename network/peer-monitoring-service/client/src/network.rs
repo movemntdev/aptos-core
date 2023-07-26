@@ -93,7 +93,7 @@ pub async fn send_request_to_peer(
     let result = peer_monitoring_client
         .send_request(
             *peer_network_id,
-            request.clone(),
+            request,
             Duration::from_millis(request_timeout_ms),
         )
         .await;
@@ -108,7 +108,7 @@ pub async fn send_request_to_peer(
             );
             metrics::increment_request_counter(
                 &metrics::SUCCESS_RESPONSES,
-                request.clone().get_label(),
+                request.get_label(),
                 peer_network_id,
             );
             Ok(response)

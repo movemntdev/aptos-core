@@ -48,62 +48,6 @@
   "liveNow": false,
   "panels": [
     {
-      "datasource": { "type": "prometheus", "uid": "${Datasource}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 80 }
-            ]
-          },
-          "unit": "percentunit"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 11, "w": 8, "x": 0, "y": 0 },
-      "id": 6,
-      "options": {
-        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
-        "tooltip": { "mode": "multi", "sort": "none" }
-      },
-      "pluginVersion": "10.0.1-cloud.2.a7a20fbf",
-      "targets": [
-        {
-          "expr": "rate(container_cpu_usage_seconds_total{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", container=~\"$container\"}[$interval])",
-          "format": "time_series",
-          "intervalFactor": 1,
-          "legendFormat": "{{pod}}-{{container}}",
-          "refId": "A"
-        }
-      ],
-      "title": "CPU Usage",
-      "type": "timeseries"
-    },
-    {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
@@ -114,9 +58,10 @@
       "fieldConfig": { "defaults": { "unit": "" }, "overrides": [] },
       "fill": 0,
       "fillGradient": 0,
-      "gridPos": { "h": 11, "w": 8, "x": 8, "y": 0 },
+      "gridPos": { "h": 11, "w": 8, "x": 0, "y": 0 },
       "hiddenSeries": false,
-      "id": 2,
+      "id": 6,
+      "isNew": false,
       "legend": {
         "alignAsTable": false,
         "avg": false,
@@ -135,7 +80,70 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "10.0.1-cloud.2.a7a20fbf",
+      "pluginVersion": "9.1.1",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "span": 0,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "rate(container_cpu_usage_seconds_total{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", container=~\"$container\"}[$interval])",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{pod}}-{{container}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "CPU Usage",
+      "tooltip": { "shared": true, "sort": 0, "value_type": "individual" },
+      "type": "graph",
+      "xaxis": { "format": "", "logBase": 0, "mode": "time", "show": true, "values": [] },
+      "yaxes": [
+        { "format": "percentunit", "logBase": 1, "min": 0, "show": true },
+        { "format": "short", "logBase": 1, "show": true }
+      ],
+      "yaxis": { "align": false }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": { "type": "prometheus", "uid": "${Datasource}" },
+      "editable": false,
+      "error": false,
+      "fieldConfig": { "defaults": { "unit": "" }, "overrides": [] },
+      "fill": 0,
+      "fillGradient": 0,
+      "gridPos": { "h": 11, "w": 8, "x": 8, "y": 0 },
+      "hiddenSeries": false,
+      "id": 2,
+      "isNew": false,
+      "legend": {
+        "alignAsTable": false,
+        "avg": false,
+        "current": false,
+        "hideEmpty": false,
+        "hideZero": false,
+        "max": false,
+        "min": false,
+        "rightSide": false,
+        "show": false,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": { "alertThreshold": true },
+      "percentage": false,
+      "pluginVersion": "9.1.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -179,6 +187,7 @@
       "gridPos": { "h": 11, "w": 8, "x": 16, "y": 0 },
       "hiddenSeries": false,
       "id": 25,
+      "isNew": false,
       "legend": {
         "alignAsTable": false,
         "avg": false,
@@ -197,7 +206,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "10.0.1-cloud.2.a7a20fbf",
+      "pluginVersion": "9.1.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -244,6 +253,7 @@
       "gridPos": { "h": 11, "w": 8, "x": 0, "y": 11 },
       "hiddenSeries": false,
       "id": 13,
+      "isNew": false,
       "legend": {
         "alignAsTable": false,
         "avg": false,
@@ -262,7 +272,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "10.0.1-cloud.2.a7a20fbf",
+      "pluginVersion": "9.1.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -309,6 +319,7 @@
       "gridPos": { "h": 11, "w": 8, "x": 8, "y": 11 },
       "hiddenSeries": false,
       "id": 23,
+      "isNew": false,
       "legend": {
         "alignAsTable": false,
         "avg": false,
@@ -327,7 +338,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "10.0.1-cloud.2.a7a20fbf",
+      "pluginVersion": "9.1.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -373,6 +384,7 @@
       "gridPos": { "h": 11, "w": 8, "x": 16, "y": 11 },
       "hiddenSeries": false,
       "id": 24,
+      "isNew": false,
       "legend": {
         "alignAsTable": false,
         "avg": false,
@@ -391,7 +403,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "10.0.1-cloud.2.a7a20fbf",
+      "pluginVersion": "9.1.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -435,6 +447,7 @@
       "gridPos": { "h": 11, "w": 8, "x": 0, "y": 22 },
       "hiddenSeries": false,
       "id": 22,
+      "isNew": false,
       "legend": {
         "alignAsTable": false,
         "avg": false,
@@ -453,7 +466,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "10.0.1-cloud.2.a7a20fbf",
+      "pluginVersion": "9.1.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -497,6 +510,7 @@
       "gridPos": { "h": 11, "w": 8, "x": 16, "y": 22 },
       "hiddenSeries": false,
       "id": 16,
+      "isNew": false,
       "legend": {
         "alignAsTable": false,
         "avg": false,
@@ -515,7 +529,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "10.0.1-cloud.2.a7a20fbf",
+      "pluginVersion": "9.1.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -549,8 +563,8 @@
       "yaxis": { "align": false }
     }
   ],
-  "refresh": "",
-  "schemaVersion": 38,
+  "refresh": false,
+  "schemaVersion": 37,
   "style": "dark",
   "tags": ["aptos-core"],
   "templating": {
@@ -703,9 +717,9 @@
         "multiFormat": "",
         "name": "pod",
         "options": [],
-        "query": { "query": "up{namespace=~\"$namespace\"}", "refId": "PrometheusVariableQueryEditor-VariableQuery" },
+        "query": { "query": "up{namespace=~\"$namespace\"}", "refId": "StandardVariableQuery" },
         "refresh": 1,
-        "regex": ".*kubernetes_pod_name=\"(.*?)\".*",
+        "regex": ".*pod=\"(.*?)\".*",
         "skipUrlSync": false,
         "sort": 1,
         "type": "query"
@@ -754,6 +768,6 @@
   "timezone": "",
   "title": "system",
   "uid": "system",
-  "version": 3,
+  "version": 1,
   "weekStart": ""
 }

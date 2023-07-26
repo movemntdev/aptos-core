@@ -7,24 +7,20 @@
 
 use crate::{
     errors::AptosDbError,
-    ledger_db::LedgerDb,
     schema::{
-        db_metadata::DbMetadataKey, epoch_by_version::EpochByVersionSchema,
-        ledger_info::LedgerInfoSchema, transaction_accumulator::TransactionAccumulatorSchema,
+        epoch_by_version::EpochByVersionSchema, ledger_info::LedgerInfoSchema,
+        transaction_accumulator::TransactionAccumulatorSchema,
         transaction_info::TransactionInfoSchema,
     },
-    utils::{
-        get_progress,
-        iterators::{EpochEndingLedgerInfoIter, ExpectContinuousVersions},
-    },
+    utils::iterators::{EpochEndingLedgerInfoIter, ExpectContinuousVersions},
 };
-use anyhow::{anyhow, ensure, format_err, Result};
+use anyhow::{ensure, format_err, Result};
 use aptos_accumulator::{HashReader, MerkleAccumulator};
 use aptos_crypto::{
     hash::{CryptoHash, TransactionAccumulatorHasher},
     HashValue,
 };
-use aptos_schemadb::{ReadOptions, SchemaBatch};
+use aptos_schemadb::{ReadOptions, SchemaBatch, DB};
 use aptos_types::{
     epoch_state::EpochState,
     ledger_info::LedgerInfoWithSignatures,
@@ -32,15 +28,15 @@ use aptos_types::{
         definition::LeafCount, position::Position, AccumulatorConsistencyProof,
         TransactionAccumulatorProof, TransactionAccumulatorRangeProof, TransactionInfoWithProof,
     },
-    transaction::{TransactionInfo, TransactionToCommit, Version},
+    transaction::{TransactionInfo, Version},
 };
 use arc_swap::ArcSwap;
 use itertools::Itertools;
-use std::{borrow::Borrow, ops::Deref, sync::Arc};
+use std::{ops::Deref, sync::Arc};
 
 #[derive(Debug)]
 pub struct LedgerStore {
-    pub ledger_db: Arc<LedgerDb>,
+    db: Arc<DB>,
 
     /// We almost always need the latest ledger info and signatures to serve read requests, so we
     /// cache it in memory in order to avoid reading DB and deserializing the object frequently. It
@@ -49,11 +45,10 @@ pub struct LedgerStore {
 }
 
 impl LedgerStore {
-    pub fn new(ledger_db: Arc<LedgerDb>) -> Self {
+    pub fn new(db: Arc<DB>) -> Self {
         // Upon restart, read the latest ledger info and signatures and cache them in memory.
         let ledger_info = {
-            let mut iter = ledger_db
-                .metadata_db()
+            let mut iter = db
                 .iter::<LedgerInfoSchema>(ReadOptions::default())
                 .expect("Constructing iterator should work.");
             iter.seek_to_last();
@@ -64,15 +59,14 @@ impl LedgerStore {
         };
 
         Self {
-            ledger_db,
+            db,
             latest_ledger_info: ArcSwap::from(Arc::new(ledger_info)),
         }
     }
 
     pub fn get_epoch(&self, version: Version) -> Result<u64> {
         let mut iter = self
-            .ledger_db
-            .metadata_db()
+            .db
             .iter::<EpochByVersionSchema>(ReadOptions::default())?;
         // Search for the end of the previous epoch.
         iter.seek_for_prev(&version)?;
@@ -108,8 +102,7 @@ impl LedgerStore {
     ) -> Result<LedgerInfoWithSignatures> {
         let epoch = self.get_epoch(version)?;
         let li = self
-            .ledger_db
-            .metadata_db()
+            .db
             .get::<LedgerInfoSchema>(&epoch)?
             .ok_or_else(|| AptosDbError::NotFound(format!("LedgerInfo for epoch {}.", epoch)))?;
         ensure!(
@@ -142,24 +135,20 @@ impl LedgerStore {
     }
 
     pub fn get_latest_ledger_info_in_epoch(&self, epoch: u64) -> Result<LedgerInfoWithSignatures> {
-        self.ledger_db
-            .metadata_db()
-            .get::<LedgerInfoSchema>(&epoch)?
-            .ok_or_else(|| {
-                AptosDbError::NotFound(format!("Last LedgerInfo of epoch {}", epoch)).into()
-            })
+        self.db.get::<LedgerInfoSchema>(&epoch)?.ok_or_else(|| {
+            AptosDbError::NotFound(format!("Last LedgerInfo of epoch {}", epoch)).into()
+        })
     }
 
     pub fn get_epoch_state(&self, epoch: u64) -> Result<EpochState> {
         ensure!(epoch > 0, "EpochState only queryable for epoch >= 1.",);
 
-        let ledger_info_with_sigs = self
-            .ledger_db
-            .metadata_db()
-            .get::<LedgerInfoSchema>(&(epoch - 1))?
-            .ok_or_else(|| {
-                AptosDbError::NotFound(format!("Last LedgerInfo of epoch {}", epoch - 1))
-            })?;
+        let ledger_info_with_sigs =
+            self.db
+                .get::<LedgerInfoSchema>(&(epoch - 1))?
+                .ok_or_else(|| {
+                    AptosDbError::NotFound(format!("Last LedgerInfo of epoch {}", epoch - 1))
+                })?;
         let latest_epoch_state = ledger_info_with_sigs
             .ledger_info()
             .next_epoch_state()
@@ -174,18 +163,24 @@ impl LedgerStore {
 
     /// Get transaction info given `version`
     pub fn get_transaction_info(&self, version: Version) -> Result<TransactionInfo> {
-        self.ledger_db
-            .transaction_info_db()
+        self.db
             .get::<TransactionInfoSchema>(&version)?
             .ok_or_else(|| format_err!("No TransactionInfo at version {}", version))
     }
 
-    pub fn get_latest_version(&self) -> Result<Version> {
-        get_progress(
-            self.ledger_db.metadata_db(),
-            &DbMetadataKey::OverallCommitProgress,
-        )?
-        .ok_or(anyhow!("No progress in db."))
+    pub fn get_latest_transaction_info_option(&self) -> Result<Option<(Version, TransactionInfo)>> {
+        let mut iter = self
+            .db
+            .iter::<TransactionInfoSchema>(ReadOptions::default())?;
+        iter.seek_to_last();
+        iter.next().transpose()
+    }
+
+    /// Get latest transaction info together with its version. Note that during node syncing, this
+    /// version can be greater than what's in the latest LedgerInfo.
+    pub fn get_latest_transaction_info(&self) -> Result<(Version, TransactionInfo)> {
+        self.get_latest_transaction_info_option()?
+            .ok_or_else(|| AptosDbError::NotFound(String::from("Genesis TransactionInfo.")).into())
     }
 
     /// Gets an iterator that yields `num_transaction_infos` transaction infos starting from
@@ -196,8 +191,7 @@ impl LedgerStore {
         num_transaction_infos: usize,
     ) -> Result<impl Iterator<Item = Result<TransactionInfo>> + '_> {
         let mut iter = self
-            .ledger_db
-            .transaction_info_db()
+            .db
             .iter::<TransactionInfoSchema>(ReadOptions::default())?;
         iter.seek(&start_version)?;
         iter.expect_continuous_versions(start_version, num_transaction_infos)
@@ -210,17 +204,13 @@ impl LedgerStore {
         start_epoch: u64,
         end_epoch: u64,
     ) -> Result<EpochEndingLedgerInfoIter> {
-        let mut iter = self
-            .ledger_db
-            .metadata_db()
-            .iter::<LedgerInfoSchema>(ReadOptions::default())?;
+        let mut iter = self.db.iter::<LedgerInfoSchema>(ReadOptions::default())?;
         iter.seek(&start_epoch)?;
         Ok(EpochEndingLedgerInfoIter::new(iter, start_epoch, end_epoch))
     }
 
     pub fn ensure_epoch_ending(&self, version: Version) -> Result<()> {
-        self.ledger_db
-            .metadata_db()
+        self.db
             .get::<EpochByVersionSchema>(&version)?
             .ok_or_else(|| format_err!("Version {} is not epoch ending.", version))?;
         Ok(())
@@ -283,16 +273,13 @@ impl LedgerStore {
         &self,
         first_version: u64,
         txn_infos: &[TransactionInfo],
-        // TODO(grao): Consider remove this function and migrate all callers to use the two functions
-        // below.
-        transaction_info_batch: &SchemaBatch,
-        transaction_accumulator_batch: &SchemaBatch,
+        batch: &SchemaBatch,
     ) -> Result<HashValue> {
         // write txn_info
         (first_version..first_version + txn_infos.len() as u64)
             .zip_eq(txn_infos.iter())
             .try_for_each(|(version, txn_info)| {
-                transaction_info_batch.put::<TransactionInfoSchema>(&version, txn_info)
+                batch.put::<TransactionInfoSchema>(&version, txn_info)
             })?;
 
         // write hash of txn_info into the accumulator
@@ -302,42 +289,10 @@ impl LedgerStore {
             first_version, /* num_existing_leaves */
             &txn_hashes,
         )?;
-        writes.iter().try_for_each(|(pos, hash)| {
-            transaction_accumulator_batch.put::<TransactionAccumulatorSchema>(pos, hash)
-        })?;
-        Ok(root_hash)
-    }
-
-    pub fn put_transaction_accumulator(
-        &self,
-        first_version: Version,
-        txns_to_commit: &[impl Borrow<TransactionToCommit>],
-        transaction_accumulator_batch: &SchemaBatch,
-    ) -> Result<HashValue> {
-        let txn_hashes: Vec<_> = txns_to_commit
+        writes
             .iter()
-            .map(|t| t.borrow().transaction_info().hash())
-            .collect();
-
-        let (root_hash, writes) = Accumulator::append(
-            self,
-            first_version, /* num_existing_leaves */
-            &txn_hashes,
-        )?;
-        writes.iter().try_for_each(|(pos, hash)| {
-            transaction_accumulator_batch.put::<TransactionAccumulatorSchema>(pos, hash)
-        })?;
-
+            .try_for_each(|(pos, hash)| batch.put::<TransactionAccumulatorSchema>(pos, hash))?;
         Ok(root_hash)
-    }
-
-    pub fn put_transaction_info(
-        &self,
-        version: Version,
-        transaction_info: &TransactionInfo,
-        transaction_info_batch: &SchemaBatch,
-    ) -> Result<()> {
-        transaction_info_batch.put::<TransactionInfoSchema>(&version, transaction_info)
     }
 
     /// Write `ledger_info_with_sigs` to `batch`.
@@ -364,8 +319,7 @@ pub(crate) type Accumulator = MerkleAccumulator<LedgerStore, TransactionAccumula
 
 impl HashReader for LedgerStore {
     fn get(&self, position: Position) -> Result<HashValue> {
-        self.ledger_db
-            .transaction_accumulator_db()
+        self.db
             .get::<TransactionAccumulatorSchema>(&position)?
             .ok_or_else(|| format_err!("{} does not exist.", position))
     }

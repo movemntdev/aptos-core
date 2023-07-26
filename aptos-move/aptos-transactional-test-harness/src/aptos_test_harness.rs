@@ -25,9 +25,12 @@ use aptos_types::{
         TransactionStatus,
     },
 };
-use aptos_vm::{data_cache::AsMoveResolver, AptosVM, VMExecutor};
+use aptos_vm::{
+    data_cache::{AsMoveResolver, IntoMoveResolver, StorageAdapterOwned},
+    AptosVM, VMExecutor,
+};
 use aptos_vm_genesis::GENESIS_KEYPAIR;
-use clap::Parser;
+use clap::StructOpt;
 use move_binary_format::file_format::{CompiledModule, CompiledScript};
 use move_command_line_common::{
     address::ParsedAddress, files::verify_and_create_named_address_mapping,
@@ -71,7 +74,7 @@ use std::{
 ///   - It executes transactions through AptosVM, instead of MoveVM directly
 struct AptosTestAdapter<'a> {
     compiled_state: CompiledState<'a>,
-    storage: FakeDataStore,
+    storage: StorageAdapterOwned<FakeDataStore>,
     default_syntax: SyntaxChoice,
     private_key_mapping: BTreeMap<String, Ed25519PrivateKey>,
 }
@@ -85,108 +88,104 @@ struct TransactionParameters {
 }
 
 /// Aptos-specific arguments for the publish command.
-#[derive(Parser, Debug)]
+#[derive(StructOpt, Debug)]
 struct AptosPublishArgs {
-    #[clap(long = "private-key", value_parser = RawPrivateKey::parse)]
+    #[structopt(long = "private-key", parse(try_from_str = RawPrivateKey::parse))]
     private_key: Option<RawPrivateKey>,
 
-    #[clap(long = "expiration")]
+    #[structopt(long = "expiration")]
     expiration_time: Option<u64>,
 
-    #[clap(long = "sequence-number")]
+    #[structopt(long = "sequence-number")]
     sequence_number: Option<u64>,
 
-    #[clap(long = "gas-price")]
+    #[structopt(long = "gas-price")]
     gas_unit_price: Option<u64>,
 
-    #[clap(long = "override-signer", value_parser= ParsedAddress::parse)]
+    #[structopt(long = "override-signer", parse(try_from_str = ParsedAddress::parse))]
     override_signer: Option<ParsedAddress>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct SignerAndKeyPair {
     address: ParsedAddress,
     private_key: Option<RawPrivateKey>,
 }
 
 /// Aptos-specifc arguments for the run command.
-#[derive(Parser, Debug)]
+#[derive(StructOpt, Debug)]
 struct AptosRunArgs {
-    #[clap(long = "private-key", value_parser = RawPrivateKey::parse)]
+    #[structopt(long = "private-key", parse(try_from_str = RawPrivateKey::parse))]
     private_key: Option<RawPrivateKey>,
 
-    #[clap(long = "script")]
+    #[structopt(long = "script")]
     script: bool,
 
-    #[clap(long = "expiration")]
+    #[structopt(long = "expiration")]
     expiration_time: Option<u64>,
 
-    #[clap(long = "sequence-number")]
+    #[structopt(long = "sequence-number")]
     sequence_number: Option<u64>,
 
-    #[clap(long = "gas-price")]
+    #[structopt(long = "gas-price")]
     gas_unit_price: Option<u64>,
 
-    #[clap(long = "show-events")]
+    #[structopt(long = "show-events")]
     show_events: bool,
 
-    #[clap(long = "secondary-signers", value_parser = SignerAndKeyPair::parse, num_args = 0..)]
+    #[structopt(long = "secondary-signers", parse(try_from_str = SignerAndKeyPair::parse), multiple_values(true))]
     secondary_signers: Option<Vec<SignerAndKeyPair>>,
 }
 
 /// Aptos-specifc arguments for the init command.
-#[derive(Parser, Debug)]
+#[derive(StructOpt, Debug)]
 struct AptosInitArgs {
-    #[clap(long = "private-keys", value_parser = parse_named_private_key, num_args = 0..)]
+    #[structopt(long = "private-keys", parse(try_from_str = parse_named_private_key), multiple_values(true))]
     private_keys: Option<Vec<(Identifier, Ed25519PrivateKey)>>,
-    #[clap(long = "initial-coins")]
+    #[structopt(long = "initial-coins")]
     initial_coins: Option<u64>,
 }
 
 /// A raw private key -- either a literal or an unresolved name.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 enum RawPrivateKey {
     Named(Identifier),
     Anonymous(Ed25519PrivateKey),
 }
 
 /// Command to initiate a block metadata transaction.
-#[derive(Parser, Debug)]
+#[derive(StructOpt, Debug)]
 struct BlockCommand {
-    #[clap(long = "proposer", value_parser = ParsedAddress::parse)]
+    #[structopt(long = "proposer", parse(try_from_str = ParsedAddress::parse))]
     proposer: ParsedAddress,
 
-    #[clap(long = "time")]
+    #[structopt(long = "time")]
     time: u64,
 }
 
 /// Command to view a table item.
-#[derive(Parser, Debug)]
+#[derive(StructOpt, Debug)]
 struct ViewTableCommand {
-    #[clap(long = "table_handle")]
+    #[structopt(long = "table_handle")]
     table_handle: AccountAddress,
 
-    #[clap(long = "key_type", value_parser = parse_type_tag)]
+    #[structopt(long = "key_type", parse(try_from_str = parse_type_tag))]
     key_type: TypeTag,
 
-    #[clap(long = "value_type", value_parser = parse_type_tag)]
+    #[structopt(long = "value_type", parse(try_from_str = parse_type_tag))]
     value_type: TypeTag,
 
-    #[clap(long = "key_value", value_parser = parse_value)]
+    #[structopt(long = "key_value", parse(try_from_str = serde_json::from_str))]
     key_value: serde_json::Value,
 }
 
-fn parse_value(input: &str) -> Result<serde_json::Value, serde_json::Error> {
-    serde_json::from_str(input)
-}
-
 /// Custom commands for the transactional test flow.
-#[derive(Parser, Debug)]
+#[derive(StructOpt, Debug)]
 enum AptosSubCommand {
-    #[clap(name = "block")]
+    #[structopt(name = "block")]
     BlockCommand(BlockCommand),
 
-    #[clap(name = "view_table")]
+    #[structopt(name = "view_table")]
     ViewTableCommand(ViewTableCommand),
 }
 
@@ -401,8 +400,8 @@ impl<'a> AptosTestAdapter<'a> {
                 )
             })?;
 
-        let annotated = MoveValueAnnotator::new(&self.storage.as_move_resolver())
-            .view_resource(&aptos_coin_tag, &balance_blob)?;
+        let annotated =
+            MoveValueAnnotator::new(&self.storage).view_resource(&aptos_coin_tag, &balance_blob)?;
 
         // Filter the Coin resource and return the resouce value
         for (key, val) in annotated.value {
@@ -472,7 +471,7 @@ impl<'a> AptosTestAdapter<'a> {
     /// Should error if the transaction ends up being discarded, or having a status other than
     /// EXECUTED.
     fn run_transaction(&mut self, txn: Transaction) -> Result<TransactionOutput> {
-        let mut outputs = AptosVM::execute_block(vec![txn], &self.storage.clone(), None)?;
+        let mut outputs = AptosVM::execute_block(vec![txn], &self.storage)?;
 
         assert_eq!(outputs.len(), 1);
 
@@ -574,7 +573,7 @@ impl<'a> MoveTestAdapter<'a> for AptosTestAdapter<'a> {
         }
 
         // Genesis modules
-        let mut storage = FakeDataStore::new(HashMap::new());
+        let mut storage = FakeDataStore::new(HashMap::new()).into_move_resolver();
         storage.add_write_set(GENESIS_CHANGE_SET_HEAD.write_set());
 
         // Builtin private key mapping
@@ -864,13 +863,7 @@ impl<'a> MoveTestAdapter<'a> for AptosTestAdapter<'a> {
         resource: &IdentStr,
         type_args: Vec<TypeTag>,
     ) -> Result<String> {
-        view_resource_in_move_storage(
-            &self.storage.as_move_resolver(),
-            address,
-            module,
-            resource,
-            type_args,
-        )
+        view_resource_in_move_storage(&self.storage, address, module, resource, type_args)
     }
 
     fn handle_subcommand(&mut self, input: TaskInput<Self::Subcommand>) -> Result<Option<String>> {

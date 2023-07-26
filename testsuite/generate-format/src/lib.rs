@@ -5,9 +5,9 @@
 //! How and where to record the Serde format of interesting Aptos types.
 //! See API documentation with `cargo doc -p serde-reflection --open`
 
-use clap::{Parser, ValueEnum};
 use serde_reflection::Registry;
-use std::fmt::{Display, Formatter};
+use std::str::FromStr;
+use structopt::{clap::arg_enum, StructOpt};
 
 /// Rest API types
 mod api;
@@ -24,7 +24,8 @@ mod network;
 
 pub use linter::lint_bcs_format;
 
-#[derive(Debug, Parser, Clone, Copy, ValueEnum)]
+arg_enum! {
+#[derive(Debug, StructOpt, Clone, Copy)]
 /// A corpus of Rust types to trace, and optionally record on disk.
 pub enum Corpus {
     API,
@@ -33,8 +34,17 @@ pub enum Corpus {
     Network,
     MoveABI,
 }
+}
 
 impl Corpus {
+    /// All corpuses.
+    pub fn values() -> Vec<Corpus> {
+        Corpus::variants()
+            .iter()
+            .filter_map(|s| Corpus::from_str(s).ok())
+            .collect()
+    }
+
     /// Compute the registry of formats.
     pub fn get_registry(self) -> Registry {
         let result = match self {
@@ -61,17 +71,5 @@ impl Corpus {
             Corpus::Network => network::output_file(),
             Corpus::MoveABI => move_abi::output_file(),
         }
-    }
-}
-
-impl Display for Corpus {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Corpus::API => "API",
-            Corpus::Aptos => "Aptos",
-            Corpus::Consensus => "Consensus",
-            Corpus::Network => "Network",
-            Corpus::MoveABI => "MoveABI",
-        })
     }
 }

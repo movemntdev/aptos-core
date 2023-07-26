@@ -1,85 +1,46 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use super::{publishing::publish_util::Package, ReliableTransactionSubmitter};
+use super::{
+    publishing::{module_simple::EntryPoints, publish_util::Package},
+    TransactionExecutor,
+};
 use crate::{
-    create_account_transaction, publishing::publish_util::PackageHandler, TransactionGenerator,
-    TransactionGeneratorCreator,
+    publishing::publish_util::PackageHandler, TransactionGenerator, TransactionGeneratorCreator,
 };
 use aptos_logger::info;
 use aptos_sdk::{
+    move_types::account_address::AccountAddress,
     transaction_builder::TransactionFactory,
     types::{transaction::SignedTransaction, LocalAccount},
 };
-use async_trait::async_trait;
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use std::sync::Arc;
 
-// Fn + Send + Sync, as it will be called from multiple threads simultaneously
-// if you need any coordination, use Arc<RwLock<X>> fields
-pub type TransactionGeneratorWorker = dyn Fn(
-        &mut LocalAccount,
-        &Package,
-        &LocalAccount,
-        &TransactionFactory,
-        &mut StdRng,
-    ) -> SignedTransaction
-    + Send
-    + Sync;
-
-#[async_trait]
-pub trait UserModuleTransactionGenerator: Sync + Send {
-    /// Called for each instance of the module we publish,
-    /// if any additional transactions are needed to setup the package.
-    /// For example, if we need to create an NFT collection, or otherwise
-    /// call directly additional initialization of the module.
-    fn initialize_package(
-        &mut self,
-        package: &Package,
-        publisher: &mut LocalAccount,
-        txn_factory: &TransactionFactory,
-        rng: &mut StdRng,
-    ) -> Vec<SignedTransaction>;
-
-    /// Create TransactionGeneratorWorker function, which will be called
-    /// to generate transactions to submit.
-    /// TransactionGeneratorWorker will be called from multiple threads simultaneously.
-    /// if you need any coordination, use Arc<RwLock<X>> fields
-    /// If you need to send any additional initialization transactions
-    /// (like creating and funding additional accounts), you can do so by using provided txn_executor
-    async fn create_generator_fn(
-        &self,
-        init_accounts: &mut [LocalAccount],
-        txn_factory: &TransactionFactory,
-        txn_executor: &dyn ReliableTransactionSubmitter,
-        rng: &mut StdRng,
-    ) -> Arc<TransactionGeneratorWorker>;
-}
-
-pub struct CustomModulesDelegationGenerator {
+pub struct CallCustomModulesGenerator {
     rng: StdRng,
     txn_factory: TransactionFactory,
-    packages: Arc<Vec<(Package, LocalAccount)>>,
-    txn_generator: Arc<TransactionGeneratorWorker>,
+    packages: Arc<Vec<(Package, AccountAddress)>>,
+    entry_point: EntryPoints,
 }
 
-impl CustomModulesDelegationGenerator {
+impl CallCustomModulesGenerator {
     pub fn new(
         rng: StdRng,
         txn_factory: TransactionFactory,
-        packages: Arc<Vec<(Package, LocalAccount)>>,
-        txn_generator: Arc<TransactionGeneratorWorker>,
+        packages: Arc<Vec<(Package, AccountAddress)>>,
+        entry_point: EntryPoints,
     ) -> Self {
         Self {
             rng,
             txn_factory,
             packages,
-            txn_generator,
+            entry_point,
         }
     }
 }
 
-impl TransactionGenerator for CustomModulesDelegationGenerator {
+impl TransactionGenerator for CallCustomModulesGenerator {
     fn generate_transactions(
         &mut self,
         account: &mut LocalAccount,
@@ -89,12 +50,12 @@ impl TransactionGenerator for CustomModulesDelegationGenerator {
 
         for _ in 0..num_to_create {
             let (package, publisher) = self.packages.choose(&mut self.rng).unwrap();
-            let request = (self.txn_generator)(
+            let request = package.use_specific_transaction(
+                self.entry_point,
                 account,
-                package,
-                publisher,
                 &self.txn_factory,
-                &mut self.rng,
+                Some(&mut self.rng),
+                Some(publisher),
             );
             requests.push(request);
         }
@@ -102,95 +63,77 @@ impl TransactionGenerator for CustomModulesDelegationGenerator {
     }
 }
 
-pub struct CustomModulesDelegationGeneratorCreator {
+pub struct CallCustomModulesCreator {
     txn_factory: TransactionFactory,
-    packages: Arc<Vec<(Package, LocalAccount)>>,
-    txn_generator: Arc<TransactionGeneratorWorker>,
+    packages: Arc<Vec<(Package, AccountAddress)>>,
+    entry_point: EntryPoints,
 }
 
-impl CustomModulesDelegationGeneratorCreator {
+impl CallCustomModulesCreator {
     pub async fn new(
         txn_factory: TransactionFactory,
         init_txn_factory: TransactionFactory,
         accounts: &mut [LocalAccount],
-        txn_executor: &dyn ReliableTransactionSubmitter,
+        txn_executor: &dyn TransactionExecutor,
+        entry_point: EntryPoints,
         num_modules: usize,
-        package_name: &str,
-        workload: &mut dyn UserModuleTransactionGenerator,
     ) -> Self {
         let mut rng = StdRng::from_entropy();
         assert!(accounts.len() >= num_modules);
-        let mut requests_create = Vec::with_capacity(accounts.len());
-        let mut requests_publish = Vec::with_capacity(accounts.len());
-        let mut requests_initialize = Vec::with_capacity(accounts.len());
-        let mut package_handler = PackageHandler::new(package_name);
+        let mut publish_requests = Vec::with_capacity(accounts.len());
+        let mut package_handler = PackageHandler::new(entry_point.package_name());
         let mut packages = Vec::new();
         for account in accounts.iter_mut().take(num_modules) {
-            let mut publisher = LocalAccount::generate(&mut rng);
-            let publisher_address = publisher.address();
-            requests_create.push(create_account_transaction(
-                account,
-                publisher_address,
-                &init_txn_factory,
-                2 * init_txn_factory.get_gas_unit_price() * init_txn_factory.get_max_gas_amount(),
-            ));
-
-            let package = package_handler.pick_package(&mut rng, &mut publisher);
-            requests_publish.push(package.publish_transaction(&mut publisher, &init_txn_factory));
-
-            requests_initialize.append(&mut workload.initialize_package(
-                &package,
-                &mut publisher,
-                &init_txn_factory,
-                &mut rng,
-            ));
-
-            packages.push((package, publisher));
+            let package = package_handler.pick_package(&mut rng, account);
+            let txn = package.publish_transaction(account, &init_txn_factory);
+            publish_requests.push(txn);
+            packages.push((package, account.address()));
         }
-        info!("Creating {} publisher accounts", requests_create.len());
+        info!("Publishing {} packages", publish_requests.len());
         txn_executor
-            .execute_transactions(&requests_create)
+            .execute_transactions(&publish_requests)
             .await
             .unwrap();
+        info!("Done publishing {} packages", publish_requests.len());
 
-        info!("Publishing {} packages", requests_publish.len());
-        txn_executor
-            .execute_transactions(&requests_publish)
-            .await
-            .unwrap();
-
-        if !requests_initialize.is_empty() {
-            info!(
-                "Initializing workload with {} transactions",
-                requests_initialize.len()
-            );
+        // For Token V1/V2 transactions, we first need to initialize collections before generating mint/transfer transactions.
+        // The initial_entry_point is the initialize_collection method for the Token transactions.
+        let mut initial_requests = Vec::with_capacity(accounts.len());
+        if let Some(initial_entry_point) = entry_point.initialize_entry_point() {
+            for account in accounts.iter_mut().take(num_modules) {
+                let package = package_handler.pick_package(&mut rng, account);
+                let request = package.use_specific_transaction(
+                    initial_entry_point,
+                    account,
+                    &init_txn_factory,
+                    Some(&mut rng),
+                    Some(&account.address()),
+                );
+                initial_requests.push(request);
+            }
+            info!("Initializing {} collections", initial_requests.len());
             txn_executor
-                .execute_transactions(&requests_initialize)
+                .execute_transactions(&initial_requests)
                 .await
                 .unwrap();
+            info!("Done initializing {} collections", initial_requests.len());
         }
-
-        info!("Done preparing workload for {} packages", packages.len());
-
-        let txn_generator = workload
-            .create_generator_fn(accounts, &init_txn_factory, txn_executor, &mut rng)
-            .await;
 
         Self {
             txn_factory,
             packages: Arc::new(packages),
-            txn_generator,
+            entry_point,
         }
     }
 }
 
-impl TransactionGeneratorCreator for CustomModulesDelegationGeneratorCreator {
+impl TransactionGeneratorCreator for CallCustomModulesCreator {
     fn create_transaction_generator(&mut self) -> Box<dyn TransactionGenerator> {
-        Box::new(CustomModulesDelegationGenerator::new(
+        Box::new(CallCustomModulesGenerator::new(
             StdRng::from_entropy(),
             self.txn_factory.clone(),
             self.packages.clone(),
-            self.txn_generator.clone(),
+            self.entry_point,
         ))
     }
 }

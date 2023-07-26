@@ -111,9 +111,9 @@ pub fn encode_aptos_mainnet_genesis_transaction(
         Features::default(),
         TimedFeatures::enable_all(),
     )
-    .unwrap();
+        .unwrap();
     let id1 = HashValue::zero();
-    let mut session = move_vm.new_session(&data_cache, SessionId::genesis(id1), true);
+    let mut session = move_vm.new_session(&data_cache, SessionId::genesis(id1));
 
     // On-chain genesis process.
     let consensus_config = OnChainConsensusConfig::default();
@@ -138,8 +138,12 @@ pub fn encode_aptos_mainnet_genesis_transaction(
     // Reconfiguration should happen after all on-chain invocations.
     emit_new_block_and_epoch_event(&mut session);
 
-    let configs = ChangeSetConfigs::unlimited_at_gas_feature_version(LATEST_GAS_FEATURE_VERSION);
-    let cs1 = session.finish(&mut (), &configs).unwrap();
+    let cs1 = session
+        .finish(
+            &mut (),
+            &ChangeSetConfigs::unlimited_at_gas_feature_version(LATEST_GAS_FEATURE_VERSION),
+        )
+        .unwrap();
 
     // Publish the framework, using a different session id, in case both scripts creates tables
     let state_view = GenesisStateView::new();
@@ -148,12 +152,17 @@ pub fn encode_aptos_mainnet_genesis_transaction(
     let mut id2_arr = [0u8; 32];
     id2_arr[31] = 1;
     let id2 = HashValue::new(id2_arr);
-    let mut session = move_vm.new_session(&data_cache, SessionId::genesis(id2), true);
+    let mut session = move_vm.new_session(&data_cache, SessionId::genesis(id2));
     publish_framework(&mut session, framework);
-    let cs2 = session.finish(&mut (), &configs).unwrap();
-    let change_set = cs1.squash(cs2, &configs).unwrap();
+    let cs2 = session
+        .finish(
+            &mut (),
+            &ChangeSetConfigs::unlimited_at_gas_feature_version(LATEST_GAS_FEATURE_VERSION),
+        )
+        .unwrap();
+    let change_set_ext = cs1.squash(cs2).unwrap();
 
-    let (write_set, delta_change_set, events) = change_set.unpack();
+    let (delta_change_set, change_set) = change_set_ext.into_inner();
 
     // Publishing stdlib should not produce any deltas around aggregators and map to write ops and
     // not deltas. The second session only publishes the framework module bundle, which should not
@@ -163,9 +172,11 @@ pub fn encode_aptos_mainnet_genesis_transaction(
         "non-empty delta change set in genesis"
     );
 
-    assert!(!write_set.iter().any(|(_, op)| op.is_deletion()));
-    verify_genesis_write_set(&events);
-    let change_set = ChangeSet::new(write_set, events);
+    assert!(!change_set
+        .write_set()
+        .iter()
+        .any(|(_, op)| op.is_deletion()));
+    verify_genesis_write_set(change_set.events());
     Transaction::GenesisTransaction(WriteSetPayload::Direct(change_set))
 }
 
@@ -217,9 +228,9 @@ pub fn encode_genesis_change_set(
         Features::default(),
         TimedFeatures::enable_all(),
     )
-    .unwrap();
+        .unwrap();
     let id1 = HashValue::zero();
-    let mut session = move_vm.new_session(&data_cache, SessionId::genesis(id1), true);
+    let mut session = move_vm.new_session(&data_cache, SessionId::genesis(id1));
 
     // On-chain genesis process.
     initialize(
@@ -246,8 +257,12 @@ pub fn encode_genesis_change_set(
     // Reconfiguration should happen after all on-chain invocations.
     emit_new_block_and_epoch_event(&mut session);
 
-    let configs = ChangeSetConfigs::unlimited_at_gas_feature_version(LATEST_GAS_FEATURE_VERSION);
-    let cs1 = session.finish(&mut (), &configs).unwrap();
+    let cs1 = session
+        .finish(
+            &mut (),
+            &ChangeSetConfigs::unlimited_at_gas_feature_version(LATEST_GAS_FEATURE_VERSION),
+        )
+        .unwrap();
 
     let state_view = GenesisStateView::new();
     let data_cache = state_view.as_move_resolver();
@@ -256,12 +271,18 @@ pub fn encode_genesis_change_set(
     let mut id2_arr = [0u8; 32];
     id2_arr[31] = 1;
     let id2 = HashValue::new(id2_arr);
-    let mut session = move_vm.new_session(&data_cache, SessionId::genesis(id2), true);
+    let mut session = move_vm.new_session(&data_cache, SessionId::genesis(id2));
     publish_framework(&mut session, framework);
-    let cs2 = session.finish(&mut (), &configs).unwrap();
-    let change_set = cs1.squash(cs2, &configs).unwrap();
+    let cs2 = session
+        .finish(
+            &mut (),
+            &ChangeSetConfigs::unlimited_at_gas_feature_version(LATEST_GAS_FEATURE_VERSION),
+        )
+        .unwrap();
 
-    let (write_set, delta_change_set, events) = change_set.unpack();
+    let change_set_ext = cs1.squash(cs2).unwrap();
+
+    let (delta_change_set, change_set) = change_set_ext.into_inner();
 
     // Publishing stdlib should not produce any deltas around aggregators and map to write ops and
     // not deltas. The second session only publishes the framework module bundle, which should not
@@ -271,9 +292,12 @@ pub fn encode_genesis_change_set(
         "non-empty delta change set in genesis"
     );
 
-    assert!(!write_set.iter().any(|(_, op)| op.is_deletion()));
-    verify_genesis_write_set(&events);
-    ChangeSet::new(write_set, events)
+    assert!(!change_set
+        .write_set()
+        .iter()
+        .any(|(_, op)| op.is_deletion()));
+    verify_genesis_write_set(change_set.events());
+    change_set
 }
 
 fn validate_genesis_config(genesis_config: &GenesisConfiguration) {
@@ -409,9 +433,6 @@ pub fn default_features() -> Vec<FeatureFlag> {
         FeatureFlag::STRUCT_CONSTRUCTORS,
         FeatureFlag::CRYPTOGRAPHY_ALGEBRA_NATIVES,
         FeatureFlag::BLS12_381_STRUCTURES,
-        FeatureFlag::CHARGE_INVARIANT_VIOLATION,
-        FeatureFlag::APTOS_UNIQUE_IDENTIFIERS,
-        FeatureFlag::GAS_PAYER_ENABLED,
     ]
 }
 
@@ -632,7 +653,7 @@ fn verify_genesis_write_set(events: &[ContractEvent]) {
         1,
         "There should only be exactly one NewEpochEvent"
     );
-    assert_eq!(new_epoch_events[0].sequence_number(), 0,);
+    assert_eq!(new_epoch_events[0].sequence_number(), 0, );
 }
 
 /// An enum specifying whether the compiled stdlib/scripts should be used or freshly built versions
@@ -662,7 +683,7 @@ pub fn generate_genesis_change_set_for_testing_with_count(
         GenesisOptions::Mainnet => {
             // We don't yet have mainnet, so returning testnet here
             aptos_framework::testnet_release_bundle()
-        },
+        }
     };
 
     generate_test_genesis(framework, Some(count as usize)).0
@@ -723,10 +744,46 @@ impl TestValidator {
     pub fn new_test_set(count: Option<usize>, initial_stake: Option<u64>) -> Vec<TestValidator> {
         let mut rng = rand::SeedableRng::from_seed([1u8; 32]);
         (0..count.unwrap_or(10))
-            .map(|_| TestValidator::gen(&mut rng, initial_stake))
+            .map(|_| TestValidator::gen_raw(&mut rng, initial_stake))
             .collect()
     }
+    fn gen_raw(_rng: &mut StdRng, initial_stake: Option<u64>) -> TestValidator {
+        let k1 =  vec![1u8; 32];
+        let k2 = vec![2u8; 32];
+        let key = Ed25519PrivateKey::try_from(k1.as_slice()).unwrap();
+        let auth_key = AuthenticationKey::ed25519(&key.public_key());
+        let owner_address = auth_key.derived_address();
+        let consensus_key = bls12381::PrivateKey::try_from(k2.as_slice()).unwrap();
+        let consensus_pubkey = consensus_key.public_key().to_bytes().to_vec();
+        let proof_of_possession = bls12381::ProofOfPossession::create(&consensus_key)
+            .to_bytes()
+            .to_vec();
+        let network_address = [0u8; 0].to_vec();
+        let full_node_network_address = [0u8; 0].to_vec();
 
+        let stake_amount = if let Some(amount) = initial_stake {
+            amount
+        } else {
+            1
+        };
+        let data = Validator {
+            owner_address,
+            consensus_pubkey,
+            proof_of_possession,
+            operator_address: owner_address,
+            voter_address: owner_address,
+            network_addresses: network_address,
+            full_node_network_addresses: full_node_network_address,
+            stake_amount,
+        };
+        Self {
+            key,
+            consensus_key,
+            data,
+        }
+    }
+
+    #[allow(dead_code)]
     fn gen(rng: &mut StdRng, initial_stake: Option<u64>) -> TestValidator {
         let key = Ed25519PrivateKey::generate(rng);
         let auth_key = AuthenticationKey::ed25519(&key.public_key());
@@ -869,7 +926,7 @@ pub fn test_genesis_module_publishing() {
     // create a state view for move_vm
     let mut state_view = GenesisStateView::new();
     for (module_bytes, module) in
-        aptos_cached_packages::head_release_bundle().code_and_compiled_modules()
+    aptos_cached_packages::head_release_bundle().code_and_compiled_modules()
     {
         state_view.add_module(&module.self_id(), module_bytes);
     }
@@ -883,9 +940,9 @@ pub fn test_genesis_module_publishing() {
         Features::default(),
         TimedFeatures::enable_all(),
     )
-    .unwrap();
+        .unwrap();
     let id1 = HashValue::zero();
-    let mut session = move_vm.new_session(&data_cache, SessionId::genesis(id1), true);
+    let mut session = move_vm.new_session(&data_cache, SessionId::genesis(id1));
     publish_framework(&mut session, aptos_cached_packages::head_release_bundle());
 }
 

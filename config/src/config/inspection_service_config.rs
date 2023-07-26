@@ -18,7 +18,6 @@ pub struct InspectionServiceConfig {
     pub address: String,
     pub port: u16,
     pub expose_configuration: bool,
-    pub expose_peer_information: bool,
     pub expose_system_information: bool,
 }
 
@@ -28,7 +27,6 @@ impl Default for InspectionServiceConfig {
             address: "0.0.0.0".to_string(),
             port: 9101,
             expose_configuration: false,
-            expose_peer_information: true,
             expose_system_information: true,
         }
     }

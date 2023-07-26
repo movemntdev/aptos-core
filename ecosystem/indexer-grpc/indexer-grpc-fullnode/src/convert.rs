@@ -11,7 +11,7 @@ use aptos_api_types::{
 };
 use aptos_bitvec::BitVec;
 use aptos_logger::warn;
-use aptos_protos::{transaction::v1 as transaction, util::timestamp};
+use aptos_protos::{transaction::testing1::v1 as transaction, util::timestamp};
 use hex;
 use move_binary_format::file_format::Ability;
 use std::time::Duration;
@@ -594,7 +594,6 @@ pub fn convert_transaction_signature(
             transaction::signature::Type::MultiEd25519
         },
         TransactionSignature::MultiAgentSignature(_) => transaction::signature::Type::MultiAgent,
-        TransactionSignature::FeePayerSignature(_) => transaction::signature::Type::FeePayer,
     };
 
     let signature = match signature {
@@ -617,23 +616,6 @@ pub fn convert_transaction_signature(
                     .iter()
                     .map(convert_account_signature)
                     .collect(),
-            })
-        },
-        TransactionSignature::FeePayerSignature(s) => {
-            transaction::signature::Signature::FeePayer(transaction::FeePayerSignature {
-                sender: Some(convert_account_signature(&s.sender)),
-                secondary_signer_addresses: s
-                    .secondary_signer_addresses
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-                secondary_signers: s
-                    .secondary_signers
-                    .iter()
-                    .map(convert_account_signature)
-                    .collect(),
-                fee_payer_address: s.fee_payer_address.to_string(),
-                fee_payer_signer: Some(convert_account_signature(&s.fee_payer_signer)),
             })
         },
     };

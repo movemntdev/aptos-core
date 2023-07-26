@@ -97,7 +97,7 @@ impl TokenOwnership {
                     collection_data_id_hash: token.collection_data_id_hash.clone(),
                     token_data_id_hash: token.token_data_id_hash.clone(),
                     property_version: token.property_version.clone(),
-                    owner_address: tm.get_owner_address(),
+                    owner_address: standardize_address(&tm.owner_address),
                     creator_address: standardize_address(&token.creator_address.clone()),
                     collection_name: token.collection_name.clone(),
                     name: token.name.clone(),
@@ -107,11 +107,11 @@ impl TokenOwnership {
                     table_type: tm.table_type.clone(),
                     last_transaction_timestamp: token.transaction_timestamp,
                 }),
-                Some(tm.get_owner_address()),
+                Some(standardize_address(&tm.owner_address)),
                 Some(tm.table_type.clone()),
             ),
             None => {
-                tracing::warn!(
+                aptos_logger::warn!(
                     transaction_version = txn_version,
                     table_handle = table_handle,
                     "Missing table handle metadata for TokenStore. {:?}",

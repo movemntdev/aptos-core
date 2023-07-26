@@ -7,7 +7,7 @@ use crate::{
     funder::{FakeFunder, Funder},
 };
 use anyhow::Result;
-use clap::{Parser, ValueEnum};
+use clap::{ArgEnum, Parser};
 use futures::lock::Mutex;
 use std::{path::PathBuf, sync::Arc};
 
@@ -50,7 +50,7 @@ impl GenerateOpenapi {
     }
 }
 
-#[derive(ValueEnum, Clone, Debug)]
+#[derive(ArgEnum, Clone, Debug)]
 pub enum OutputFormat {
     Json,
     Yaml,
@@ -60,11 +60,11 @@ pub enum OutputFormat {
 pub struct OutputConfig {
     /// By default, the spec is written to stdout. If this is provided, the
     /// tool will instead write the spec to the provided path.
-    #[clap(short, long, value_parser)]
+    #[clap(short, long)]
     pub output_path: Option<PathBuf>,
 
     /// What format to output the spec in.
-    #[clap(short, long, value_enum, ignore_case = true, default_value_t = OutputFormat::Yaml)]
+    #[clap(short, long, arg_enum, default_value = "yaml")]
     pub format: OutputFormat,
 }
 

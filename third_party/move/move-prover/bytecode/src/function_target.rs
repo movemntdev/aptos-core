@@ -6,15 +6,16 @@ use crate::{
     annotations::Annotations,
     borrow_analysis,
     function_target_pipeline::FunctionVariant,
-    livevar_analysis, reaching_def_analysis,
+    livevar_analysis, reaching_def_analysis, read_write_set_analysis,
     stackless_bytecode::{AttrId, Bytecode, Label},
 };
 use itertools::Itertools;
-use move_binary_format::file_format::{CodeOffset, Visibility};
+use move_binary_format::file_format::CodeOffset;
 use move_model::{
     ast::{Exp, ExpData, Spec, TempIndex},
     model::{
-        FunId, FunctionEnv, GlobalEnv, Loc, ModuleEnv, QualifiedId, QualifiedInstId, StructId,
+        FunId, FunctionEnv, FunctionVisibility, GlobalEnv, Loc, ModuleEnv, QualifiedId,
+        QualifiedInstId, StructId,
     },
     symbol::{Symbol, SymbolPool},
     ty::{Type, TypeDisplayContext},
@@ -62,7 +63,7 @@ pub struct FunctionData {
     /// The locals, including parameters.
     pub local_types: Vec<Type>,
     /// The return types.
-    pub result_type: Type,
+    pub return_types: Vec<Type>,
     /// The set of global resources acquired by  this function.
     pub acquires_global_resources: Vec<StructId>,
     /// A map from byte code attribute to source code location.
@@ -161,7 +162,7 @@ impl<'env> FunctionTarget<'env> {
     }
 
     /// Returns the visibility of this function.
-    pub fn visibility(&self) -> Visibility {
+    pub fn visibility(&self) -> FunctionVisibility {
         self.func_env.visibility()
     }
 
@@ -180,18 +181,18 @@ impl<'env> FunctionTarget<'env> {
     }
 
     /// Returns return type at given index.
-    pub fn get_return_type(&self, idx: usize) -> Type {
-        self.data.result_type.clone().flatten().remove(idx)
+    pub fn get_return_type(&self, idx: usize) -> &Type {
+        &self.data.return_types[idx]
     }
 
     /// Returns return types of this function.
-    pub fn get_return_types(&self) -> Vec<Type> {
-        self.data.result_type.clone().flatten()
+    pub fn get_return_types(&self) -> &[Type] {
+        &self.data.return_types
     }
 
     /// Returns the number of return values of this function.
     pub fn get_return_count(&self) -> usize {
-        self.data.result_type.clone().flatten().len()
+        self.data.return_types.len()
     }
 
     /// Return the number of parameters of this function
@@ -207,9 +208,7 @@ impl<'env> FunctionTarget<'env> {
     /// Get the name to be used for a local. If the local has a user name, use that for naming,
     /// otherwise generate a unique name.
     pub fn get_local_name(&self, idx: usize) -> Symbol {
-        self.func_env
-            .get_local_name(idx)
-            .expect("compiled module available")
+        self.func_env.get_local_name(idx)
     }
 
     /// Return true if this local has a user name.
@@ -234,7 +233,7 @@ impl<'env> FunctionTarget<'env> {
     /// Gets the number of user declared locals of this function, excluding locals which have
     /// been introduced by transformations.
     pub fn get_user_local_count(&self) -> usize {
-        self.func_env.get_local_count().unwrap_or_default()
+        self.func_env.get_local_count()
     }
 
     /// Return an iterator over the non-parameter local variables of this function
@@ -244,9 +243,7 @@ impl<'env> FunctionTarget<'env> {
 
     /// Returns true if the index is for a temporary, not user declared local.
     pub fn is_temporary(&self, idx: usize) -> bool {
-        self.func_env
-            .is_temporary(idx)
-            .expect("compiled module available")
+        self.func_env.is_temporary(idx)
     }
 
     /// Gets the type of the local at index. This must use an index in the range as determined by
@@ -406,20 +403,22 @@ impl FunctionData {
         func_env: &FunctionEnv<'_>,
         code: Vec<Bytecode>,
         local_types: Vec<Type>,
-        result_type: Type,
+        return_types: Vec<Type>,
         locations: BTreeMap<AttrId, Loc>,
-        name_to_index: BTreeMap<Symbol, usize>,
         acquires_global_resources: Vec<StructId>,
         loop_unrolling: BTreeMap<AttrId, usize>,
         loop_invariants: BTreeSet<AttrId>,
     ) -> Self {
+        let name_to_index = (0..func_env.get_local_count())
+            .map(|idx| (func_env.get_local_name(idx), idx))
+            .collect();
         let modify_targets = func_env.get_modify_targets();
         FunctionData {
             variant: FunctionVariant::Baseline,
             type_args: vec![],
             code,
             local_types,
-            result_type,
+            return_types,
             acquires_global_resources,
             locations,
             loop_unrolling,
@@ -494,7 +493,7 @@ impl FunctionData {
 
         // fix types
         let local_types = Type::instantiate_slice(&self.local_types, inst);
-        let result_type = Type::instantiate(&self.result_type, inst);
+        let return_types = Type::instantiate_slice(&self.return_types, inst);
         let code = self
             .code
             .iter()
@@ -522,7 +521,7 @@ impl FunctionData {
             type_args,
             code,
             local_types,
-            result_type,
+            return_types,
             modify_targets,
             ..self.clone()
         }
@@ -559,6 +558,9 @@ impl<'env> FunctionTarget<'env> {
         self.register_annotation_formatter(Box::new(
             reaching_def_analysis::format_reaching_def_annotation,
         ));
+        self.register_annotation_formatter(Box::new(
+            read_write_set_analysis::format_read_write_set_annotation,
+        ));
     }
 }
 
@@ -579,7 +581,7 @@ impl<'env> fmt::Display for FunctionTarget<'env> {
             self.func_env
                 .module_env
                 .get_name()
-                .display(self.global_env()),
+                .display(self.symbol_pool()),
             self.get_name().display(self.symbol_pool())
         )?;
         let tparams_count_all = self.get_type_parameter_count();
@@ -597,7 +599,10 @@ impl<'env> fmt::Display for FunctionTarget<'env> {
             }
             write!(f, ">")?;
         }
-        let tctx = TypeDisplayContext::new(self.global_env());
+        let tctx = TypeDisplayContext::WithEnv {
+            env: self.global_env(),
+            type_param_names: None,
+        };
         let write_decl = |f: &mut fmt::Formatter<'_>, i: TempIndex| {
             let ty = self.get_local_type(i).display(&tctx);
             if self.has_local_user_name(i) {

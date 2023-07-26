@@ -14,14 +14,14 @@ use crate::{
     utils::{database::PgPoolConnection, util::standardize_address},
 };
 use anyhow::Context;
-use aptos_protos::transaction::v1::WriteTableItem;
+use aptos_protos::transaction::testing1::v1::WriteTableItem;
 use bigdecimal::BigDecimal;
 use diesel::{prelude::*, ExpressionMethods};
 use field_count::FieldCount;
 use serde::{Deserialize, Serialize};
 
-pub const QUERY_RETRIES: u32 = 5;
-pub const QUERY_RETRY_DELAY_MS: u64 = 500;
+const QUERY_RETRIES: u32 = 5;
+const QUERY_RETRY_DELAY_MS: u64 = 500;
 #[derive(Debug, Deserialize, FieldCount, Identifiable, Insertable, Serialize)]
 #[diesel(primary_key(collection_data_id_hash, transaction_version))]
 #[diesel(table_name = collection_datas)]
@@ -103,7 +103,7 @@ impl CollectionData {
             let table_handle = table_item.handle.to_string();
             let maybe_creator_address = table_handle_to_owner
                 .get(&standardize_address(&table_handle))
-                .map(|table_metadata| table_metadata.get_owner_address());
+                .map(|table_metadata| table_metadata.owner_address.clone());
             let mut creator_address = match maybe_creator_address {
                 Some(ca) => ca,
                 None => Self::get_collection_creator(conn, &table_handle).context(format!(

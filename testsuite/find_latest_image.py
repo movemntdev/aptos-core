@@ -9,11 +9,10 @@ import sys
 # 2. If the IMAGE_TAG environment variable is not set, it will find the latest image tag from git history,
 #    assuming images are tagged with the git commit hash.
 
-from test_framework.logging import init_logging, log
+from applogging import logger, init_logging
 from forge import find_recent_images, image_exists
-from test_framework.shell import LocalShell
-from test_framework.git import Git
-from test_framework.cluster import Cloud
+from forge_wrapper_core.shell import LocalShell
+from forge_wrapper_core.git import Git
 
 # gh output logic from determinator
 from determinator import GithubOutput, write_github_output
@@ -24,6 +23,7 @@ IMAGE_TAG_ENV = "IMAGE_TAG"
 GH_OUTPUT_KEY = "IMAGE_TAG"
 
 
+@logger
 def main() -> None:
     init_logging(logger=log)
 
@@ -35,7 +35,7 @@ def main() -> None:
         "--image-name",
         "-i",
         help="The name of the image to search for",
-        default="validator-testing",
+        default="aptos/validator-testing",
     )
     parser.add_argument(
         "--variant",
@@ -45,22 +45,13 @@ def main() -> None:
         dest="variants",
         default=[],
     )
-    parser.add_argument(
-        "--cloud",
-        "-c",
-        help="The cloud to use",
-        choices=[c.value for c in Cloud],
-        default=Cloud.GCP.value,
-    )
     args = parser.parse_args()
     image_name = args.image_name
-    cloud = Cloud(args.cloud)
-    log.info(f"Using cloud: {cloud}")
 
     # If the IMAGE_TAG environment variable is set, check that
     if IMAGE_TAG_ENV in os.environ and os.environ[IMAGE_TAG_ENV]:
         image_tag = os.environ[IMAGE_TAG_ENV]
-        if not image_exists(shell, image_name, image_tag, cloud=cloud):
+        if not image_exists(shell, image_name, image_tag):
             sys.exit(1)
 
     variants = args.variants
@@ -73,9 +64,7 @@ def main() -> None:
     # Find the latest image from git history
     num_images_to_find = 1  # for the purposes of this script, this is always 1
     images = list(
-        find_recent_images(
-            shell, git, num_images_to_find, image_name, variant_prefixes, cloud=cloud
-        )
+        find_recent_images(shell, git, num_images_to_find, image_name, variant_prefixes)
     )
     log.info(f"Found latest images: {images}")
 

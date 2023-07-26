@@ -82,8 +82,7 @@ Publish the chain ID <code>id</code> of this instance under the SystemAddresses 
 Return the chain ID of this instance.
 
 
-<pre><code>#[view]
-<b>public</b> <b>fun</b> <a href="chain_id.md#0x1_chain_id_get">get</a>(): u8
+<pre><code><b>public</b> <b>fun</b> <a href="chain_id.md#0x1_chain_id_get">get</a>(): u8
 </code></pre>
 
 
@@ -136,8 +135,7 @@ Return the chain ID of this instance.
 ### Function `get`
 
 
-<pre><code>#[view]
-<b>public</b> <b>fun</b> <a href="chain_id.md#0x1_chain_id_get">get</a>(): u8
+<pre><code><b>public</b> <b>fun</b> <a href="chain_id.md#0x1_chain_id_get">get</a>(): u8
 </code></pre>
 
 

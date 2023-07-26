@@ -2,23 +2,25 @@
 // Copyright (c) The Move Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-//! Contains definitions for the abstract syntax tree (AST) of the Move language.
+//! Contains AST definitions for the specification language fragments of the Move language.
+//! Note that in this crate, specs are represented in AST form, whereas code is represented
+//! as bytecodes. Therefore we do not need an AST for the Move code itself.
 
 use crate::{
     exp_rewriter::ExpRewriterFunctions,
     model::{
-        EnvDisplay, FieldId, FunId, FunctionEnv, GlobalEnv, GlobalId, Loc, ModuleId, NodeId,
-        Parameter, QualifiedId, QualifiedInstId, SchemaId, SpecFunId, StructId, TypeParameter,
+        EnvDisplay, FieldId, FunId, FunctionVisibility, GlobalEnv, GlobalId, Loc, ModuleId, NodeId,
+        QualifiedId, QualifiedInstId, SchemaId, SpecFunId, StructId, TypeParameter,
         GHOST_MEMORY_PREFIX,
     },
-    symbol::Symbol,
-    ty::{ReferenceKind, Type, TypeDisplayContext},
+    symbol::{Symbol, SymbolPool},
+    ty::{Type, TypeDisplayContext},
 };
 use internment::LocalIntern;
 use itertools::Itertools;
-use move_binary_format::file_format::{CodeOffset, Visibility};
-use move_core_types::account_address::AccountAddress;
-use num::BigInt;
+use move_binary_format::file_format::CodeOffset;
+use num::{BigInt, BigUint, Num};
+use once_cell::sync::Lazy;
 use std::{
     borrow::Borrow,
     cell::RefCell,
@@ -36,7 +38,7 @@ use std::{
 pub struct SpecVarDecl {
     pub loc: Loc,
     pub name: Symbol,
-    pub type_params: Vec<TypeParameter>,
+    pub type_params: Vec<(Symbol, Type)>,
     pub type_: Type,
     pub init: Option<Exp>,
 }
@@ -45,8 +47,8 @@ pub struct SpecVarDecl {
 pub struct SpecFunDecl {
     pub loc: Loc,
     pub name: Symbol,
-    pub type_params: Vec<TypeParameter>,
-    pub params: Vec<Parameter>,
+    pub type_params: Vec<(Symbol, Type)>,
+    pub params: Vec<(Symbol, Type)>,
     pub context_params: Option<Vec<(Symbol, bool)>>,
     pub result_type: Type,
     pub used_memory: BTreeSet<QualifiedInstId<StructId>>,
@@ -117,7 +119,7 @@ impl ConditionKind {
     }
 
     /// Returns true if this condition is allowed on a function declaration.
-    pub fn allowed_on_fun_decl(&self, _visibility: Visibility) -> bool {
+    pub fn allowed_on_fun_decl(&self, _visibility: FunctionVisibility) -> bool {
         use ConditionKind::*;
         matches!(
             self,
@@ -376,10 +378,10 @@ pub enum ExpData {
     Invalid(NodeId),
     /// Represents a value.
     Value(NodeId, Value),
-    /// Represents a reference to a local variable introduced in the AST.
+    /// Represents a reference to a local variable introduced by a specification construct,
+    /// e.g. a quantifier.
     LocalVar(NodeId, Symbol),
-    /// Represents a reference to a temporary used in bytecode, if this expression is associated
-    /// with bytecode.
+    /// Represents a reference to a temporary used in bytecode.
     Temporary(NodeId, TempIndex),
     /// Represents a call to an operation. The `Operation` enum covers all builtin functions
     /// (including operators, constants, ...) as well as user functions.
@@ -420,8 +422,6 @@ pub enum ExpData {
     LoopCont(NodeId, bool),
     /// Assignment to a pattern. Can be a tuple pattern and a tuple expression.
     Assign(NodeId, Pattern, Exp),
-    /// Mutation of a lhs reference, as in `*lhs = rhs`.
-    Mutate(NodeId, Exp, Exp),
 }
 
 /// An internalized expression. We do use a wrapper around the underlying internement implementation
@@ -513,7 +513,6 @@ impl ExpData {
             | Loop(node_id, ..)
             | LoopCont(node_id, ..)
             | Return(node_id, ..)
-            | Mutate(node_id, ..)
             | Assign(node_id, ..) => *node_id,
         }
     }
@@ -603,7 +602,7 @@ impl ExpData {
                     let (mid, sid, sinst) = inst[0].require_struct();
                     result.insert((mid.qualified_inst(sid, sinst.to_owned()), label.to_owned()));
                 },
-                Call(id, SpecFunction(mid, fid, labels), _) => {
+                Call(id, Function(mid, fid, labels), _) => {
                     let inst = &env.get_node_instantiation(*id);
                     let module = env.get_module(*mid);
                     let fun = module.get_spec_fun(*fid);
@@ -633,55 +632,6 @@ impl ExpData {
         };
         self.visit(&mut visitor);
         temps
-    }
-
-    /// Returns the Move functions called by this expression
-    pub fn called_funs(&self) -> BTreeSet<QualifiedId<FunId>> {
-        let mut called = BTreeSet::new();
-        let mut visitor = |e: &ExpData| {
-            if let ExpData::Call(_, Operation::MoveFunction(mid, fid), _) = e {
-                called.insert(mid.qualified(*fid));
-            }
-        };
-        self.visit(&mut visitor);
-        called
-    }
-
-    pub fn has_exit(&self) -> bool {
-        // TODO: we currently cannot break out of a visitor, so we maintain a state when we
-        // are inside a loop.
-        let mut in_loop = false;
-        let mut has_exit = false;
-        let mut visitor = |post: bool, e: &ExpData| match e {
-            ExpData::Loop(_, _) => in_loop = !post,
-            ExpData::LoopCont(_, _) if !in_loop => has_exit = true,
-            _ => {},
-        };
-        self.visit_pre_post(&mut visitor);
-        has_exit
-    }
-
-    /// Returns true of the given expression is valid for a constant expression.
-    /// TODO: this mimics the current allowed expression forms the v1 compiler allows,
-    /// but is not documented as such in the book
-    pub fn is_valid_for_constant(&self) -> bool {
-        let mut valid = true;
-        let mut visitor = |e: &ExpData| match e {
-            ExpData::Value(..) | ExpData::Invalid(_) => {},
-            ExpData::Call(_, oper, args) => {
-                if !oper.is_builtin_op() || !args.iter().all(|e| e.is_valid_for_constant()) {
-                    valid = false;
-                }
-            },
-            ExpData::Sequence(_, items) => {
-                if !items.iter().all(|e| e.is_valid_for_constant()) {
-                    valid = false
-                }
-            },
-            _ => valid = false,
-        };
-        self.visit(&mut visitor);
-        valid
     }
 
     /// Visits expression, calling visitor on each sub-expression, depth first.
@@ -767,10 +717,6 @@ impl ExpData {
                 }
             },
             Assign(_, _, e) => e.visit_pre_post(visitor),
-            Mutate(_, lhs, rhs) => {
-                lhs.visit_pre_post(visitor);
-                rhs.visit_pre_post(visitor);
-            },
             // Explicitly list all enum variants
             LoopCont(..) | Value(..) | LocalVar(..) | Temporary(..) | Invalid(..) => {},
         }
@@ -851,10 +797,7 @@ impl ExpData {
             if let ExpData::Call(_, oper, _) = e {
                 use Operation::*;
                 match oper {
-                    SpecFunction(mid, ..)
-                    | Pack(mid, ..)
-                    | Select(mid, ..)
-                    | UpdateField(mid, ..) => {
+                    Function(mid, ..) | Pack(mid, ..) | Select(mid, ..) | UpdateField(mid, ..) => {
                         usage.insert(*mid);
                     },
                     _ => {},
@@ -956,23 +899,17 @@ impl<'a> ExpRewriterFunctions for ExpRewriter<'a> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Operation {
-    MoveFunction(ModuleId, FunId),
-    SpecFunction(ModuleId, SpecFunId, Option<Vec<MemoryLabel>>),
+    Function(ModuleId, SpecFunId, Option<Vec<MemoryLabel>>),
     Pack(ModuleId, StructId),
     Tuple,
-
-    // Specification specific
     Select(ModuleId, StructId, FieldId),
     UpdateField(ModuleId, StructId, FieldId),
     Result(usize),
     Index,
     Slice,
-    Range,
-    Implies,
-    Iff,
-    Identical,
 
     // Binary operators
+    Range,
     Add,
     Sub,
     Mul,
@@ -983,9 +920,12 @@ pub enum Operation {
     Xor,
     Shl,
     Shr,
+    Implies,
+    Iff,
     And,
     Or,
     Eq,
+    Identical,
     Neq,
     Lt,
     Gt,
@@ -996,29 +936,16 @@ pub enum Operation {
     Not,
     Cast,
 
-    // Builtin functions (impl and spec)
-    Exists(Option<MemoryLabel>),
-
-    // Builtin functions (impl only)
-    BorrowGlobal(ReferenceKind),
-    Borrow(ReferenceKind),
-    Deref,
-    MoveTo,
-    MoveFrom,
-    Freeze,
-    Abort,
-    Vector,
-
-    // Builtin functions (spec only)
+    // Builtin functions
     Len,
     TypeValue,
     TypeDomain,
     ResourceDomain,
     Global(Option<MemoryLabel>),
+    Exists(Option<MemoryLabel>),
     CanModify,
     Old,
     Trace(TraceKind),
-
     EmptyVec,
     SingleVec,
     UpdateVec,
@@ -1133,19 +1060,18 @@ impl fmt::Display for TraceKind {
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Value {
-    Address(Address),
+    Address(BigUint),
     Number(BigInt),
     Bool(bool),
     ByteArray(Vec<u8>),
-    AddressArray(Vec<Address>), // TODO: merge AddressArray to Vector type in the future
+    AddressArray(Vec<BigUint>), // TODO: merge AddressArray to Vector type in the future
     Vector(Vec<Value>),
 }
 
-// enables `env.display(&value)`
-impl<'a> fmt::Display for EnvDisplay<'a, Value> {
+impl fmt::Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        match self.val {
-            Value::Address(address) => write!(f, "{}", self.env.display(address)),
+        match self {
+            Value::Address(address) => write!(f, "{:x}", address),
             Value::Number(int) => write!(f, "{}", int),
             Value::Bool(b) => write!(f, "{}", b),
             // TODO(tzakian): Figure out a better story for byte array displays
@@ -1168,51 +1094,9 @@ impl Operation {
         use Operation::*;
         match self {
             Exists(_) | Global(_) => false,
-            SpecFunction(mid, fid, _) => check_pure(*mid, *fid),
+            Function(mid, fid, _) => check_pure(*mid, *fid),
             _ => true,
         }
-    }
-
-    /// Determines whether this is a builtin operator
-    pub fn is_builtin_op(&self) -> bool {
-        use Operation::*;
-        matches!(
-            self,
-            Tuple
-                | Index
-                | Slice
-                | Range
-                | Implies
-                | Iff
-                | Identical
-                | Add
-                | Sub
-                | Mul
-                | Mod
-                | Div
-                | BitOr
-                | BitAnd
-                | Xor
-                | Shl
-                | Shr
-                | And
-                | Or
-                | Eq
-                | Neq
-                | Lt
-                | Gt
-                | Le
-                | Ge
-                | Not
-                | Cast
-                | Len
-        )
-    }
-
-    /// Whether the operation alllows to take reference parameters instead of values. This applies
-    /// currently to equality which can be used on `(T, T)`, `(T, &T)`, etc.
-    pub fn allows_ref_param_for_value(&self) -> bool {
-        matches!(self, Operation::Eq | Operation::Neq)
     }
 }
 
@@ -1249,7 +1133,7 @@ impl ExpData {
                 },
                 Call(_, oper, _) => match oper {
                     Exists(..) | Global(..) => is_pure = false,
-                    SpecFunction(mid, fid, _) => {
+                    Function(mid, fid, _) => {
                         let module = env.get_module(*mid);
                         let fun = module.get_spec_fun(*fid);
                         if !fun.used_memory.is_empty() {
@@ -1269,47 +1153,12 @@ impl ExpData {
 // =================================================================================================
 /// # Names
 
-/// Represents an account address, which can be either numerical or a symbol
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
-pub enum Address {
-    Numerical(AccountAddress),
-    Symbolic(Symbol),
-}
-
-impl Address {
-    pub fn from_hex(mut s: &str) -> anyhow::Result<Address> {
-        if s.starts_with("0x") {
-            s = &s[2..]
-        }
-        let addr = AccountAddress::from_hex_literal(s).map(Address::Numerical)?;
-        Ok(addr)
-    }
-
-    pub fn expect_numerical(&self) -> AccountAddress {
-        if let Address::Numerical(a) = self {
-            *a
-        } else {
-            panic!("expected numerical address, found symbolic")
-        }
-    }
-}
-
-// enables `env.display(address)`
-impl<'a> fmt::Display for EnvDisplay<'a, Address> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self.val {
-            Address::Numerical(addr) => write!(f, "0x{}", addr.short_str_lossless()),
-            Address::Symbolic(sym) => write!(f, "{}", sym.display(self.env.symbol_pool())),
-        }
-    }
-}
-
 /// Represents a module name, consisting of address and name.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
-pub struct ModuleName(Address, Symbol);
+pub struct ModuleName(BigUint, Symbol);
 
 impl ModuleName {
-    pub fn new(addr: Address, name: Symbol) -> ModuleName {
+    pub fn new(addr: BigUint, name: Symbol) -> ModuleName {
         ModuleName(addr, name)
     }
 
@@ -1317,19 +1166,18 @@ impl ModuleName {
         addr: move_compiler::shared::NumericalAddress,
         name: Symbol,
     ) -> ModuleName {
-        ModuleName(Address::Numerical(addr.into_inner()), name)
+        ModuleName(BigUint::from_bytes_be(&addr.into_bytes()), name)
     }
 
-    pub fn from_str(addr: &str, name: Symbol) -> ModuleName {
-        let addr = if !addr.starts_with("0x") {
-            AccountAddress::from_hex_literal(&format!("0x{}", addr))
-        } else {
-            AccountAddress::from_hex_literal(addr)
-        };
-        ModuleName(Address::Numerical(addr.expect("valid address")), name)
+    pub fn from_str(mut addr: &str, name: Symbol) -> ModuleName {
+        if addr.starts_with("0x") {
+            addr = &addr[2..];
+        }
+        let bi = BigUint::from_str_radix(addr, 16).expect("valid hex");
+        ModuleName(bi, name)
     }
 
-    pub fn addr(&self) -> &Address {
+    pub fn addr(&self) -> &BigUint {
         &self.0
     }
 
@@ -1340,27 +1188,30 @@ impl ModuleName {
     /// Determine whether this is a script. The move-compiler infrastructure uses MAX_ADDR
     /// for pseudo modules created from scripts, so use this address to check.
     pub fn is_script(&self) -> bool {
-        self.0 == Address::Numerical(AccountAddress::new([0xFF; AccountAddress::LENGTH]))
+        static MAX_ADDR: Lazy<BigUint> = Lazy::new(|| {
+            BigUint::from_str_radix("ffffffffffffffffffffffffffffffff", 16).expect("valid hex")
+        });
+        self.0 == *MAX_ADDR
     }
 }
 
 impl ModuleName {
     /// Creates a value implementing the Display trait which shows this name,
     /// excluding address.
-    pub fn display<'a>(&'a self, env: &'a GlobalEnv) -> ModuleNameDisplay<'a> {
+    pub fn display<'a>(&'a self, pool: &'a SymbolPool) -> ModuleNameDisplay<'a> {
         ModuleNameDisplay {
             name: self,
-            env,
+            pool,
             with_address: false,
         }
     }
 
     /// Creates a value implementing the Display trait which shows this name,
     /// including address.
-    pub fn display_full<'a>(&'a self, env: &'a GlobalEnv) -> ModuleNameDisplay<'a> {
+    pub fn display_full<'a>(&'a self, pool: &'a SymbolPool) -> ModuleNameDisplay<'a> {
         ModuleNameDisplay {
             name: self,
-            env,
+            pool,
             with_address: true,
         }
     }
@@ -1369,16 +1220,17 @@ impl ModuleName {
 /// A helper to support module names in formatting.
 pub struct ModuleNameDisplay<'a> {
     name: &'a ModuleName,
-    env: &'a GlobalEnv,
+    pool: &'a SymbolPool,
     with_address: bool,
 }
 
 impl<'a> fmt::Display for ModuleNameDisplay<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         if self.with_address && !self.name.is_script() {
-            write!(f, "{}::", self.env.display(&self.name.0))?
+            write!(f, "0x{}::", self.name.0.to_str_radix(16))?;
         }
-        write!(f, "{}", self.name.1.display(self.env.symbol_pool()))
+        write!(f, "{}", self.name.1.display(self.pool))?;
+        Ok(())
     }
 }
 
@@ -1391,10 +1243,10 @@ pub struct QualifiedSymbol {
 impl QualifiedSymbol {
     /// Creates a value implementing the Display trait which shows this symbol,
     /// including module name but excluding address.
-    pub fn display<'a>(&'a self, env: &'a GlobalEnv) -> QualifiedSymbolDisplay<'a> {
+    pub fn display<'a>(&'a self, pool: &'a SymbolPool) -> QualifiedSymbolDisplay<'a> {
         QualifiedSymbolDisplay {
             sym: self,
-            env,
+            pool,
             with_module: true,
             with_address: false,
         }
@@ -1402,10 +1254,10 @@ impl QualifiedSymbol {
 
     /// Creates a value implementing the Display trait which shows this qualified symbol,
     /// excluding module name.
-    pub fn display_simple<'a>(&'a self, env: &'a GlobalEnv) -> QualifiedSymbolDisplay<'a> {
+    pub fn display_simple<'a>(&'a self, pool: &'a SymbolPool) -> QualifiedSymbolDisplay<'a> {
         QualifiedSymbolDisplay {
             sym: self,
-            env,
+            pool,
             with_module: false,
             with_address: false,
         }
@@ -1413,10 +1265,10 @@ impl QualifiedSymbol {
 
     /// Creates a value implementing the Display trait which shows this symbol,
     /// including module name with address.
-    pub fn display_full<'a>(&'a self, env: &'a GlobalEnv) -> QualifiedSymbolDisplay<'a> {
+    pub fn display_full<'a>(&'a self, pool: &'a SymbolPool) -> QualifiedSymbolDisplay<'a> {
         QualifiedSymbolDisplay {
             sym: self,
-            env,
+            pool,
             with_module: true,
             with_address: true,
         }
@@ -1426,7 +1278,7 @@ impl QualifiedSymbol {
 /// A helper to support qualified symbols in formatting.
 pub struct QualifiedSymbolDisplay<'a> {
     sym: &'a QualifiedSymbol,
-    env: &'a GlobalEnv,
+    pool: &'a SymbolPool,
     with_module: bool,
     with_address: bool,
 }
@@ -1438,13 +1290,13 @@ impl<'a> fmt::Display for QualifiedSymbolDisplay<'a> {
                 f,
                 "{}::",
                 if self.with_address {
-                    self.sym.module_name.display_full(self.env)
+                    self.sym.module_name.display_full(self.pool)
                 } else {
-                    self.sym.module_name.display(self.env)
+                    self.sym.module_name.display(self.pool)
                 }
             )?;
         }
-        write!(f, "{}", self.sym.symbol.display(self.env.symbol_pool()))?;
+        write!(f, "{}", self.sym.symbol.display(self.pool))?;
         Ok(())
     }
 }
@@ -1452,29 +1304,7 @@ impl<'a> fmt::Display for QualifiedSymbolDisplay<'a> {
 impl ExpData {
     /// Creates a display of an expression which can be used in formatting.
     pub fn display<'a>(&'a self, env: &'a GlobalEnv) -> ExpDisplay<'a> {
-        ExpDisplay {
-            env,
-            exp: self,
-            fun_env: None,
-        }
-    }
-
-    /// Creates a display of an expression which can be used in formatting, based
-    /// on a function env for getting names of locals and type parameters.
-    pub fn display_for_fun<'a>(&'a self, fun_env: FunctionEnv<'a>) -> ExpDisplay<'a> {
-        ExpDisplay {
-            env: fun_env.module_env.env,
-            exp: self,
-            fun_env: Some(fun_env),
-        }
-    }
-
-    fn display_cont<'a>(&'a self, other: &ExpDisplay<'a>) -> ExpDisplay<'a> {
-        ExpDisplay {
-            env: other.env,
-            exp: self,
-            fun_env: other.fun_env.clone(),
-        }
+        ExpDisplay { env, exp: self }
     }
 }
 
@@ -1482,7 +1312,6 @@ impl ExpData {
 pub struct ExpDisplay<'a> {
     env: &'a GlobalEnv,
     exp: &'a ExpData,
-    fun_env: Option<FunctionEnv<'a>>,
 }
 
 impl<'a> fmt::Display for ExpDisplay<'a> {
@@ -1490,43 +1319,31 @@ impl<'a> fmt::Display for ExpDisplay<'a> {
         use ExpData::*;
         match self.exp {
             Invalid(_) => write!(f, "*invalid*"),
-            Value(_, v) => write!(f, "{}", self.env.display(v)),
-            LocalVar(_, name) => {
-                write!(f, "{}", name.display(self.env.symbol_pool()))
-            },
-            Temporary(_, idx) => {
-                if let Some(name) = self
-                    .fun_env
-                    .as_ref()
-                    .and_then(|fe| fe.get_parameters().get(*idx).map(|p| p.0))
-                {
-                    write!(f, "{}", name.display(self.env.symbol_pool()))
-                } else {
-                    write!(f, "$t{}", idx)
-                }
-            },
+            Value(_, v) => write!(f, "{}", v),
+            LocalVar(_, name) => write!(f, "{}", name.display(self.env.symbol_pool())),
+            Temporary(_, idx) => write!(f, "$t{}", idx),
             Call(node_id, oper, args) => {
                 write!(
                     f,
                     "{}({})",
-                    oper.display_for_exp(self, *node_id),
+                    oper.display(self.env, *node_id),
                     self.fmt_exps(args)
                 )
             },
             Lambda(_, pat, body) => {
-                write!(f, "|{}| {}", self.fmt_pattern(pat), body.display_cont(self))
+                write!(f, "|{}| {}", self.fmt_pattern(pat), body.display(self.env))
             },
             Block(_, pat, binding, body) => {
                 write!(
                     f,
-                    "{{\n  let {}{};\n  {}\n}}",
-                    indent(self.fmt_pattern(pat)),
+                    "{{let {}{}; {}}}",
+                    self.fmt_pattern(pat),
                     if let Some(exp) = binding {
-                        indent(format!(" = {}", exp.display_cont(self)))
+                        format!(" = {}", exp.display(self.env))
                     } else {
                         "".to_string()
                     },
-                    indent(body.display_cont(self))
+                    body.display(self.env)
                 )
             },
             Quant(_, kind, ranges, triggers, opt_where, body) => {
@@ -1536,7 +1353,7 @@ impl<'a> fmt::Display for ExpDisplay<'a> {
                     .collect_vec()
                     .join("");
                 let where_str = if let Some(exp) = opt_where {
-                    format!(" where {}", exp.display_cont(self))
+                    format!(" where {}", exp.display(self.env))
                 } else {
                     "".to_string()
                 };
@@ -1547,19 +1364,19 @@ impl<'a> fmt::Display for ExpDisplay<'a> {
                     self.fmt_quant_ranges(ranges),
                     triggers_str,
                     where_str,
-                    body.display_cont(self)
+                    body.display(self.env)
                 )
             },
             Invoke(_, fun, args) => {
-                write!(f, "({})({})", fun.display_cont(self), self.fmt_exps(args))
+                write!(f, "({})({})", fun.display(self.env), self.fmt_exps(args))
             },
             IfElse(_, cond, if_exp, else_exp) => {
                 write!(
                     f,
-                    "if {} {{\n  {}\n}} else {{\n  {}\n}}",
-                    cond.display_cont(self),
-                    indent(if_exp.display_cont(self)),
-                    indent(else_exp.display_cont(self))
+                    "(if {} {{{}}} else {{{}}})",
+                    cond.display(self.env),
+                    if_exp.display(self.env),
+                    else_exp.display(self.env)
                 )
             },
             Sequence(_, es) => {
@@ -1567,58 +1384,36 @@ impl<'a> fmt::Display for ExpDisplay<'a> {
                     if i > 0 {
                         writeln!(f, ";")?
                     }
-                    write!(f, "{}", e.display_cont(self))?
+                    write!(f, "{}", e.display(self.env))?
                 }
                 Ok(())
             },
             Loop(_, e) => {
-                write!(f, "loop {{\n  {}\n}}", indent(e.display_cont(self)))
+                write!(f, "loop {{\n{}\n}}", e.display(self.env))
             },
             LoopCont(_, true) => write!(f, "continue"),
             LoopCont(_, false) => write!(f, "break"),
-            Return(_, e) => write!(f, "return {}", e.display_cont(self)),
+            Return(_, e) => write!(f, "return {}", e.display(self.env)),
             Assign(_, lhs, rhs) => {
-                write!(f, "{} = {}", self.fmt_pattern(lhs), rhs.display_cont(self))
-            },
-            Mutate(_, lhs, rhs) => {
-                write!(f, "{} = {}", lhs.display_cont(self), rhs.display_cont(self))
+                write!(f, "{} = {}", self.fmt_pattern(lhs), rhs.display(self.env))
             },
         }
     }
-}
-
-fn indent(fmt: impl fmt::Display) -> String {
-    let s = fmt.to_string();
-    s.replace('\n', "\n  ")
 }
 
 impl<'a> ExpDisplay<'a> {
-    fn type_ctx(&self) -> TypeDisplayContext<'a> {
-        if let Some(fe) = &self.fun_env {
-            fe.get_type_display_ctx()
-        } else {
-            TypeDisplayContext::new(self.env)
-        }
-    }
-
     fn fmt_patterns(&self, patterns: &[Pattern]) -> String {
         patterns.iter().map(|pat| self.fmt_pattern(pat)).join(", ")
     }
 
     pub fn fmt_pattern(&self, pat: &Pattern) -> String {
         match pat {
-            Pattern::Var(id, name) => {
-                let tctx = self.type_ctx();
-                let ty = self.env.get_node_type(*id);
-                format!(
-                    "{}: {}",
-                    name.display(self.env.symbol_pool()),
-                    ty.display(&tctx)
-                )
+            Pattern::Var(_, name) => {
+                format!("{}", name.display(self.env.symbol_pool()))
             },
             Pattern::Tuple(_, args) => format!("({})", self.fmt_patterns(args)),
             Pattern::Struct(_, struct_id, args) => {
-                let tctx = self.type_ctx();
+                let tctx = self.env.get_type_display_ctx();
                 let inst_str = if !struct_id.inst.is_empty() {
                     format!(
                         "<{}>",
@@ -1657,15 +1452,13 @@ impl<'a> ExpDisplay<'a> {
     fn fmt_quant_ranges(&self, ranges: &[(Pattern, Exp)]) -> String {
         ranges
             .iter()
-            .map(|(pat, domain)| {
-                format!("{}: {}", self.fmt_pattern(pat), domain.display_cont(self))
-            })
+            .map(|(pat, domain)| format!("{}: {}", self.fmt_pattern(pat), domain.display(self.env)))
             .join(", ")
     }
 
     fn fmt_exps(&self, exps: &[Exp]) -> String {
         exps.iter()
-            .map(|e| e.display_cont(self).to_string())
+            .map(|e| e.display(self.env).to_string())
             .join(", ")
     }
 }
@@ -1677,25 +1470,6 @@ impl Operation {
             env,
             oper: self,
             node_id,
-            tctx: TypeDisplayContext::new(env),
-        }
-    }
-
-    fn display_for_exp<'a>(
-        &'a self,
-        exp_display: &'a ExpDisplay,
-        node_id: NodeId,
-    ) -> OperationDisplay<'a> {
-        let tctx = if let Some(fe) = &exp_display.fun_env {
-            fe.get_type_display_ctx()
-        } else {
-            TypeDisplayContext::new(exp_display.env)
-        };
-        OperationDisplay {
-            env: exp_display.env,
-            oper: self,
-            node_id,
-            tctx,
         }
     }
 }
@@ -1705,14 +1479,13 @@ pub struct OperationDisplay<'a> {
     env: &'a GlobalEnv,
     node_id: NodeId,
     oper: &'a Operation,
-    tctx: TypeDisplayContext<'a>,
 }
 
 impl<'a> fmt::Display for OperationDisplay<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         use Operation::*;
         match self.oper {
-            SpecFunction(mid, fid, labels_opt) => {
+            Function(mid, fid, labels_opt) => {
                 write!(f, "{}", self.fun_str(mid, fid))?;
                 if let Some(labels) = labels_opt {
                     write!(
@@ -1722,15 +1495,6 @@ impl<'a> fmt::Display for OperationDisplay<'a> {
                     )?;
                 }
                 Ok(())
-            },
-            MoveFunction(mid, fid) => {
-                write!(
-                    f,
-                    "{}",
-                    self.env
-                        .get_function(mid.qualified(*fid))
-                        .get_full_name_str()
-                )
             },
             Global(label_opt) => {
                 write!(f, "global")?;
@@ -1760,10 +1524,14 @@ impl<'a> fmt::Display for OperationDisplay<'a> {
         // If operation has a type instantiation, add it.
         let type_inst = self.env.get_node_instantiation(self.node_id);
         if !type_inst.is_empty() {
+            let tctx = TypeDisplayContext::WithEnv {
+                env: self.env,
+                type_param_names: None,
+            };
             write!(
                 f,
                 "<{}>",
-                type_inst.iter().map(|ty| ty.display(&self.tctx)).join(", ")
+                type_inst.iter().map(|ty| ty.display(&tctx)).join(", ")
             )?;
         }
         Ok(())
@@ -1776,7 +1544,7 @@ impl<'a> OperationDisplay<'a> {
         let fun = module_env.get_spec_fun(*fid);
         format!(
             "{}::{}",
-            module_env.get_name().display(self.env),
+            module_env.get_name().display(self.env.symbol_pool()),
             fun.name.display(self.env.symbol_pool()),
         )
     }
@@ -1786,7 +1554,7 @@ impl<'a> OperationDisplay<'a> {
         let struct_env = module_env.get_struct(*sid);
         format!(
             "{}::{}",
-            module_env.get_name().display(self.env),
+            module_env.get_name().display(self.env.symbol_pool()),
             struct_env.get_name().display(self.env.symbol_pool()),
         )
     }

@@ -85,7 +85,7 @@ impl GenesisTool {
 #[derive(Parser)]
 pub struct GenerateGenesis {
     /// Output directory for Genesis file and waypoint
-    #[clap(long, value_parser)]
+    #[clap(long, parse(from_os_str))]
     output_dir: Option<PathBuf>,
     /// Whether this is mainnet genesis.
     ///

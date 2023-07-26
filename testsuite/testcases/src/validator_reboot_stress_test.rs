@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::NetworkLoadTest;
-use aptos_forge::{NetworkContext, NetworkTest, Result, Swarm, Test, TestReport};
+use aptos_forge::{NetworkContext, NetworkTest, Result, Swarm, Test};
 use rand::{seq::SliceRandom, thread_rng};
 use std::time::Duration;
 use tokio::{runtime::Runtime, time::Instant};
@@ -20,12 +20,7 @@ impl Test for ValidatorRebootStressTest {
 }
 
 impl NetworkLoadTest for ValidatorRebootStressTest {
-    fn test(
-        &self,
-        swarm: &mut dyn Swarm,
-        _report: &mut TestReport,
-        duration: Duration,
-    ) -> Result<()> {
+    fn test(&self, swarm: &mut dyn Swarm, duration: Duration) -> Result<()> {
         let start = Instant::now();
         let runtime = Runtime::new().unwrap();
 
@@ -61,7 +56,7 @@ impl NetworkLoadTest for ValidatorRebootStressTest {
 }
 
 impl NetworkTest for ValidatorRebootStressTest {
-    fn run(&self, ctx: &mut NetworkContext<'_>) -> Result<()> {
+    fn run<'t>(&self, ctx: &mut NetworkContext<'t>) -> Result<()> {
         <dyn NetworkLoadTest>::run(self, ctx)
     }
 }

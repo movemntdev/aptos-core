@@ -13,7 +13,7 @@ use rand::{
     Rng, SeedableRng,
 };
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct RandomizedStrategy {
     gen: StdRng,
 }
@@ -46,6 +46,7 @@ impl PartitionStrategy for RandomizedStrategy {
     }
 }
 
+#[derive(Debug)]
 pub struct RandomExecutor {
     strategy: RandomizedStrategy,
     executor: FakeExecutor,

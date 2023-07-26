@@ -19,12 +19,7 @@ mod transactions_test;
 mod view_function;
 
 use aptos_api_test_context::{new_test_context as super_new_test_context, TestContext};
-use aptos_config::config::NodeConfig;
 
 fn new_test_context(test_name: String) -> TestContext {
-    new_test_context_with_config(test_name, NodeConfig::default())
-}
-
-fn new_test_context_with_config(test_name: String, node_config: NodeConfig) -> TestContext {
-    super_new_test_context(test_name, node_config, false)
+    super_new_test_context(test_name, false)
 }

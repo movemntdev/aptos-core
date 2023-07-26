@@ -22,8 +22,7 @@ use move_core_types::{
     ident_str,
     identifier::{IdentStr, Identifier},
     language_storage::{ModuleId, StructTag},
-    metadata::Metadata,
-    resolver::{resource_size, ModuleResolver, ResourceResolver},
+    resolver::{ModuleResolver, ResourceResolver},
 };
 use move_prover_test_utils::{baseline_test::verify_or_update_baseline, extract_test_directives};
 use move_vm_test_utils::gas_schedule::GasStatus;
@@ -379,10 +378,6 @@ struct HarnessProxy<'a> {
 }
 
 impl<'a> ModuleResolver for HarnessProxy<'a> {
-    fn get_module_metadata(&self, _module_id: &ModuleId) -> Vec<Metadata> {
-        vec![]
-    }
-
     fn get_module(&self, id: &ModuleId) -> Result<Option<Vec<u8>>, Error> {
         Ok(self
             .harness
@@ -393,20 +388,18 @@ impl<'a> ModuleResolver for HarnessProxy<'a> {
 }
 
 impl<'a> ResourceResolver for HarnessProxy<'a> {
-    fn get_resource_with_metadata(
+    fn get_resource(
         &self,
         address: &AccountAddress,
         typ: &StructTag,
-        _metadata: &[Metadata],
-    ) -> anyhow::Result<(Option<Vec<u8>>, usize)> {
+    ) -> Result<Option<Vec<u8>>, Error> {
         let res = self
             .harness
             .resource_store
             .borrow()
             .get(&(*address, typ.clone()))
             .cloned();
-        let res_size = resource_size(&res);
-        Ok((res, res_size))
+        Ok(res)
     }
 }
 

@@ -6,7 +6,6 @@
 
 use crate::{
     errors::AptosDbError,
-    ledger_db::LedgerDb,
     schema::{
         transaction::TransactionSchema, transaction_by_account::TransactionByAccountSchema,
         transaction_by_hash::TransactionByHashSchema, write_set::WriteSetSchema,
@@ -17,7 +16,7 @@ use crate::{
 };
 use anyhow::{ensure, format_err, Result};
 use aptos_crypto::{hash::CryptoHash, HashValue};
-use aptos_schemadb::{ReadOptions, SchemaBatch};
+use aptos_schemadb::{ReadOptions, SchemaBatch, DB};
 use aptos_types::{
     account_address::AccountAddress,
     proof::position::Position,
@@ -31,12 +30,12 @@ mod test;
 
 #[derive(Clone, Debug)]
 pub struct TransactionStore {
-    ledger_db: Arc<LedgerDb>,
+    db: Arc<DB>,
 }
 
 impl TransactionStore {
-    pub fn new(ledger_db: Arc<LedgerDb>) -> Self {
-        Self { ledger_db }
+    pub fn new(db: Arc<DB>) -> Self {
+        Self { db }
     }
 
     /// Gets the version of a transaction by the sender `address` and `sequence_number`.
@@ -47,8 +46,7 @@ impl TransactionStore {
         ledger_version: Version,
     ) -> Result<Option<Version>> {
         if let Some(version) = self
-            .ledger_db
-            .transaction_db()
+            .db
             .get::<TransactionByAccountSchema>(&(address, sequence_number))?
         {
             if version <= ledger_version {
@@ -65,16 +63,10 @@ impl TransactionStore {
         hash: &HashValue,
         ledger_version: Version,
     ) -> Result<Option<Version>> {
-        Ok(
-            match self
-                .ledger_db
-                .transaction_db()
-                .get::<TransactionByHashSchema>(hash)?
-            {
-                Some(version) if version <= ledger_version => Some(version),
-                _ => None,
-            },
-        )
+        Ok(match self.db.get::<TransactionByHashSchema>(hash)? {
+            Some(version) if version <= ledger_version => Some(version),
+            _ => None,
+        })
     }
 
     /// Gets an iterator that yields `(sequence_number, version)` for each
@@ -91,8 +83,7 @@ impl TransactionStore {
         ledger_version: Version,
     ) -> Result<AccountTransactionVersionIter> {
         let mut iter = self
-            .ledger_db
-            .transaction_db()
+            .db
             .iter::<TransactionByAccountSchema>(ReadOptions::default())?;
         iter.seek(&(address, min_seq_num))?;
         Ok(AccountTransactionVersionIter::new(
@@ -107,8 +98,7 @@ impl TransactionStore {
 
     /// Get signed transaction given `version`
     pub fn get_transaction(&self, version: Version) -> Result<Transaction> {
-        self.ledger_db
-            .transaction_db()
+        self.db
             .get::<TransactionSchema>(&version)?
             .ok_or_else(|| AptosDbError::NotFound(format!("Txn {}", version)).into())
     }
@@ -119,10 +109,7 @@ impl TransactionStore {
         start_version: Version,
         num_transactions: usize,
     ) -> Result<impl Iterator<Item = Result<Transaction>> + '_> {
-        let mut iter = self
-            .ledger_db
-            .transaction_db()
-            .iter::<TransactionSchema>(ReadOptions::default())?;
+        let mut iter = self.db.iter::<TransactionSchema>(ReadOptions::default())?;
         iter.seek(&start_version)?;
         iter.expect_continuous_versions(start_version, num_transactions)
     }
@@ -133,10 +120,7 @@ impl TransactionStore {
         start_version: Version,
         num_transactions: usize,
     ) -> Result<impl Iterator<Item = Result<WriteSet>> + '_> {
-        let mut iter = self
-            .ledger_db
-            .write_set_db()
-            .iter::<WriteSetSchema>(ReadOptions::default())?;
+        let mut iter = self.db.iter::<WriteSetSchema>(ReadOptions::default())?;
         iter.seek(&start_version)?;
         iter.expect_continuous_versions(start_version, num_transactions)
     }
@@ -146,16 +130,13 @@ impl TransactionStore {
         &self,
         version: Version,
         transaction: &Transaction,
-        skip_index: bool,
         batch: &SchemaBatch,
     ) -> Result<()> {
-        if !skip_index {
-            if let Some(txn) = transaction.try_as_signed_user_txn() {
-                batch.put::<TransactionByAccountSchema>(
-                    &(txn.sender(), txn.sequence_number()),
-                    &version,
-                )?;
-            }
+        if let Some(txn) = transaction.try_as_signed_user_txn() {
+            batch.put::<TransactionByAccountSchema>(
+                &(txn.sender(), txn.sequence_number()),
+                &version,
+            )?;
         }
         batch.put::<TransactionByHashSchema>(&transaction.hash(), &version)?;
         batch.put::<TransactionSchema>(&version, transaction)?;
@@ -165,12 +146,9 @@ impl TransactionStore {
 
     /// Get executed transaction vm output given `version`
     pub fn get_write_set(&self, version: Version) -> Result<WriteSet> {
-        self.ledger_db
-            .write_set_db()
-            .get::<WriteSetSchema>(&version)?
-            .ok_or_else(|| {
-                AptosDbError::NotFound(format!("WriteSet at version {}", version)).into()
-            })
+        self.db.get::<WriteSetSchema>(&version)?.ok_or_else(|| {
+            AptosDbError::NotFound(format!("WriteSet at version {}", version)).into()
+        })
     }
 
     /// Get write sets in `[begin_version, end_version)` half-open range.
@@ -191,10 +169,7 @@ impl TransactionStore {
             end_version
         );
 
-        let mut iter = self
-            .ledger_db
-            .write_set_db()
-            .iter::<WriteSetSchema>(Default::default())?;
+        let mut iter = self.db.iter::<WriteSetSchema>(Default::default())?;
         iter.seek(&begin_version)?;
 
         let mut ret = Vec::with_capacity((end_version - begin_version) as usize);

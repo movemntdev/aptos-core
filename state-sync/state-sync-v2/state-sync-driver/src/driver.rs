@@ -14,7 +14,7 @@ use crate::{
     notification_handlers::{
         CommitNotification, CommitNotificationListener, CommittedTransactions,
         ConsensusNotificationHandler, ErrorNotification, ErrorNotificationListener,
-        MempoolNotificationHandler, StorageServiceNotificationHandler,
+        MempoolNotificationHandler,
     },
     storage_synchronizer::StorageSynchronizerInterface,
     utils,
@@ -24,7 +24,7 @@ use aptos_config::config::{RoleType, StateSyncDriverConfig};
 use aptos_consensus_notifications::{
     ConsensusCommitNotification, ConsensusNotification, ConsensusSyncNotification,
 };
-use aptos_data_client::interface::AptosDataClientInterface;
+use aptos_data_client::AptosDataClient;
 use aptos_data_streaming_service::streaming_client::{
     DataStreamingClient, NotificationAndFeedback, NotificationFeedback,
 };
@@ -33,7 +33,6 @@ use aptos_infallible::Mutex;
 use aptos_logger::prelude::*;
 use aptos_mempool_notifications::MempoolNotificationSender;
 use aptos_storage_interface::DbReader;
-use aptos_storage_service_notifications::StorageServiceNotificationSender;
 use aptos_time_service::{TimeService, TimeServiceTrait};
 use aptos_types::waypoint::Waypoint;
 use futures::StreamExt;
@@ -75,7 +74,6 @@ pub struct StateSyncDriver<
     DataClient,
     MempoolNotifier,
     MetadataStorage,
-    StorageServiceNotifier,
     StorageSyncer,
     StreamingClient,
 > {
@@ -115,9 +113,6 @@ pub struct StateSyncDriver<
     // The interface to read from storage
     storage: Arc<dyn DbReader>,
 
-    // The handler for notifications to the storage service
-    storage_service_notification_handler: StorageServiceNotificationHandler<StorageServiceNotifier>,
-
     // The storage synchronizer used to update local storage
     storage_synchronizer: StorageSyncer,
 
@@ -126,21 +121,13 @@ pub struct StateSyncDriver<
 }
 
 impl<
-        DataClient: AptosDataClientInterface + Send + Clone + 'static,
+        DataClient: AptosDataClient + Send + Clone + 'static,
         MempoolNotifier: MempoolNotificationSender,
         MetadataStorage: MetadataStorageInterface + Clone,
-        StorageServiceNotifier: StorageServiceNotificationSender,
         StorageSyncer: StorageSynchronizerInterface + Clone,
         StreamingClient: DataStreamingClient + Clone,
     >
-    StateSyncDriver<
-        DataClient,
-        MempoolNotifier,
-        MetadataStorage,
-        StorageServiceNotifier,
-        StorageSyncer,
-        StreamingClient,
-    >
+    StateSyncDriver<DataClient, MempoolNotifier, MetadataStorage, StorageSyncer, StreamingClient>
 {
     pub fn new(
         client_notification_listener: ClientNotificationListener,
@@ -151,9 +138,6 @@ impl<
         event_subscription_service: Arc<Mutex<EventSubscriptionService>>,
         mempool_notification_handler: MempoolNotificationHandler<MempoolNotifier>,
         metadata_storage: MetadataStorage,
-        storage_service_notification_handler: StorageServiceNotificationHandler<
-            StorageServiceNotifier,
-        >,
         storage_synchronizer: StorageSyncer,
         aptos_data_client: DataClient,
         streaming_client: StreamingClient,
@@ -191,7 +175,6 @@ impl<
             mempool_notification_handler,
             start_time: None,
             storage,
-            storage_service_notification_handler,
             storage_synchronizer,
             time_service,
         }
@@ -213,8 +196,6 @@ impl<
                     self.handle_client_notification(notification).await;
                 },
                 notification = self.commit_notification_listener.select_next_some() => {
-                    // TODO(joshlind): we should probably just remove this path
-                    // now that we aren't reusing it.
                     self.handle_commit_notification(notification).await;
                 }
                 notification = self.consensus_notification_handler.select_next_some() => {
@@ -316,7 +297,6 @@ impl<
             self.storage.clone(),
             self.mempool_notification_handler.clone(),
             self.event_subscription_service.clone(),
-            self.storage_service_notification_handler.clone(),
         )
         .await;
 
@@ -432,7 +412,6 @@ impl<
             self.storage.clone(),
             self.mempool_notification_handler.clone(),
             self.event_subscription_service.clone(),
-            self.storage_service_notification_handler.clone(),
         )
         .await;
     }

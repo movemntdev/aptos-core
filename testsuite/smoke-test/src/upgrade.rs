@@ -101,7 +101,6 @@ async fn test_upgrade_flow() {
     upgrade_scripts_folder.create_as_dir().unwrap();
 
     let config = aptos_release_builder::ReleaseConfig {
-        name: "Default".to_string(),
         remote_endpoint: None,
         proposals: vec![
             Proposal {

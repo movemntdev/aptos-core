@@ -55,7 +55,7 @@ pub(crate) fn generate_next_execution_hash_blob(
 
 pub(crate) fn generate_governance_proposal_header(
     writer: &CodeWriter,
-    deps_names: &[&str],
+    deps_name: &str,
     is_multi_step: bool,
     next_execution_hash: Vec<u8>,
 ) {
@@ -63,9 +63,7 @@ pub(crate) fn generate_governance_proposal_header(
     writer.indent();
 
     emitln!(writer, "use aptos_framework::aptos_governance;");
-    for deps_name in deps_names {
-        emitln!(writer, "use {};", deps_name);
-    }
+    emitln!(writer, "use {};", deps_name);
     if next_execution_hash == "vector::empty<u8>()".as_bytes() {
         emitln!(writer, "use std::vector;");
     }
@@ -85,14 +83,12 @@ pub(crate) fn generate_governance_proposal_header(
     }
 }
 
-pub(crate) fn generate_testnet_header(writer: &CodeWriter, deps_names: &[&str]) {
+pub(crate) fn generate_testnet_header(writer: &CodeWriter, deps_name: &str) {
     emitln!(writer, "script {");
     writer.indent();
 
     emitln!(writer, "use aptos_framework::aptos_governance;");
-    for deps_name in deps_names {
-        emitln!(writer, "use {};", deps_name);
-    }
+    emitln!(writer, "use {};", deps_name);
     emitln!(writer);
 
     emitln!(writer, "fun main(core_resources: &signer) {");
@@ -120,7 +116,7 @@ pub(crate) fn generate_governance_proposal<F>(
     writer: &CodeWriter,
     is_testnet: bool,
     next_execution_hash: Vec<u8>,
-    deps_names: &[&str],
+    deps_name: &str,
     body: F,
 ) -> String
 where
@@ -128,17 +124,17 @@ where
 {
     if next_execution_hash.is_empty() {
         if is_testnet {
-            generate_testnet_header(writer, deps_names);
+            generate_testnet_header(writer, deps_name);
         } else {
             generate_governance_proposal_header(
                 writer,
-                deps_names,
+                deps_name,
                 false,
                 "".to_owned().into_bytes(),
             );
         }
     } else {
-        generate_governance_proposal_header(writer, deps_names, true, next_execution_hash);
+        generate_governance_proposal_header(writer, deps_name, true, next_execution_hash);
     };
 
     body(writer);

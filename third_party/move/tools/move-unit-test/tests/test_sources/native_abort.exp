@@ -3,11 +3,11 @@ Running Move unit tests
 [ FAIL    ] 0x1::A::native_abort_good_wrong_code
 [ FAIL    ] 0x1::A::native_abort_unexpected_abort
 0x1::A::native_abort_good_right_code
-Output: Ok(Changes { accounts: {} })
+Output: Ok(ChangeSet { accounts: {} })
 0x1::A::native_abort_good_wrong_code
-Output: Ok(Changes { accounts: {} })
+Output: Ok(ChangeSet { accounts: {} })
 0x1::A::native_abort_unexpected_abort
-Output: Ok(Changes { accounts: {} })
+Output: Ok(ChangeSet { accounts: {} })
 
 Test failures:
 

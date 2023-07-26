@@ -6,7 +6,7 @@ use crate::{
     endpoints::{AptosTapError, AptosTapErrorCode},
     middleware::NUM_OUTSTANDING_TRANSACTIONS,
 };
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use aptos_config::keys::ConfigKey;
 use aptos_logger::{
     error, info,
@@ -58,18 +58,18 @@ pub struct ApiConnectionConfig {
     /// To manually generate a keypair, use generate-key:
     /// `cargo run -p generate-keypair -- -o <output_file_path>`
     #[serde(default = "ApiConnectionConfig::default_mint_key_file_path")]
-    #[clap(long, default_value = DEFAULT_KEY_FILE_PATH, value_parser)]
+    #[clap(long, default_value = DEFAULT_KEY_FILE_PATH, parse(from_os_str))]
     key_file_path: PathBuf,
 
     /// Hex string of an Ed25519PrivateKey for minting / transferring coins.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[clap(long, value_parser = ConfigKey::<Ed25519PrivateKey>::from_encoded_string)]
+    #[clap(long, parse(try_from_str = ConfigKey::from_encoded_string))]
     key: Option<ConfigKey<Ed25519PrivateKey>>,
 
     /// Chain ID of the network this client is connecting to. For example, for mainnet:
     /// "MAINNET" or 1, testnet: "TESTNET" or 2. If there is no predefined string
     /// alias (e.g. "MAINNET"), just use the number. Note: Chain ID of 0 is not allowed.
-    #[clap(long, default_value_t = ChainId::testnet())]
+    #[clap(long, default_value = "2")]
     pub chain_id: ChainId,
 }
 
@@ -94,28 +94,23 @@ impl ApiConnectionConfig {
 
     pub fn get_key(&self) -> Result<Ed25519PrivateKey> {
         if let Some(ref key) = self.key {
-            return Ok(key.private_key());
-        }
-        let key_bytes = std::fs::read(self.key_file_path.as_path()).with_context(|| {
-            format!(
-                "Failed to read key file: {}",
-                self.key_file_path.to_string_lossy()
-            )
-        })?;
-        // decode as bcs first, fall back to a file of hex
-        let result = aptos_sdk::bcs::from_bytes(&key_bytes); //.with_context(|| "bad bcs");
-        if let Ok(x) = result {
-            return Ok(x);
-        }
-        let keystr = String::from_utf8(key_bytes).map_err(|e| anyhow!(e))?;
-        Ok(ConfigKey::from_encoded_string(keystr.as_str())
+            Ok(key.private_key())
+        } else {
+            aptos_sdk::bcs::from_bytes(&std::fs::read(self.key_file_path.as_path()).with_context(
+                || {
+                    format!(
+                        "Failed to read key file: {}",
+                        self.key_file_path.to_string_lossy()
+                    )
+                },
+            )?)
             .with_context(|| {
                 format!(
-                    "{}: key file failed as both bcs and hex",
+                    "Failed to deserialize data in key file: {}",
                     self.key_file_path.to_string_lossy()
                 )
-            })?
-            .private_key())
+            })
+        }
     }
 }
 
@@ -140,10 +135,6 @@ pub struct TransactionSubmissionConfig {
     #[serde(default = "TransactionSubmissionConfig::default_transaction_expiration_secs")]
     pub transaction_expiration_secs: u64,
 
-    /// Amount of time we'll wait for the seqnum to catch up before resetting it.
-    #[serde(default = "TransactionSubmissionConfig::default_wait_for_outstanding_txns_secs")]
-    pub wait_for_outstanding_txns_secs: u64,
-
     /// Whether to wait for the transaction before returning.
     #[serde(default)]
     pub wait_for_transactions: bool,
@@ -156,7 +147,6 @@ impl TransactionSubmissionConfig {
         gas_unit_price_override: Option<u64>,
         max_gas_amount: u64,
         transaction_expiration_secs: u64,
-        wait_for_outstanding_txns_secs: u64,
         wait_for_transactions: bool,
     ) -> Self {
         Self {
@@ -165,7 +155,6 @@ impl TransactionSubmissionConfig {
             gas_unit_price_override,
             max_gas_amount,
             transaction_expiration_secs,
-            wait_for_outstanding_txns_secs,
             wait_for_transactions,
         }
     }
@@ -179,10 +168,6 @@ impl TransactionSubmissionConfig {
     }
 
     fn default_transaction_expiration_secs() -> u64 {
-        25
-    }
-
-    fn default_wait_for_outstanding_txns_secs() -> u64 {
         30
     }
 
@@ -208,7 +193,6 @@ pub async fn update_sequence_numbers(
     outstanding_requests: &RwLock<Vec<(AccountAddress, u64)>>,
     receiver_address: AccountAddress,
     amount: u64,
-    wait_for_outstanding_txns_secs: u64,
 ) -> Result<(u64, Option<u64>), AptosTapError> {
     let (mut funder_seq, mut receiver_seq) =
         get_sequence_numbers(client, funder_account, receiver_address).await?;
@@ -227,7 +211,7 @@ pub async fn update_sequence_numbers(
 
     let mut set_outstanding = false;
     // We shouldn't have too many outstanding txns
-    for _ in 0..(wait_for_outstanding_txns_secs * 2) {
+    for _ in 0..60 {
         if our_funder_seq < funder_seq + MAX_NUM_OUTSTANDING_TRANSACTIONS {
             // Enforce a stronger ordering of priorities based upon the MintParams that arrived
             // first. Then put the other folks to sleep to try again until the queue fills up.
@@ -364,7 +348,7 @@ pub async fn submit_transaction(
         Ok(_) => {
             info!(
                 hash = signed_transaction.clone().committed_hash().to_hex_literal(),
-                address = receiver_address,
+                receiver_address = receiver_address,
                 event = event_on_success,
             );
             Ok(signed_transaction)
