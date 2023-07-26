@@ -51,6 +51,50 @@ pub fn bootstrap(
 // TODO: https://github.com/poem-web/poem/issues/332
 // TODO: https://github.com/poem-web/poem/issues/333
 
+pub type RawApi = (
+    TransactionsApi,
+    ViewFunctionApi,
+    IndexApi,
+    AccountsApi,
+    StateApi,
+    BlocksApi,
+    EventsApi,
+// BasicApi,
+);
+
+pub fn get_raw_api_service(
+    context: Arc<Context>,
+) -> RawApi {
+    let a = (
+        TransactionsApi {
+            context: context.clone(),
+        },
+        ViewFunctionApi {
+            context: context.clone()
+        },
+        IndexApi {
+            context: context.clone(),
+        },
+        AccountsApi {
+            context: context.clone(),
+        },
+        StateApi {
+            context: context.clone(),
+        },
+        BlocksApi {
+            context: context.clone(),
+        },
+        EventsApi {
+            context: context.clone(),
+        },
+        // BasicApi {
+        //     context: context.clone(),
+        // },
+    );
+    a
+}
+
+
 /// Generate the top level API service
 pub fn get_api_service(
     context: Arc<Context>,
