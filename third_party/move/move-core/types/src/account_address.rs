@@ -29,7 +29,7 @@ impl AccountAddress {
         Self(address)
     }
 
-    const fn get_hex_address_one() -> Self {
+    pub const fn get_hex_address_one() -> Self {
         let mut addr = [0u8; AccountAddress::LENGTH];
         addr[AccountAddress::LENGTH - 1] = 1u8;
         Self(addr)

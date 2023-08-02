@@ -5,7 +5,6 @@
 use aptos_crypto::HashValue;
 use move_core_types::{account_address::AccountAddress, value::MoveValue};
 use serde::{Deserialize, Serialize};
-use borsh::{BorshSerialize, BorshDeserialize};
 
 /// Struct that will be persisted on chain to store the information of the current block.
 ///
