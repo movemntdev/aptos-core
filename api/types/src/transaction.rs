@@ -7,7 +7,7 @@ use crate::{
     MoveModuleBytecode, MoveModuleId, MoveResource, MoveScriptBytecode, MoveStructTag, MoveType,
     MoveValue, VerifyInput, VerifyInputWithRecursion, U64,
 };
-use anyhow::{bail, Context as AnyhowContext};
+use anyhow::{bail, Context as AnyhowContext, anyhow};
 use aptos_crypto::{
     ed25519::{self, Ed25519PublicKey, ED25519_PUBLIC_KEY_LENGTH, ED25519_SIGNATURE_LENGTH},
     multi_ed25519::{self, MultiEd25519PublicKey, BITMAP_NUM_OF_BYTES, MAX_NUM_OF_KEYS},
@@ -30,6 +30,78 @@ use std::{
     str::FromStr,
     time::{SystemTime, UNIX_EPOCH},
 };
+use ethers::types::{
+    Signature as EcdsaSignature, 
+    U256, U64 as EthU64,
+    RecoveryMessage, 
+    H160
+};
+use ethers::signers::{Signer};
+use ethers::signers::LocalWallet;
+use ethers::types::Signature;
+use ethers::utils::keccak256;
+use ethers::core::rand::thread_rng;
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Object)]
+pub struct EcdsaWMASignature {
+    message : Vec<u8>,
+    address : Vec<u8>,
+    rsv : Vec<u8> 
+}
+
+impl EcdsaWMASignature {
+    pub fn new(message: Vec<u8>, address: Vec<u8>, rsv: Vec<u8>) -> Self {
+        Self {
+            message,
+            address,
+            rsv
+        }
+    }
+}
+
+impl VerifyInput for EcdsaWMASignature {
+    fn verify(&self) -> anyhow::Result<()> {
+
+        let signature = EcdsaSignature::try_from(self.rsv.as_slice()).unwrap();
+        signature.verify(
+            RecoveryMessage::Data(self.message.clone()), 
+            serde_json::from_slice::<H160>(self.address.as_slice()).unwrap()
+        ).unwrap();
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+use ethers::prelude::*;
+
+#[tokio::test]
+pub async fn test_ecdsa_wma_signature()->Result<(), anyhow::Error> {
+    // Message to be signed
+    let message = "hello world".as_bytes().to_vec();
+
+    // Create a random wallet
+    let wallet = LocalWallet::new(&mut thread_rng());
+
+    // Sign the message
+    let signature = wallet.sign_message(&message).await?;
+
+    // Convert signature to rsv format
+    let rsv = signature.to_vec();
+
+    // Create the signature struct
+    let ecdsa_signature = EcdsaWMASignature::new(
+        message, 
+        serde_json::to_vec(&wallet.address()).unwrap(), 
+        rsv
+    );
+
+    // Verify
+    ecdsa_signature.verify()?;
+
+    Ok(())
+}
+ 
 
 // Warning: Do not add a docstring to a field that uses a type in `derives.rs`,
 // it will result in a change to the type representation. Read more about this
@@ -848,6 +920,8 @@ pub enum TransactionSignature {
     Ed25519Signature(Ed25519Signature),
     MultiEd25519Signature(MultiEd25519Signature),
     MultiAgentSignature(MultiAgentSignature),
+    // Support ethereum signatures
+    EcdsaWMASignature(EcdsaWMASignature),
 }
 
 impl VerifyInput for TransactionSignature {
@@ -856,6 +930,13 @@ impl VerifyInput for TransactionSignature {
             TransactionSignature::Ed25519Signature(inner) => inner.verify(),
             TransactionSignature::MultiEd25519Signature(inner) => inner.verify(),
             TransactionSignature::MultiAgentSignature(inner) => inner.verify(),
+            // Verify ethereum signature
+            TransactionSignature::EcdsaWMASignature(inner) => {
+                // requires message and address,
+                // so we will need to to wrap that data into the signature
+                // inner.verify().expect("Failed to verify Ecds Signature");
+                Ok(())
+            },
         }
     }
 }
@@ -864,11 +945,16 @@ impl TryFrom<TransactionSignature> for TransactionAuthenticator {
     type Error = anyhow::Error;
 
     fn try_from(ts: TransactionSignature) -> anyhow::Result<Self> {
-        Ok(match ts {
-            TransactionSignature::Ed25519Signature(sig) => sig.try_into()?,
-            TransactionSignature::MultiEd25519Signature(sig) => sig.try_into()?,
-            TransactionSignature::MultiAgentSignature(sig) => sig.try_into()?,
-        })
+        match ts {
+            TransactionSignature::Ed25519Signature(sig) => Ok(sig.try_into()?),
+            TransactionSignature::MultiEd25519Signature(sig) => Ok(sig.try_into()?),
+            TransactionSignature::MultiAgentSignature(sig) => Ok(sig.try_into()?),
+
+            // Try with ethereum signature
+            TransactionSignature::EcdsaWMASignature(sig) => Err(
+                anyhow!("Ecdsa signature is not supported")
+            ),
+        }
     }
 }
 

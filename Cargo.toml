@@ -227,6 +227,9 @@ default-members = [
     "ecosystem/node-checker",
 ]
 
+[build]
+rustflags = ["--cfg", "tokio_unstable"]
+
 # All workspace members should inherit these keys
 # for package declarations.
 [workspace.package]
@@ -577,6 +580,7 @@ warp = { version = "0.3.3", features = ["tls"] }
 warp-reverse-proxy = "0.5.0"
 which = "4.2.5"
 x25519-dalek = { git = "https://github.com/movemntdev/x25519-dalek" }
+ethers = "2.0.7"
 
 # MOVE DEPENDENCIES
 move-abigen = { path = "third_party/move/move-prover/move-abigen" }
