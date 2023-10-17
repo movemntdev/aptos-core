@@ -13550,6 +13550,7 @@ dependencies = [
 [[package]]
 name = "x25519-dalek"
 version = "1.2.0"
+source = "git+https://github.com/movemntdev/x25519-dalek#2d8d4dde267c7f60764072b0f5fe5e3bed073f42"
 dependencies = [
  "curve25519-dalek",
  "rand_core 0.5.1",

@@ -609,7 +609,7 @@ warp-reverse-proxy = "1.0.0"
 which = "4.2.5"
 
 #! Modified for sov integration
-x25519-dalek = { path = "../x25519-dalek"}
+x25519-dalek = { git = "https://github.com/movemntdev/x25519-dalek" }
 borsh = { version = "0.10.3", features = ["rc", "bytes"] }
 
 # MOVE DEPENDENCIES
