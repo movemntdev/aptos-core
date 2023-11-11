@@ -8,7 +8,7 @@ use aptos_types::chain_id::ChainId;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 
-// #[cfg(feature = "indexer")]
+#[cfg(feature = "indexer")]
 pub fn bootstrap_indexer(
     node_config: &NodeConfig,
     chain_id: ChainId,
@@ -23,7 +23,7 @@ pub fn bootstrap_indexer(
     }
 }
 
-/*#[cfg(not(feature = "indexer"))]
+#[cfg(not(feature = "indexer"))]
 pub fn bootstrap_indexer(
     _node_config: &NodeConfig,
     _chain_id: ChainId,
@@ -31,4 +31,4 @@ pub fn bootstrap_indexer(
     _mp_client_sender: MempoolClientSender,
 ) -> Result<Option<Runtime>, anyhow::Error> {
     Ok(None)
-}*/
+}

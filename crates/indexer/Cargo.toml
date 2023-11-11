@@ -30,7 +30,7 @@ bcs = { workspace = true }
 bigdecimal = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
-diesel = { workspace = true }
+diesel = { workspace = true, features =["numeric"] }
 diesel_migrations = { workspace = true }
 field_count = { workspace = true }
 futures = { workspace = true }
