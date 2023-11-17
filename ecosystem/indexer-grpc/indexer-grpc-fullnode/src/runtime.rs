@@ -46,6 +46,8 @@ pub fn bootstrap(
     db: Arc<dyn DbReader>,
     mp_sender: MempoolClientSender,
 ) -> Option<Runtime> {
+
+    println!("Trying to start GRPC server");
     if !config.indexer_grpc.enabled {
         return None;
     }
@@ -61,6 +63,7 @@ pub fn bootstrap(
     let address = node_config.indexer_grpc.address.clone().unwrap();
 
     runtime.spawn(async move {
+        println!("Starting GRPC server");
         let context = Arc::new(Context::new(chain_id, db, mp_sender, node_config));
         let server = FullnodeDataService {
             context,

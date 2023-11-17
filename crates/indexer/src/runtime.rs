@@ -80,6 +80,7 @@ pub fn bootstrap(
     db: Arc<dyn DbReader>,
     mp_sender: MempoolClientSender,
 ) -> Option<anyhow::Result<Runtime>> {
+
     if !config.indexer.enabled {
         return None;
     }
@@ -89,6 +90,7 @@ pub fn bootstrap(
     let indexer_config = config.indexer.clone();
     let node_config = config.clone();
 
+    println!("Starting indexer");
     runtime.spawn(async move {
         let context = Arc::new(Context::new(chain_id, db, mp_sender, node_config));
         run_forever(indexer_config, context).await;
