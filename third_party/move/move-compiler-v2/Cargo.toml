@@ -1,6 +1,6 @@
 [package]
 name = "move-compiler-v2"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 authors = ["Aptos Labs"]
 description = "Move compiler based on stackless bytecode"
 repository = "https://github.com/aptos-labs/aptos-core"

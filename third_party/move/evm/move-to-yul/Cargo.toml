@@ -1,6 +1,6 @@
 [package]
 name = "move-to-yul"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 authors = ["Diem Association <opensource@diem.com>"]
 description = "Move Solidity Generator"
 publish = false

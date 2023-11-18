@@ -1,6 +1,6 @@
 [package]
 name = "extract-ethereum-abi"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 authors = ["Diem Association <opensource@diem.com>"]
 description = "Extract Etherem ABI"
 publish = false

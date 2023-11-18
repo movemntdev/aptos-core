@@ -1,7 +1,7 @@
 [package]
 name = "aptos-storage-service-notifications"
 description = "The notification interface between state sync and the storage service"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 
 # Workspace inherited keys
 authors = { workspace = true }

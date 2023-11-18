@@ -1,7 +1,7 @@
 [package]
 name = "aptos-node-checker"
 description = "Aptos Node Health Checker"
-version = "0.1.1"
+version = "0.1.1-canonical-aptos"
 
 # Workspace inherited keys
 authors = { workspace = true }

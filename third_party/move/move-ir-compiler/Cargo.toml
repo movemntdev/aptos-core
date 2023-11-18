@@ -1,6 +1,6 @@
 [package]
 name = "move-ir-compiler"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 authors = ["Diem Association <opensource@diem.com>"]
 description = "Move IR to bytecode compiler"
 repository = "https://github.com/diem/diem"

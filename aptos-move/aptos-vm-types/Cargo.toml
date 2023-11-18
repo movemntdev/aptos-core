@@ -1,7 +1,7 @@
 [package]
 name = "aptos-vm-types"
 description = "Aptos VM types"
-version = "0.0.1"
+version = "0.0.1-canonical-aptos"
 
 # Workspace inherited keys
 authors = { workspace = true }

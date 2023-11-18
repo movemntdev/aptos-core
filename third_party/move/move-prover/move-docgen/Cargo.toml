@@ -1,6 +1,6 @@
 [package]
 name = "move-docgen"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 authors = ["Diem Association <opensource@diem.com>"]
 publish = false
 edition = "2021"

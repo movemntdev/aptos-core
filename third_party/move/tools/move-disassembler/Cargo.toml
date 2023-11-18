@@ -1,6 +1,6 @@
 [package]
 name = "move-disassembler"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 authors = ["Diem Association <opensource@diem.com>"]
 description = "Print a human-readable version of Move bytecode (.mv files)"
 license = "Apache-2.0"

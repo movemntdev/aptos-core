@@ -1,6 +1,6 @@
 [package]
 name = "move-async-vm"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 authors = ["Diem Association <opensource@diem.com>"]
 description = "Wrapper for the Move VM for the asynchronous execution flavor"
 repository = "https://github.com/diem/move"

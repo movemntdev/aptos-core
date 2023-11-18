@@ -1,6 +1,6 @@
 [package]
 name = "aptos-debugger"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 authors = ["Aptos Labs <opensource@aptoslabs.com>"]
 description = "A tool to replay transactions on chain and to execute transactions locally with remote backend"
 repository = "https://github.com/aptos-labs/aptos-core"

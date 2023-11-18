@@ -1,7 +1,7 @@
 [package]
 name = "aptos-peer-monitoring-service-types"
 description = "Common types offered by the peer monitoring service"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 
 # Workspace inherited keys
 authors = { workspace = true }

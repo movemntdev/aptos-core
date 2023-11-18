@@ -1,6 +1,6 @@
 [package]
 name = "invalid-mutations"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 edition = "2021"
 authors = ["Diem Association <opensource@diem.com>"]
 description = "Diem invalid mutations"

@@ -1,6 +1,6 @@
 [package]
 name = "evm-exec-utils"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 authors = ["Diem Association <opensource@diem.com>"]
 edition = "2021"
 license = "Apache-2.0"

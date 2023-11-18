@@ -1,7 +1,7 @@
 [package]
 name = "aptos-cli-common"
 description = "Common CLI functionality for all Aptos CLIs"
-version = "1.0.0"
+version = "1.0.0-canonical-aptos"
 
 # Workspace inherited keys
 authors = { workspace = true }

@@ -1,7 +1,7 @@
 [package]
 name = "aptos-executor-service"
 description = "Aptos executor service"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 
 # Workspace inherited keys
 authors = { workspace = true }

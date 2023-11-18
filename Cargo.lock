@@ -191,7 +191,7 @@ dependencies = [
 
 [[package]]
 name = "aptos"
-version = "2.0.2"
+version = "2.0.2-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-api-types",
@@ -272,7 +272,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-accumulator"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -283,7 +283,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-aggregator"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -302,7 +302,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-api"
-version = "0.2.0"
+version = "0.2.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-api-test-context",
@@ -353,7 +353,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-api-test-context"
-version = "0.2.0"
+version = "0.2.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-api",
@@ -395,7 +395,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-api-types"
-version = "0.0.1"
+version = "0.0.1-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-config",
@@ -421,7 +421,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-backup-cli"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-backup-service",
@@ -469,7 +469,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-backup-service"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-config",
@@ -493,7 +493,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-bitvec"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "bcs 0.1.4",
  "proptest",
@@ -505,7 +505,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-block-executor"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-aggregator",
@@ -534,7 +534,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-block-partitioner"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -553,7 +553,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-bounded-executor"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "futures",
  "tokio",
@@ -561,14 +561,14 @@ dependencies = [
 
 [[package]]
 name = "aptos-build-info"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "shadow-rs",
 ]
 
 [[package]]
 name = "aptos-cached-packages"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-framework",
  "aptos-types",
@@ -582,7 +582,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-channels"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-infallible",
@@ -595,7 +595,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-cli-common"
-version = "1.0.0"
+version = "1.0.0-canonical-aptos"
 dependencies = [
  "anstyle",
  "clap 4.3.5",
@@ -604,7 +604,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-compression"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-crypto",
  "aptos-logger",
@@ -619,7 +619,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-config"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -648,7 +648,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-consensus"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-bitvec",
@@ -715,7 +715,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-consensus-notifications"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-crypto",
  "aptos-runtimes",
@@ -731,7 +731,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-consensus-types"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-bitvec",
@@ -755,7 +755,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-crash-handler"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-logger",
  "backtrace",
@@ -766,7 +766,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-crypto"
-version = "0.0.3"
+version = "0.0.3-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-crypto-derive",
@@ -812,7 +812,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-crypto-derive"
-version = "0.0.3"
+version = "0.0.3-canonical-aptos"
 dependencies = [
  "anyhow",
  "proc-macro2 1.0.59",
@@ -822,7 +822,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-data-client"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-channels",
@@ -855,7 +855,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-data-streaming-service"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-channels",
  "aptos-config",
@@ -883,7 +883,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-db"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-accumulator",
@@ -931,7 +931,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-db-bootstrapper"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-config",
@@ -948,7 +948,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-db-indexer"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-config",
@@ -978,7 +978,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-db-tool"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-backup-cli",
@@ -1002,7 +1002,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-debugger"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -1035,7 +1035,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-enum-conversion-derive"
-version = "0.0.3"
+version = "0.0.3-canonical-aptos"
 dependencies = [
  "anyhow",
  "proc-macro2 1.0.59",
@@ -1046,7 +1046,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-event-notifications"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-channels",
  "aptos-crypto",
@@ -1072,7 +1072,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-executable-store"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-infallible",
  "aptos-logger",
@@ -1086,7 +1086,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-executor"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-block-partitioner",
@@ -1125,7 +1125,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-executor-benchmark"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-block-executor",
@@ -1170,7 +1170,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-executor-service"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-config",
@@ -1193,7 +1193,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-executor-test-helpers"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-cached-packages",
@@ -1216,7 +1216,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-executor-types"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-block-partitioner",
@@ -1236,14 +1236,14 @@ dependencies = [
 
 [[package]]
 name = "aptos-fallible"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "aptos-faucet-cli"
-version = "2.0.1"
+version = "2.0.1-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-faucet-core",
@@ -1255,7 +1255,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-faucet-core"
-version = "2.0.1"
+version = "2.0.1-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-config",
@@ -1288,7 +1288,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-faucet-metrics-server"
-version = "2.0.0"
+version = "2.0.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-logger",
@@ -1302,7 +1302,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-faucet-service"
-version = "2.0.1"
+version = "2.0.1-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-faucet-core",
@@ -1313,7 +1313,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-fn-check-client"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-logger",
@@ -1331,7 +1331,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-forge"
-version = "0.0.0"
+version = "0.0.0-canonical-aptos"
 dependencies = [
  "again",
  "anyhow",
@@ -1385,7 +1385,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-forge-cli"
-version = "0.0.0"
+version = "0.0.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-cached-packages",
@@ -1412,7 +1412,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-framework"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-aggregator",
@@ -1484,7 +1484,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-fuzz"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-fuzzer",
  "libfuzzer-sys",
@@ -1493,7 +1493,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-fuzzer"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-accumulator",
@@ -1532,7 +1532,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-gas"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-framework",
@@ -1555,14 +1555,14 @@ dependencies = [
 
 [[package]]
 name = "aptos-gas-algebra-ext"
-version = "0.0.1"
+version = "0.0.1-canonical-aptos"
 dependencies = [
  "move-core-types",
 ]
 
 [[package]]
 name = "aptos-gas-profiling"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-framework",
@@ -1579,7 +1579,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-genesis"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-cached-packages",
@@ -1604,7 +1604,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-github-client"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-proxy",
  "base64 0.13.0",
@@ -1616,15 +1616,15 @@ dependencies = [
 
 [[package]]
 name = "aptos-global-constants"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 
 [[package]]
 name = "aptos-id-generator"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 
 [[package]]
 name = "aptos-indexer"
-version = "0.0.1"
+version = "0.0.1-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-api",
@@ -1663,7 +1663,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-indexer-grpc-cache-worker"
-version = "1.0.0"
+version = "1.0.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-config",
@@ -1694,7 +1694,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-indexer-grpc-data-service"
-version = "1.0.0"
+version = "1.0.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-indexer-grpc-server-framework",
@@ -1723,7 +1723,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-indexer-grpc-file-store"
-version = "1.0.0"
+version = "1.0.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-indexer-grpc-server-framework",
@@ -1745,7 +1745,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-indexer-grpc-fullnode"
-version = "1.0.0"
+version = "1.0.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-api",
@@ -1798,7 +1798,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-indexer-grpc-integration-tests"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-config",
@@ -1840,7 +1840,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-indexer-grpc-parser"
-version = "1.0.0"
+version = "1.0.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-indexer-grpc-server-framework",
@@ -1873,7 +1873,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-indexer-grpc-post-processor"
-version = "1.0.0"
+version = "1.0.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-indexer-grpc-server-framework",
@@ -1902,7 +1902,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-indexer-grpc-server-framework"
-version = "1.0.0"
+version = "1.0.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-metrics-core",
@@ -1924,7 +1924,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-indexer-grpc-utils"
-version = "1.0.0"
+version = "1.0.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-metrics-core",
@@ -1957,11 +1957,11 @@ dependencies = [
 
 [[package]]
 name = "aptos-infallible"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 
 [[package]]
 name = "aptos-inspection-service"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-build-info",
@@ -1986,7 +1986,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-jellyfish-merkle"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -2013,7 +2013,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-keygen"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-crypto",
  "aptos-types",
@@ -2022,7 +2022,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-language-e2e-tests"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-bitvec",
@@ -2060,7 +2060,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-ledger"
-version = "0.2.0"
+version = "0.2.0-canonical-aptos"
 dependencies = [
  "aptos-crypto",
  "aptos-types",
@@ -2073,7 +2073,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-log-derive"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "proc-macro2 1.0.59",
  "quote 1.0.28",
@@ -2082,7 +2082,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-logger"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-infallible",
  "aptos-log-derive",
@@ -2107,7 +2107,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-memory-usage-tracker"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-gas",
  "aptos-types",
@@ -2118,7 +2118,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-mempool"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-bounded-executor",
@@ -2162,7 +2162,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-mempool-notifications"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-crypto",
  "aptos-runtimes",
@@ -2177,7 +2177,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-memsocket"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-infallible",
  "bytes",
@@ -2187,7 +2187,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-metrics-core"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "claims",
@@ -2196,7 +2196,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-move-examples"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-gas",
  "aptos-types",
@@ -2212,7 +2212,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-move-stdlib"
-version = "0.1.1"
+version = "0.1.1-canonical-aptos"
 dependencies = [
  "anyhow",
  "dir-diff",
@@ -2240,14 +2240,14 @@ dependencies = [
 
 [[package]]
 name = "aptos-moving-average"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "chrono",
 ]
 
 [[package]]
 name = "aptos-mvhashmap"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-aggregator",
@@ -2265,7 +2265,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-netcore"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-memsocket",
  "aptos-proxy",
@@ -2281,7 +2281,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-network"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-bitvec",
@@ -2328,7 +2328,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-network-builder"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-channels",
  "aptos-config",
@@ -2353,7 +2353,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-network-checker"
-version = "0.0.1"
+version = "0.0.1-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-config",
@@ -2369,7 +2369,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-network-discovery"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-channels",
@@ -2397,7 +2397,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-node"
-version = "1.5.0"
+version = "1.5.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-api",
@@ -2464,7 +2464,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-node-checker"
-version = "0.1.1"
+version = "0.1.1-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-api",
@@ -2495,7 +2495,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-node-identity"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-types",
@@ -2506,7 +2506,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-node-resource-metrics"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-build-info",
  "aptos-infallible",
@@ -2521,7 +2521,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-num-variants"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "proc-macro2 1.0.59",
  "quote 1.0.28",
@@ -2530,7 +2530,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-openapi"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "async-trait",
  "percent-encoding",
@@ -2542,7 +2542,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-openapi-spec-generator"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-api",
@@ -2555,7 +2555,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-package-builder"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-framework",
@@ -2567,7 +2567,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-peer-monitoring-service-client"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-build-info",
  "aptos-channels",
@@ -2598,7 +2598,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-peer-monitoring-service-server"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-bounded-executor",
@@ -2630,7 +2630,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-peer-monitoring-service-types"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-config",
  "aptos-types",
@@ -2642,7 +2642,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-proptest-helpers"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "crossbeam",
  "proptest",
@@ -2651,7 +2651,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-protos"
-version = "1.0.0"
+version = "1.0.0-canonical-aptos"
 dependencies = [
  "pbjson",
  "prost",
@@ -2661,14 +2661,14 @@ dependencies = [
 
 [[package]]
 name = "aptos-proxy"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "ipnet",
 ]
 
 [[package]]
 name = "aptos-push-metrics"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-logger",
  "aptos-metrics-core",
@@ -2678,7 +2678,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-rate-limiter"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-infallible",
  "aptos-logger",
@@ -2691,7 +2691,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-release-builder"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos",
@@ -2726,7 +2726,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-resource-viewer"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-types",
@@ -2737,7 +2737,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-rest-client"
-version = "0.0.0"
+version = "0.0.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-api-types",
@@ -2763,7 +2763,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-retrier"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-logger",
  "tokio",
@@ -2771,7 +2771,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-rocksdb-options"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-config",
  "rocksdb",
@@ -2779,7 +2779,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-rosetta"
-version = "0.0.1"
+version = "0.0.1-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-cached-packages",
@@ -2812,7 +2812,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-rosetta-cli"
-version = "0.0.1"
+version = "0.0.1-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos",
@@ -2828,14 +2828,14 @@ dependencies = [
 
 [[package]]
 name = "aptos-runtimes"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "tokio",
 ]
 
 [[package]]
 name = "aptos-safety-rules"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-config",
  "aptos-consensus-types",
@@ -2863,7 +2863,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-schemadb"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-infallible",
@@ -2878,7 +2878,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-scratchpad"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-crypto",
  "aptos-infallible",
@@ -2897,7 +2897,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-sdk"
-version = "0.0.3"
+version = "0.0.3-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-api-types",
@@ -2920,7 +2920,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-sdk-builder"
-version = "0.2.0"
+version = "0.2.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-cached-packages",
@@ -2942,7 +2942,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-secure-net"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-config",
  "aptos-logger",
@@ -2954,7 +2954,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-secure-storage"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -2976,7 +2976,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-short-hex-str"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "hex",
  "mirai-annotations",
@@ -2988,7 +2988,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-speculative-state-helper"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-infallible",
@@ -3003,7 +3003,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-state-sync-driver"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-channels",
@@ -3052,7 +3052,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-state-view"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -3065,7 +3065,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-storage-interface"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-crypto",
@@ -3092,7 +3092,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-storage-service-client"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-channels",
  "aptos-config",
@@ -3105,7 +3105,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-storage-service-notifications"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-channels",
  "aptos-crypto",
@@ -3119,7 +3119,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-storage-service-server"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-bitvec",
@@ -3153,7 +3153,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-storage-service-types"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-compression",
  "aptos-config",
@@ -3169,7 +3169,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-telemetry"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-api",
@@ -3210,7 +3210,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-telemetry-service"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-config",
@@ -3253,7 +3253,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-temppath"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "hex",
  "rand 0.7.3",
@@ -3261,7 +3261,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-testcases"
-version = "0.0.0"
+version = "0.0.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos",
@@ -3290,7 +3290,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-time-service"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-infallible",
  "enum_dispatch",
@@ -3303,7 +3303,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-transaction-benchmarks"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-bitvec",
  "aptos-block-executor",
@@ -3328,7 +3328,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-transaction-emitter"
-version = "0.0.0"
+version = "0.0.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-global-constants",
@@ -3345,7 +3345,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-transaction-emitter-lib"
-version = "0.0.0"
+version = "0.0.0-canonical-aptos"
 dependencies = [
  "again",
  "anyhow",
@@ -3375,7 +3375,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-transaction-generator-lib"
-version = "0.0.0"
+version = "0.0.0-canonical-aptos"
 dependencies = [
  "again",
  "anyhow",
@@ -3404,7 +3404,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-transactional-test-harness"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-api-types",
@@ -3436,7 +3436,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-types"
-version = "0.0.3"
+version = "0.0.3-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-bitvec",
@@ -3469,11 +3469,11 @@ dependencies = [
 
 [[package]]
 name = "aptos-utils"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 
 [[package]]
 name = "aptos-validator-interface"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-api-types",
@@ -3493,7 +3493,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-vault-client"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-crypto",
  "aptos-proptest-helpers",
@@ -3511,7 +3511,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-vm"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-aggregator",
@@ -3560,7 +3560,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-vm-benchmarks"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos",
  "aptos-cached-packages",
@@ -3576,7 +3576,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-vm-genesis"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-cached-packages",
@@ -3599,7 +3599,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-vm-logging"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-crypto",
  "aptos-logger",
@@ -3614,7 +3614,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-vm-profiling"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-cached-packages",
@@ -3639,7 +3639,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-vm-types"
-version = "0.0.1"
+version = "0.0.1-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-aggregator",
@@ -3653,7 +3653,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-vm-validator"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-cached-packages",
@@ -3675,7 +3675,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-warp-webserver"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-api-types",
@@ -3690,7 +3690,7 @@ dependencies = [
 
 [[package]]
 name = "aptos-writeset-generator"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-cached-packages",
@@ -4219,7 +4219,7 @@ dependencies = [
 
 [[package]]
 name = "axum-test"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "axum 0.5.16",
  "tokio",
@@ -4556,7 +4556,7 @@ checksum = "e3b5ca7a04898ad4bcd41c90c5285445ff5b791899bb1b0abdd2a2aa791211d7"
 
 [[package]]
 name = "bytecode-verifier-libfuzzer"
-version = "0.0.0"
+version = "0.0.0-canonical-aptos"
 dependencies = [
  "arbitrary",
  "libfuzzer-sys",
@@ -4567,7 +4567,7 @@ dependencies = [
 
 [[package]]
 name = "bytecode-verifier-tests"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "fail 0.4.0",
  "hex",
@@ -4581,7 +4581,7 @@ dependencies = [
 
 [[package]]
 name = "bytecode-verifier-transactional-tests"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "datatest-stable",
  "move-transactional-test-runner",
@@ -5747,7 +5747,7 @@ checksum = "0bd4b30a6560bbd9b4620f4de34c3f14f60848e58a9b7216801afcb4c7b31c3c"
 
 [[package]]
 name = "e2e-move-tests"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos",
@@ -6050,7 +6050,7 @@ dependencies = [
 
 [[package]]
 name = "evm-exec-utils"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "evm",
@@ -6360,11 +6360,11 @@ dependencies = [
 
 [[package]]
 name = "fuzzer"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 
 [[package]]
 name = "fuzzer-fuzz"
-version = "0.0.0"
+version = "0.0.0-canonical-aptos"
 dependencies = [
  "aptos-consensus",
  "aptos-consensus-types",
@@ -6409,7 +6409,7 @@ dependencies = [
 
 [[package]]
 name = "generate-format"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-api-types",
  "aptos-config",
@@ -7237,7 +7237,7 @@ dependencies = [
 
 [[package]]
 name = "invalid-mutations"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "move-binary-format",
  "move-core-types",
@@ -7551,7 +7551,7 @@ dependencies = [
 
 [[package]]
 name = "language-e2e-testsuite"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "aptos-block-executor",
  "aptos-cached-packages",
@@ -7825,7 +7825,7 @@ checksum = "f051f77a7c8e6957c0696eac88f26b0117e54f52d3fc682ab19397a8812846a4"
 
 [[package]]
 name = "listener"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "bytes",
  "clap 4.3.5",
@@ -8109,7 +8109,7 @@ dependencies = [
 
 [[package]]
 name = "module-generation"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "move-binary-format",
  "move-bytecode-verifier",
@@ -8122,7 +8122,7 @@ dependencies = [
 
 [[package]]
 name = "module-publish"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos-framework",
@@ -8139,7 +8139,7 @@ checksum = "5474f8732dc7e0635ae9df6595bcd39cd30e3cfe8479850d4fa3e69306c19712"
 
 [[package]]
 name = "move-abigen"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
@@ -8160,7 +8160,7 @@ dependencies = [
 
 [[package]]
 name = "move-analyzer"
-version = "1.0.0"
+version = "1.0.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "clap 4.3.5",
@@ -8185,7 +8185,7 @@ dependencies = [
 
 [[package]]
 name = "move-async-vm"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
@@ -8208,7 +8208,7 @@ dependencies = [
 
 [[package]]
 name = "move-binary-format"
-version = "0.0.3"
+version = "0.0.3-canonical-aptos"
 dependencies = [
  "anyhow",
  "arbitrary",
@@ -8226,11 +8226,11 @@ dependencies = [
 
 [[package]]
 name = "move-borrow-graph"
-version = "0.0.1"
+version = "0.0.1-canonical-aptos"
 
 [[package]]
 name = "move-bytecode-source-map"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
@@ -8244,7 +8244,7 @@ dependencies = [
 
 [[package]]
 name = "move-bytecode-utils"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "move-binary-format",
@@ -8255,7 +8255,7 @@ dependencies = [
 
 [[package]]
 name = "move-bytecode-verifier"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "fail 0.4.0",
@@ -8270,7 +8270,7 @@ dependencies = [
 
 [[package]]
 name = "move-bytecode-viewer"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "clap 4.3.5",
@@ -8286,7 +8286,7 @@ dependencies = [
 
 [[package]]
 name = "move-cli"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
@@ -8332,7 +8332,7 @@ dependencies = [
 
 [[package]]
 name = "move-command-line-common"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "difference",
@@ -8348,7 +8348,7 @@ dependencies = [
 
 [[package]]
 name = "move-compiler"
-version = "0.0.1"
+version = "0.0.1-canonical-aptos"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
@@ -8378,7 +8378,7 @@ dependencies = [
 
 [[package]]
 name = "move-compiler-transactional-tests"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "datatest-stable",
  "move-transactional-test-runner",
@@ -8386,7 +8386,7 @@ dependencies = [
 
 [[package]]
 name = "move-compiler-v2"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "clap 3.2.23",
@@ -8408,7 +8408,7 @@ dependencies = [
 
 [[package]]
 name = "move-core-types"
-version = "0.0.4"
+version = "0.0.4-canonical-aptos"
 dependencies = [
  "anyhow",
  "arbitrary",
@@ -8431,7 +8431,7 @@ dependencies = [
 
 [[package]]
 name = "move-coverage"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
@@ -8450,7 +8450,7 @@ dependencies = [
 
 [[package]]
 name = "move-disassembler"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "clap 4.3.5",
@@ -8467,7 +8467,7 @@ dependencies = [
 
 [[package]]
 name = "move-docgen"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "codespan",
@@ -8489,7 +8489,7 @@ dependencies = [
 
 [[package]]
 name = "move-errmapgen"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
@@ -8505,7 +8505,7 @@ dependencies = [
 
 [[package]]
 name = "move-ethereum-abi"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "ethabi",
@@ -8517,7 +8517,7 @@ dependencies = [
 
 [[package]]
 name = "move-explain"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "bcs 0.1.4",
  "clap 4.3.5",
@@ -8527,7 +8527,7 @@ dependencies = [
 
 [[package]]
 name = "move-ir-compiler"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
@@ -8545,7 +8545,7 @@ dependencies = [
 
 [[package]]
 name = "move-ir-compiler-transactional-tests"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "datatest-stable",
  "move-transactional-test-runner",
@@ -8553,7 +8553,7 @@ dependencies = [
 
 [[package]]
 name = "move-ir-to-bytecode"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "codespan-reporting",
@@ -8571,7 +8571,7 @@ dependencies = [
 
 [[package]]
 name = "move-ir-to-bytecode-syntax"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "hex",
@@ -8583,7 +8583,7 @@ dependencies = [
 
 [[package]]
 name = "move-ir-types"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "hex",
@@ -8596,7 +8596,7 @@ dependencies = [
 
 [[package]]
 name = "move-model"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "codespan",
@@ -8624,7 +8624,7 @@ dependencies = [
 
 [[package]]
 name = "move-package"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
@@ -8664,7 +8664,7 @@ dependencies = [
 
 [[package]]
 name = "move-prover"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8705,7 +8705,7 @@ dependencies = [
 
 [[package]]
 name = "move-prover-boogie-backend"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8733,7 +8733,7 @@ dependencies = [
 
 [[package]]
 name = "move-prover-test-utils"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "move-command-line-common",
@@ -8743,7 +8743,7 @@ dependencies = [
 
 [[package]]
 name = "move-resource-viewer"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
@@ -8757,7 +8757,7 @@ dependencies = [
 
 [[package]]
 name = "move-stackless-bytecode"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "codespan",
@@ -8786,7 +8786,7 @@ dependencies = [
 
 [[package]]
 name = "move-stdlib"
-version = "0.1.1"
+version = "0.1.1-canonical-aptos"
 dependencies = [
  "anyhow",
  "dir-diff",
@@ -8814,7 +8814,7 @@ dependencies = [
 
 [[package]]
 name = "move-symbol-pool"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "once_cell",
  "serde 1.0.149",
@@ -8823,7 +8823,7 @@ dependencies = [
 
 [[package]]
 name = "move-table-extension"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "bcs 0.1.4",
@@ -8844,7 +8844,7 @@ dependencies = [
 
 [[package]]
 name = "move-to-yul"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "atty",
@@ -8887,7 +8887,7 @@ dependencies = [
 
 [[package]]
 name = "move-transactional-test-runner"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "clap 4.3.5",
@@ -8919,7 +8919,7 @@ dependencies = [
 
 [[package]]
 name = "move-unit-test"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "better_any",
@@ -8954,7 +8954,7 @@ dependencies = [
 
 [[package]]
 name = "move-vm-integration-tests"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "memory-stats",
@@ -8972,7 +8972,7 @@ dependencies = [
 
 [[package]]
 name = "move-vm-paranoid-tests"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "datatest-stable",
  "fail 0.4.0",
@@ -8981,7 +8981,7 @@ dependencies = [
 
 [[package]]
 name = "move-vm-runtime"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "better_any",
@@ -9002,7 +9002,7 @@ dependencies = [
 
 [[package]]
 name = "move-vm-test-utils"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "move-binary-format",
@@ -9015,7 +9015,7 @@ dependencies = [
 
 [[package]]
 name = "move-vm-transactional-tests"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "datatest-stable",
  "move-transactional-test-runner",
@@ -9023,7 +9023,7 @@ dependencies = [
 
 [[package]]
 name = "move-vm-types"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "bcs 0.1.4",
  "move-binary-format",
@@ -11155,7 +11155,7 @@ checksum = "93f6841e709003d68bb2deee8c343572bf446003ec20a583e76f7b15cebf3711"
 
 [[package]]
 name = "sender"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "bytes",
  "clap 4.3.5",
@@ -11361,7 +11361,7 @@ dependencies = [
 
 [[package]]
 name = "serializer-tests"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "move-binary-format",
  "move-core-types",
@@ -11639,7 +11639,7 @@ checksum = "f67ad224767faa3c7d8b6d91985b78e70a1324408abcb1cfcc2be4c06bc06043"
 
 [[package]]
 name = "smoke-test"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "anyhow",
  "aptos",
@@ -11999,7 +11999,7 @@ checksum = "507e9898683b6c43a9aa55b64259b721b52ba226e0f3779137e50ad114a4c90b"
 
 [[package]]
 name = "test-generation"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 dependencies = [
  "clap 4.3.5",
  "crossbeam-channel",

@@ -2,7 +2,7 @@
 name = "aptos-block-partitioner"
 description = "A tool to partition a block store into smaller chunks based on graph partitioning."
 
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 
 # Workspace inherited keys
 authors = { workspace = true }

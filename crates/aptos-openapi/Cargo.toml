@@ -1,7 +1,7 @@
 [package]
 name = "aptos-openapi"
 description = "Helpers that allow structs to self-describe in an OpenAPI spec"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 
 # Workspace inherited keys
 authors = { workspace = true }

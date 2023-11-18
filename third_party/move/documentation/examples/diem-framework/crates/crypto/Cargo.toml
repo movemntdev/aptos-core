@@ -1,6 +1,6 @@
 [package]
 name = "diem-crypto"
-version = "0.0.3"
+version = "0.0.3-canonical-aptos"
 authors = ["Diem Association <opensource@diem.com>"]
 publish = false
 edition = "2021"

@@ -1,7 +1,7 @@
 [package]
 name = "aptos-time-service"
 description = "Time Service for mocking time with tokio"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 
 # Workspace inherited keys
 authors = { workspace = true }

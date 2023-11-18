@@ -1,7 +1,7 @@
 [package]
 name = "aptos-keygen"
 description = "Command line utility to generate Ed25519 key pairs for testing"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 
 # Workspace inherited keys
 authors = { workspace = true }

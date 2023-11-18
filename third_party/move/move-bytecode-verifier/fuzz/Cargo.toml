@@ -1,6 +1,6 @@
 [package]
 name = "bytecode-verifier-libfuzzer"
-version = "0.0.0"
+version = "0.0.0-canonical-aptos"
 authors = ["Diem Association <opensource@diem.com>"]
 license = "Apache-2.0"
 publish = false

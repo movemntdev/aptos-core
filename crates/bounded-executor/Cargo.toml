@@ -1,7 +1,7 @@
 [package]
 name = "aptos-bounded-executor"
 description = "Executor bounded by number of concurrent tasks"
-version = "0.1.0"
+version = "0.1.0-canonical-aptos"
 
 # Workspace inherited keys
 authors = { workspace = true }

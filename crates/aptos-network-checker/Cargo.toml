@@ -1,7 +1,7 @@
 [package]
 name = "aptos-network-checker"
 description = "Aptos network checker"
-version = "0.0.1"
+version = "0.0.1-canonical-aptos"
 
 # Workspace inherited keys
 authors = { workspace = true }

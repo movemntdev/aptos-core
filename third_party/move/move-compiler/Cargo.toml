@@ -1,6 +1,6 @@
 [package]
 name = "move-compiler"
-version = "0.0.1"
+version = "0.0.1-canonical-aptos"
 authors = ["Diem Association <opensource@diem.com>"]
 description = "The definition of the Move source language, and its compiler"
 publish = false
