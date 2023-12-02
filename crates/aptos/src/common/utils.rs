@@ -437,6 +437,37 @@ pub async fn fund_account(
     }
 }
 
+/// Fund by public key (and possibly create it) from a faucet
+pub async fn fund_pub_key(
+    faucet_url: Url,
+    pub_key: String,
+) -> CliTypedResult<Vec<HashValue>> {
+    let url = format!(
+        "{}v1/mint?&pub_key={}",
+        faucet_url, pub_key
+    );
+    let response = reqwest::Client::new()
+        .post(url)
+        .body("{}")
+        .send()
+        .await
+        .map_err(|err| {
+            CliError::ApiError(format!("Failed to fund account with faucet: {:#}", err))
+        })?;
+    if response.status() == 200 {
+        let hashes: Vec<HashValue> = response
+            .json()
+            .await
+            .map_err(|err| CliError::UnexpectedError(err.to_string()))?;
+        Ok(hashes)
+    } else {
+        Err(CliError::ApiError(format!(
+            "Faucet issue: {}",
+            response.status()
+        )))
+    }
+}
+
 /// Wait for transactions, returning an error if any of them fail.
 pub async fn wait_for_transactions(
     client: &aptos_rest_client::Client,
