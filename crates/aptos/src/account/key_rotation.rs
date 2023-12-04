@@ -309,6 +309,12 @@ pub async fn lookup_address(
     address_key: AccountAddress,
     must_exist: bool,
 ) -> Result<AccountAddress, RestError> {
+
+    /*if !must_exist {
+        return Ok(address_key);
+    }*/
+
+    // eprintln!("address_key: {}", address_key.to_hex_literal());
     let originating_resource: OriginatingResource = rest_client
         .get_account_resource_bcs(CORE_CODE_ADDRESS, "0x1::account::OriginatingAddress")
         .await?
@@ -345,7 +351,10 @@ pub async fn lookup_address(
                     .map(|_| address_key)
             }
         },
-        Err(err) => Err(err),
+        Err(err) => {
+            eprintln!("Error looking up address: {}", err);
+            Err(err)
+        },
     }
 }
 

@@ -9,7 +9,7 @@ use crate::{
             ConfigSearchMode, EncodingOptions, PrivateKeyInputOptions, ProfileConfig,
             ProfileOptions, PromptOptions, RngArgs, DEFAULT_PROFILE,
         },
-        utils::{fund_account, prompt_yes_with_override, read_line, wait_for_transactions},
+        utils::{fund_account, fund_pub_key, prompt_yes_with_override, read_line, wait_for_transactions},
     },
 };
 use aptos_crypto::{ed25519::Ed25519PrivateKey, PrivateKey, ValidCryptoMaterialStringExt};
@@ -21,7 +21,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, str::FromStr};
+use std::{collections::BTreeMap, str::FromStr, f32::consts::E};
 
 /// 1 APT (might not actually get that much, depending on the faucet)
 const NUM_DEFAULT_OCTAS: u64 = 100000000;
@@ -173,10 +173,24 @@ impl CliCommand<()> for InitTool {
             .map_err(|err| CliError::UnableToParse("rest_url", err.to_string()))?,
         );
 
+        let pub_key = public_key.clone().to_string();
+        /*if let Some(faucet_url) = profile_config.faucet_url.as_ref() {
+            eprintln!("Funding account");
+            let hashes = fund_pub_key(
+                Url::parse(faucet_url)
+                    .map_err(|err| CliError::UnableToParse("rest_url", err.to_string()))?,
+                // NUM_DEFAULT_OCTAS,
+                pub_key.clone().to_string()
+            ).await?;
+            wait_for_transactions(&client, hashes).await?;
+        }*/
+
         // lookup the address from onchain instead of deriving it
         // if this is the rotated key, deriving it will outputs an incorrect address
         let derived_address = account_address_from_public_key(&public_key);
         let address = lookup_address(&client, derived_address, false).await?;
+
+        eprintln!("Using account {}", address);
 
         profile_config.private_key = Some(private_key);
         profile_config.public_key = Some(public_key);
@@ -229,11 +243,11 @@ impl CliCommand<()> for InitTool {
                     "Account {} doesn't exist, creating it and funding it with {} Octas",
                     address, NUM_DEFAULT_OCTAS
                 );
-                let hashes = fund_account(
+                let hashes = fund_pub_key(
                     Url::parse(faucet_url)
                         .map_err(|err| CliError::UnableToParse("rest_url", err.to_string()))?,
-                    NUM_DEFAULT_OCTAS,
-                    address,
+                    // NUM_DEFAULT_OCTAS,
+                    pub_key.clone().to_string()
                 )
                 .await?;
                 wait_for_transactions(&client, hashes).await?;
