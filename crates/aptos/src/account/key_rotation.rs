@@ -310,9 +310,9 @@ pub async fn lookup_address(
     must_exist: bool,
 ) -> Result<AccountAddress, RestError> {
 
-    /*if !must_exist {
+    if !must_exist {
         return Ok(address_key);
-    }*/
+    }
 
     // eprintln!("address_key: {}", address_key.to_hex_literal());
     let originating_resource: OriginatingResource = rest_client
