@@ -95,13 +95,13 @@ impl CliCommand<()> for InitTool {
             network
         } else {
             eprintln!(
-                "Choose network from [devnet, testnet, mainnet, local, custom | defaults to devnet]"
+                "Choose network from [devnet, testnet, mainnet, local, custom, movement-devnet | defaults to movement-devnet]"
             );
             let input = read_line("network")?;
             let input = input.trim();
             if input.is_empty() {
-                eprintln!("No network given, using devnet...");
-                Network::Devnet
+                eprintln!("No network given, using movement-devnet...");
+                Network::MovementDevnet
             } else {
                 Network::from_str(input)?
             }
@@ -129,6 +129,10 @@ impl CliCommand<()> for InitTool {
                 profile_config.faucet_url = Some("http://localhost:8081".to_string());
             },
             Network::Custom => self.custom_network(&mut profile_config)?,
+            Network::MovementDevnet => {
+                profile_config.rest_url = Some("https://seed-node1.movementlabs.xyz".to_string());
+                profile_config.faucet_url = Some("https://seed-node1.movementlabs.xyz".to_string());
+            },
         }
 
         // Private key
@@ -341,6 +345,7 @@ pub enum Network {
     Devnet,
     Local,
     Custom,
+    MovementDevnet
 }
 
 impl FromStr for Network {
@@ -353,9 +358,10 @@ impl FromStr for Network {
             "devnet" => Self::Devnet,
             "local" => Self::Local,
             "custom" => Self::Custom,
+            "movement-devnet" => Self::MovementDevnet,
             str => {
                 return Err(CliError::CommandArgumentError(format!(
-                    "Invalid network {}.  Must be one of [devnet, testnet, mainnet, local, custom]",
+                    "Invalid network {}.  Must be one of [devnet, testnet, mainnet, local, custom, movement-devnet]",
                     str
                 )));
             },
@@ -365,6 +371,6 @@ impl FromStr for Network {
 
 impl Default for Network {
     fn default() -> Self {
-        Self::Devnet
+        Self::MovementDevnet
     }
 }
