@@ -14,7 +14,6 @@ use aptos_crypto::{
     hash::{CryptoHash, SPARSE_MERKLE_PLACEHOLDER_HASH},
     HashValue,
 };
-use aptos_experimental_runtimes::thread_manager::THREAD_MANAGER;
 use aptos_types::proof::{definition::NodeInProof, SparseMerkleLeafNode, SparseMerkleProofExt};
 use std::cmp::Ordering;
 
@@ -24,7 +23,7 @@ type InMemSubTree<V> = super::node::SubTree<V>;
 type InMemInternal<V> = super::node::InternalNode<V>;
 
 #[derive(Clone)]
-enum InMemSubTreeInfo<V: Send + Sync + 'static> {
+enum InMemSubTreeInfo<V> {
     Internal {
         subtree: InMemSubTree<V>,
         node: InMemInternal<V>,
@@ -39,7 +38,7 @@ enum InMemSubTreeInfo<V: Send + Sync + 'static> {
     Empty,
 }
 
-impl<V: Clone + CryptoHash + Send + Sync + 'static> InMemSubTreeInfo<V> {
+impl<V: Clone + CryptoHash> InMemSubTreeInfo<V> {
     fn create_leaf_with_update(update: (HashValue, &V), generation: u64) -> Self {
         let subtree = InMemSubTree::new_leaf_with_value(update.0, (*update.1).clone(), generation);
         Self::Leaf {
@@ -105,12 +104,12 @@ enum PersistedSubTreeInfo<'a> {
 }
 
 #[derive(Clone)]
-enum SubTreeInfo<'a, V: Send + Sync + 'static> {
+enum SubTreeInfo<'a, V> {
     InMem(InMemSubTreeInfo<V>),
     Persisted(PersistedSubTreeInfo<'a>),
 }
 
-impl<'a, V: Clone + CryptoHash + Send + Sync + 'static> SubTreeInfo<'a, V> {
+impl<'a, V: Clone + CryptoHash> SubTreeInfo<'a, V> {
     fn new_empty() -> Self {
         Self::InMem(InMemSubTreeInfo::Empty)
     }
@@ -274,14 +273,14 @@ impl<'a, V: Clone + CryptoHash + Send + Sync + 'static> SubTreeInfo<'a, V> {
     }
 }
 
-pub struct SubTreeUpdater<'a, V: Send + Sync + 'static> {
+pub struct SubTreeUpdater<'a, V> {
     depth: usize,
     info: SubTreeInfo<'a, V>,
     updates: &'a [(HashValue, Option<&'a V>)],
     generation: u64,
 }
 
-impl<'a, V: Send + Sync + 'static + Clone + CryptoHash> SubTreeUpdater<'a, V> {
+impl<'a, V: Send + Sync + Clone + CryptoHash> SubTreeUpdater<'a, V> {
     pub(crate) fn update(
         root: InMemSubTree<V>,
         updates: &'a [(HashValue, Option<&'a V>)],
@@ -313,9 +312,7 @@ impl<'a, V: Send + Sync + 'static + Clone + CryptoHash> SubTreeUpdater<'a, V> {
                     && left.updates.len() >= MIN_PARALLELIZABLE_SIZE
                     && right.updates.len() >= MIN_PARALLELIZABLE_SIZE
                 {
-                    THREAD_MANAGER
-                        .get_exe_cpu_pool()
-                        .join(|| left.run(proof_reader), || right.run(proof_reader))
+                    rayon::join(|| left.run(proof_reader), || right.run(proof_reader))
                 } else {
                     (left.run(proof_reader), right.run(proof_reader))
                 };

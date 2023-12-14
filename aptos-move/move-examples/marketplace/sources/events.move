@@ -1,9 +1,10 @@
 /// Defines all the events associated with a marketplace. Note: this is attached to a FeeSchedule.
 module marketplace::events {
+    use std::error;
     use std::option::{Self, Option};
     use std::string::String;
 
-    use aptos_framework::event;
+    use aptos_framework::event::{Self, EventHandle};
     use aptos_framework::object::{Self, Object};
 
     use aptos_token::token as tokenv1;
@@ -16,7 +17,46 @@ module marketplace::events {
     friend marketplace::listing;
     friend marketplace::token_offer;
 
+    /// Marketplace does not have EventsV1
+    const ENO_EVENTS_V1: u64 = 1;
+
+    #[resource_group_member(group = aptos_framework::object::ObjectGroup)]
+    /// A holder for all events for a marketplace
+    struct EventsV1 has key {
+        auction_bid_events: EventHandle<AuctionBidEvent>,
+        listing_placed_events: EventHandle<ListingPlacedEvent>,
+        listing_canceled_events: EventHandle<ListingCanceledEvent>,
+        listing_filled_events: EventHandle<ListingFilledEvent>,
+
+        collection_offer_placed_events: EventHandle<CollectionOfferPlacedEvent>,
+        collection_offer_canceled_events: EventHandle<CollectionOfferCanceledEvent>,
+        collection_offer_filled_events: EventHandle<CollectionOfferFilledEvent>,
+
+        token_offer_placed_events: EventHandle<TokenOfferPlacedEvent>,
+        token_offer_canceled_events: EventHandle<TokenOfferCanceledEvent>,
+        token_offer_filled_events: EventHandle<TokenOfferFilledEvent>,
+    }
+
+    // Initializers
+
+    public(friend) fun init(fee_schedule_signer: &signer) {
+        let events = EventsV1 {
+            auction_bid_events: object::new_event_handle(fee_schedule_signer),
+            listing_placed_events: object::new_event_handle(fee_schedule_signer),
+            listing_canceled_events: object::new_event_handle(fee_schedule_signer),
+            listing_filled_events: object::new_event_handle(fee_schedule_signer),
+            collection_offer_placed_events: object::new_event_handle(fee_schedule_signer),
+            collection_offer_canceled_events: object::new_event_handle(fee_schedule_signer),
+            collection_offer_filled_events: object::new_event_handle(fee_schedule_signer),
+            token_offer_placed_events: object::new_event_handle(fee_schedule_signer),
+            token_offer_canceled_events: object::new_event_handle(fee_schedule_signer),
+            token_offer_filled_events: object::new_event_handle(fee_schedule_signer),
+        };
+        move_to(fee_schedule_signer, events);
+    }
+
     // TokenMetadata and helpers
+
     struct TokenMetadata has drop, store {
         creator_address: address,
         collection_name: String,
@@ -82,10 +122,8 @@ module marketplace::events {
 
     // Listing events
 
-    #[event]
     /// An event triggered upon each bid.
-    struct AuctionBid has drop, store {
-        marketplace: address,
+    struct AuctionBidEvent has drop, store {
         listing: address,
         new_bidder: address,
         new_bid: u64,
@@ -106,9 +144,9 @@ module marketplace::events {
         previous_bid: Option<u64>,
         previous_end_time: u64,
         token_metadata: TokenMetadata,
-    ) {
-        event::emit(AuctionBid {
-            marketplace: object::object_address(&marketplace),
+    ) acquires EventsV1 {
+        let marketplace_events = get_events_v1(marketplace);
+        event::emit_event(&mut marketplace_events.auction_bid_events, AuctionBidEvent {
             listing,
             new_bidder,
             new_bid,
@@ -120,9 +158,7 @@ module marketplace::events {
         });
     }
 
-    #[event]
-    struct ListingPlaced has drop, store {
-        marketplace: address,
+    struct ListingPlacedEvent has drop, store {
         type: String,
         listing: address,
         seller: address,
@@ -137,9 +173,9 @@ module marketplace::events {
         seller: address,
         price: u64,
         token_metadata: TokenMetadata,
-    ) {
-        event::emit(ListingPlaced {
-            marketplace: object::object_address(&marketplace),
+    ) acquires EventsV1 {
+        let marketplace_events = get_events_v1(marketplace);
+        event::emit_event(&mut marketplace_events.listing_placed_events, ListingPlacedEvent {
             type,
             listing,
             seller,
@@ -148,9 +184,7 @@ module marketplace::events {
         });
     }
 
-    #[event]
-    struct ListingCanceled has drop, store {
-        marketplace: address,
+    struct ListingCanceledEvent has drop, store {
         type: String,
         listing: address,
         seller: address,
@@ -165,9 +199,9 @@ module marketplace::events {
         seller: address,
         price: u64,
         token_metadata: TokenMetadata,
-    ) {
-        event::emit(ListingCanceled {
-            marketplace: object::object_address(&marketplace),
+    ) acquires EventsV1 {
+        let marketplace_events = get_events_v1(marketplace);
+        event::emit_event(&mut marketplace_events.listing_canceled_events, ListingCanceledEvent {
             type,
             listing,
             seller,
@@ -176,9 +210,7 @@ module marketplace::events {
         });
     }
 
-    #[event]
-    struct ListingFilled has drop, store {
-        marketplace: address,
+    struct ListingFilledEvent has drop, store {
         type: String,
         listing: address,
         seller: address,
@@ -199,9 +231,9 @@ module marketplace::events {
         commission: u64,
         royalties: u64,
         token_metadata: TokenMetadata,
-    ) {
-        event::emit(ListingFilled {
-            marketplace: object::object_address(&marketplace),
+    ) acquires EventsV1 {
+        let marketplace_events = get_events_v1(marketplace);
+        event::emit_event(&mut marketplace_events.listing_filled_events, ListingFilledEvent {
             type,
             listing,
             seller,
@@ -215,9 +247,7 @@ module marketplace::events {
 
     // Collection offer events
 
-    #[event]
-    struct CollectionOfferPlaced has drop, store {
-        marketplace: address,
+    struct CollectionOfferPlacedEvent has drop, store {
         collection_offer: address,
         purchaser: address,
         price: u64,
@@ -232,9 +262,9 @@ module marketplace::events {
         price: u64,
         token_amount: u64,
         collection_metadata: CollectionMetadata,
-    ) {
-        event::emit(CollectionOfferPlaced {
-            marketplace: object::object_address(&marketplace),
+    ) acquires EventsV1 {
+        let marketplace_events = get_events_v1(marketplace);
+        event::emit_event(&mut marketplace_events.collection_offer_placed_events, CollectionOfferPlacedEvent {
             collection_offer,
             purchaser,
             price,
@@ -243,9 +273,7 @@ module marketplace::events {
         });
     }
 
-    #[event]
-    struct CollectionOfferCanceled has drop, store {
-        marketplace: address,
+    struct CollectionOfferCanceledEvent has drop, store {
         collection_offer: address,
         purchaser: address,
         price: u64,
@@ -260,9 +288,9 @@ module marketplace::events {
         price: u64,
         remaining_token_amount: u64,
         collection_metadata: CollectionMetadata,
-    ) {
-        event::emit(CollectionOfferCanceled {
-            marketplace: object::object_address(&marketplace),
+    ) acquires EventsV1 {
+        let marketplace_events = get_events_v1(marketplace);
+        event::emit_event(&mut marketplace_events.collection_offer_canceled_events, CollectionOfferCanceledEvent {
             collection_offer,
             purchaser,
             price,
@@ -271,9 +299,7 @@ module marketplace::events {
         });
     }
 
-    #[event]
-    struct CollectionOfferFilled has drop, store {
-        marketplace: address,
+    struct CollectionOfferFilledEvent has drop, store {
         collection_offer: address,
         purchaser: address,
         seller: address,
@@ -292,9 +318,9 @@ module marketplace::events {
         royalties: u64,
         commission: u64,
         token_metadata: TokenMetadata,
-    ) {
-        event::emit(CollectionOfferFilled {
-            marketplace: object::object_address(&marketplace),
+    ) acquires EventsV1 {
+        let marketplace_events = get_events_v1(marketplace);
+        event::emit_event(&mut marketplace_events.collection_offer_filled_events, CollectionOfferFilledEvent {
             collection_offer,
             purchaser,
             seller,
@@ -305,10 +331,8 @@ module marketplace::events {
         });
     }
 
-    #[event]
     // Token offer events
-    struct TokenOfferPlaced has drop, store {
-        marketplace: address,
+    struct TokenOfferPlacedEvent has drop, store {
         token_offer: address,
         purchaser: address,
         price: u64,
@@ -321,9 +345,9 @@ module marketplace::events {
         purchaser: address,
         price: u64,
         token_metadata: TokenMetadata,
-    ) {
-        event::emit(TokenOfferPlaced {
-            marketplace: object::object_address(&marketplace),
+    ) acquires EventsV1 {
+        let marketplace_events = get_events_v1(marketplace);
+        event::emit_event(&mut marketplace_events.token_offer_placed_events, TokenOfferPlacedEvent {
             token_offer,
             purchaser,
             price,
@@ -331,9 +355,7 @@ module marketplace::events {
         });
     }
 
-    #[event]
-    struct TokenOfferCanceled has drop, store {
-        marketplace: address,
+    struct TokenOfferCanceledEvent has drop, store {
         token_offer: address,
         purchaser: address,
         price: u64,
@@ -346,9 +368,9 @@ module marketplace::events {
         purchaser: address,
         price: u64,
         token_metadata: TokenMetadata,
-    ) {
-        event::emit(TokenOfferCanceled {
-            marketplace: object::object_address(&marketplace),
+    ) acquires EventsV1 {
+        let marketplace_events = get_events_v1(marketplace);
+        event::emit_event(&mut marketplace_events.token_offer_canceled_events, TokenOfferCanceledEvent {
             token_offer,
             purchaser,
             price,
@@ -356,9 +378,7 @@ module marketplace::events {
         });
     }
 
-    #[event]
-    struct TokenOfferFilled has drop, store {
-        marketplace: address,
+    struct TokenOfferFilledEvent has drop, store {
         token_offer: address,
         purchaser: address,
         seller: address,
@@ -377,9 +397,9 @@ module marketplace::events {
         royalties: u64,
         commission: u64,
         token_metadata: TokenMetadata,
-    ) {
-        event::emit(TokenOfferFilled {
-            marketplace: object::object_address(&marketplace),
+    ) acquires EventsV1 {
+        let marketplace_events = get_events_v1(marketplace);
+        event::emit_event(&mut marketplace_events.token_offer_filled_events, TokenOfferFilledEvent {
             token_offer,
             purchaser,
             seller,
@@ -388,5 +408,11 @@ module marketplace::events {
             commission,
             token_metadata,
         });
+    }
+
+    inline fun get_events_v1<T: key>(marketplace: Object<T>): &mut EventsV1 acquires EventsV1 {
+        let addr = object::object_address(&marketplace);
+        assert!(exists<EventsV1>(addr), error::not_found(ENO_EVENTS_V1));
+        borrow_global_mut<EventsV1>(addr)
     }
 }

@@ -21,13 +21,10 @@ const TEST_EXT: &str = "unit_test";
 const VERIFICATION_EXT: &str = "verification";
 
 /// Root of tests which require to set flavor flags.
-const FLAVOR_PATH: &str = "/flavors/";
+const FLAVOR_PATH: &str = "flavors/";
 
 /// Root of tests which require to set skip_attribute_checks flag.
-const SKIP_ATTRIBUTE_CHECKS_PATH: &str = "/skip_attribute_checks/";
-
-/// Root of tests which require to set warn_of_deprecation_use flag
-const WARN_DEPRECATION_PATH: &str = "/deprecated/";
+const SKIP_ATTRIBUTE_CHECKS_PATH: &str = "skip_attribute_checks/";
 
 fn default_testing_addresses() -> BTreeMap<String, NumericalAddress> {
     let mapping = [
@@ -106,9 +103,6 @@ fn move_check_testsuite(path: &Path) -> datatest_stable::Result<()> {
         }
         if p.contains(SKIP_ATTRIBUTE_CHECKS_PATH) {
             flags = flags.set_skip_attribute_checks(true);
-        }
-        if p.contains(WARN_DEPRECATION_PATH) {
-            flags = flags.set_warn_of_deprecation_use(true);
         }
     };
     run_test(path, &exp_path, &out_path, flags)?;

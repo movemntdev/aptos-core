@@ -4,7 +4,6 @@
 
 use crate::{BCS_EXTENSION, DEFAULT_BUILD_DIR, DEFAULT_STORAGE_DIR};
 use anyhow::{anyhow, bail, Result};
-use bytes::Bytes;
 use move_binary_format::{
     access::ModuleAccess,
     binary_views::BinaryIndexedView,
@@ -19,7 +18,6 @@ use move_core_types::{
     metadata::Metadata,
     parser,
     resolver::{resource_size, ModuleResolver, ResourceResolver},
-    value::MoveTypeLayout,
 };
 use move_disassembler::disassembler::Disassembler;
 use move_ir_types::location::Spanned;
@@ -95,7 +93,7 @@ impl OnDiskStateView {
 
     fn get_addr_path(&self, addr: &AccountAddress) -> PathBuf {
         let mut path = self.storage_dir.clone();
-        path.push(format!("0x{}", addr.to_hex()));
+        path.push(format!("0x{}", addr));
         path
     }
 
@@ -135,12 +133,12 @@ impl OnDiskStateView {
         &self,
         addr: AccountAddress,
         tag: StructTag,
-    ) -> Result<Option<Bytes>> {
+    ) -> Result<Option<Vec<u8>>> {
         Self::get_bytes(&self.get_resource_path(addr, tag))
     }
 
     /// Read the resource bytes stored on-disk at `addr`/`tag`
-    fn get_module_bytes(&self, module_id: &ModuleId) -> Result<Option<Bytes>> {
+    fn get_module_bytes(&self, module_id: &ModuleId) -> Result<Option<Vec<u8>>> {
         Self::get_bytes(&self.get_module_path(module_id))
     }
 
@@ -164,9 +162,9 @@ impl OnDiskStateView {
         }
     }
 
-    fn get_bytes(path: &Path) -> Result<Option<Bytes>> {
+    fn get_bytes(path: &Path) -> Result<Option<Vec<u8>>> {
         Ok(if path.exists() {
-            Some(fs::read(path)?.into())
+            Some(fs::read(path)?)
         } else {
             None
         })
@@ -283,7 +281,7 @@ impl OnDiskStateView {
     /// Save all the modules in the local cache, re-generate mv_interfaces if required.
     pub fn save_modules<'a>(
         &self,
-        modules: impl IntoIterator<Item = &'a (ModuleId, Bytes)>,
+        modules: impl IntoIterator<Item = &'a (ModuleId, Vec<u8>)>,
     ) -> Result<()> {
         for (module_id, module_bytes) in modules {
             self.save_module(module_id, module_bytes)?;
@@ -340,19 +338,18 @@ impl ModuleResolver for OnDiskStateView {
         vec![]
     }
 
-    fn get_module(&self, module_id: &ModuleId) -> Result<Option<Bytes>, anyhow::Error> {
+    fn get_module(&self, module_id: &ModuleId) -> Result<Option<Vec<u8>>, anyhow::Error> {
         self.get_module_bytes(module_id)
     }
 }
 
 impl ResourceResolver for OnDiskStateView {
-    fn get_resource_bytes_with_metadata_and_layout(
+    fn get_resource_with_metadata(
         &self,
         address: &AccountAddress,
         struct_tag: &StructTag,
         _metadata: &[Metadata],
-        _maybe_layout: Option<&MoveTypeLayout>,
-    ) -> Result<(Option<Bytes>, usize)> {
+    ) -> Result<(Option<Vec<u8>>, usize)> {
         let buf = self.get_resource_bytes(*address, struct_tag.clone())?;
         let buf_size = resource_size(&buf);
         Ok((buf, buf_size))
@@ -406,7 +403,7 @@ impl ToString for StructID {
         // Would be nice to expose a StructTag parser and get rid of the 0x here
         format!(
             "0x{}::{}::{}{}",
-            tag.address.to_hex(),
+            tag.address,
             tag.module,
             tag.name,
             Generics(tag.type_params.clone()).to_string()

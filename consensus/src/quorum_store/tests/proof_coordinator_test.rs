@@ -6,15 +6,16 @@ use crate::{
     quorum_store::{
         batch_store::BatchReader,
         proof_coordinator::{ProofCoordinator, ProofCoordinatorCommand},
+        tests::utils::create_vec_signed_transactions,
         types::Batch,
     },
-    test_utils::{create_vec_signed_transactions, mock_quorum_store_sender::MockQuorumStoreSender},
+    test_utils::mock_quorum_store_sender::MockQuorumStoreSender,
 };
 use aptos_consensus_types::proof_of_store::{
     BatchId, ProofOfStore, SignedBatchInfo, SignedBatchInfoMsg,
 };
 use aptos_crypto::HashValue;
-use aptos_executor_types::ExecutorResult;
+use aptos_executor_types::Error;
 use aptos_types::{
     transaction::SignedTransaction, validator_verifier::random_validator_verifier, PeerId,
 };
@@ -30,12 +31,8 @@ impl BatchReader for MockBatchReader {
         Some(self.peer)
     }
 
-    fn get_batch(&self, _proof: ProofOfStore) -> Receiver<ExecutorResult<Vec<SignedTransaction>>> {
-        unimplemented!()
-    }
-
-    fn update_certified_timestamp(&self, _certified_time: u64) {
-        unimplemented!()
+    fn get_batch(&self, _proof: ProofOfStore) -> Receiver<Result<Vec<SignedTransaction>, Error>> {
+        unimplemented!();
     }
 }
 
@@ -51,7 +48,6 @@ async fn test_proof_coordinator_basic() {
             peer: signers[0].author(),
         }),
         tx,
-        true,
     );
     let (proof_coordinator_tx, proof_coordinator_rx) = channel(100);
     let (tx, mut rx) = channel(100);

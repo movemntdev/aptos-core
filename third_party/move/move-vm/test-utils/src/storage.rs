@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::{bail, Error, Result};
-use bytes::Bytes;
 use move_core_types::{
     account_address::AccountAddress,
     effects::{AccountChangeSet, ChangeSet, Op},
@@ -11,7 +10,6 @@ use move_core_types::{
     language_storage::{ModuleId, StructTag},
     metadata::Metadata,
     resolver::{resource_size, ModuleResolver, MoveResolver, ResourceResolver},
-    value::MoveTypeLayout,
 };
 #[cfg(feature = "table-extension")]
 use move_table_extension::{TableChangeSet, TableHandle, TableResolver};
@@ -35,31 +33,29 @@ impl ModuleResolver for BlankStorage {
         vec![]
     }
 
-    fn get_module(&self, _module_id: &ModuleId) -> Result<Option<Bytes>> {
+    fn get_module(&self, _module_id: &ModuleId) -> Result<Option<Vec<u8>>> {
         Ok(None)
     }
 }
 
 impl ResourceResolver for BlankStorage {
-    fn get_resource_bytes_with_metadata_and_layout(
+    fn get_resource_with_metadata(
         &self,
         _address: &AccountAddress,
         _tag: &StructTag,
         _metadata: &[Metadata],
-        _maybe_layout: Option<&MoveTypeLayout>,
-    ) -> Result<(Option<Bytes>, usize)> {
+    ) -> Result<(Option<Vec<u8>>, usize)> {
         Ok((None, 0))
     }
 }
 
 #[cfg(feature = "table-extension")]
 impl TableResolver for BlankStorage {
-    fn resolve_table_entry_bytes_with_layout(
+    fn resolve_table_entry(
         &self,
         _handle: &TableHandle,
         _key: &[u8],
-        _maybe_layout: Option<&MoveTypeLayout>,
-    ) -> Result<Option<Bytes>, Error> {
+    ) -> Result<Option<Vec<u8>>, Error> {
         Ok(None)
     }
 }
@@ -69,7 +65,7 @@ impl TableResolver for BlankStorage {
 #[derive(Debug, Clone)]
 pub struct DeltaStorage<'a, 'b, S> {
     base: &'a S,
-    change_set: &'b ChangeSet,
+    delta: &'b ChangeSet,
 }
 
 impl<'a, 'b, S: ModuleResolver> ModuleResolver for DeltaStorage<'a, 'b, S> {
@@ -77,8 +73,8 @@ impl<'a, 'b, S: ModuleResolver> ModuleResolver for DeltaStorage<'a, 'b, S> {
         vec![]
     }
 
-    fn get_module(&self, module_id: &ModuleId) -> Result<Option<Bytes>, Error> {
-        if let Some(account_storage) = self.change_set.accounts().get(module_id.address()) {
+    fn get_module(&self, module_id: &ModuleId) -> Result<Option<Vec<u8>>, Error> {
+        if let Some(account_storage) = self.delta.accounts().get(module_id.address()) {
             if let Some(blob_opt) = account_storage.modules().get(module_id.name()) {
                 return Ok(blob_opt.clone().ok());
             }
@@ -89,53 +85,48 @@ impl<'a, 'b, S: ModuleResolver> ModuleResolver for DeltaStorage<'a, 'b, S> {
 }
 
 impl<'a, 'b, S: ResourceResolver> ResourceResolver for DeltaStorage<'a, 'b, S> {
-    fn get_resource_bytes_with_metadata_and_layout(
+    fn get_resource_with_metadata(
         &self,
         address: &AccountAddress,
         tag: &StructTag,
         metadata: &[Metadata],
-        layout: Option<&MoveTypeLayout>,
-    ) -> anyhow::Result<(Option<Bytes>, usize), Error> {
-        if let Some(account_storage) = self.change_set.accounts().get(address) {
+    ) -> Result<(Option<Vec<u8>>, usize)> {
+        if let Some(account_storage) = self.delta.accounts().get(address) {
             if let Some(blob_opt) = account_storage.resources().get(tag) {
                 let buf = blob_opt.clone().ok();
                 let buf_size = resource_size(&buf);
                 return Ok((buf, buf_size));
             }
         }
-        self.base
-            .get_resource_bytes_with_metadata_and_layout(address, tag, metadata, layout)
+
+        // TODO
+        self.base.get_resource_with_metadata(address, tag, metadata)
     }
 }
 
 #[cfg(feature = "table-extension")]
 impl<'a, 'b, S: TableResolver> TableResolver for DeltaStorage<'a, 'b, S> {
-    fn resolve_table_entry_bytes_with_layout(
+    fn resolve_table_entry(
         &self,
         handle: &TableHandle,
         key: &[u8],
-        maybe_layout: Option<&MoveTypeLayout>,
-    ) -> Result<Option<Bytes>, Error> {
-        // TODO: In addition to `change_set`, cache table outputs.
-        self.base
-            .resolve_table_entry_bytes_with_layout(handle, key, maybe_layout)
+    ) -> std::result::Result<Option<Vec<u8>>, Error> {
+        // TODO: No support for table deltas
+        self.base.resolve_table_entry(handle, key)
     }
 }
 
 impl<'a, 'b, S: MoveResolver> DeltaStorage<'a, 'b, S> {
     pub fn new(base: &'a S, delta: &'b ChangeSet) -> Self {
-        Self {
-            base,
-            change_set: delta,
-        }
+        Self { base, delta }
     }
 }
 
 /// Simple in-memory storage for modules and resources under an account.
 #[derive(Debug, Clone)]
 struct InMemoryAccountStorage {
-    resources: BTreeMap<StructTag, Bytes>,
-    modules: BTreeMap<Identifier, Bytes>,
+    resources: BTreeMap<StructTag, Vec<u8>>,
+    modules: BTreeMap<Identifier, Vec<u8>>,
 }
 
 /// Simple in-memory storage that can be used as a Move VM storage backend for testing purposes.
@@ -143,7 +134,7 @@ struct InMemoryAccountStorage {
 pub struct InMemoryStorage {
     accounts: BTreeMap<AccountAddress, InMemoryAccountStorage>,
     #[cfg(feature = "table-extension")]
-    tables: BTreeMap<TableHandle, BTreeMap<Vec<u8>, Bytes>>,
+    tables: BTreeMap<TableHandle, BTreeMap<Vec<u8>, Vec<u8>>>,
 }
 
 fn apply_changes<K, V>(
@@ -277,9 +268,7 @@ impl InMemoryStorage {
         let account = get_or_insert(&mut self.accounts, *module_id.address(), || {
             InMemoryAccountStorage::new()
         });
-        account
-            .modules
-            .insert(module_id.name().to_owned(), blob.into());
+        account.modules.insert(module_id.name().to_owned(), blob);
     }
 
     pub fn publish_or_overwrite_resource(
@@ -289,7 +278,7 @@ impl InMemoryStorage {
         blob: Vec<u8>,
     ) {
         let account = get_or_insert(&mut self.accounts, addr, InMemoryAccountStorage::new);
-        account.resources.insert(struct_tag, blob.into());
+        account.resources.insert(struct_tag, blob);
     }
 }
 
@@ -298,7 +287,7 @@ impl ModuleResolver for InMemoryStorage {
         vec![]
     }
 
-    fn get_module(&self, module_id: &ModuleId) -> Result<Option<Bytes>, Error> {
+    fn get_module(&self, module_id: &ModuleId) -> Result<Option<Vec<u8>>, Error> {
         if let Some(account_storage) = self.accounts.get(module_id.address()) {
             return Ok(account_storage.modules.get(module_id.name()).cloned());
         }
@@ -307,13 +296,12 @@ impl ModuleResolver for InMemoryStorage {
 }
 
 impl ResourceResolver for InMemoryStorage {
-    fn get_resource_bytes_with_metadata_and_layout(
+    fn get_resource_with_metadata(
         &self,
         address: &AccountAddress,
         tag: &StructTag,
         _metadata: &[Metadata],
-        _maybe_layout: Option<&MoveTypeLayout>,
-    ) -> Result<(Option<Bytes>, usize)> {
+    ) -> Result<(Option<Vec<u8>>, usize)> {
         if let Some(account_storage) = self.accounts.get(address) {
             let buf = account_storage.resources.get(tag).cloned();
             let buf_size = resource_size(&buf);
@@ -325,12 +313,11 @@ impl ResourceResolver for InMemoryStorage {
 
 #[cfg(feature = "table-extension")]
 impl TableResolver for InMemoryStorage {
-    fn resolve_table_entry_bytes_with_layout(
+    fn resolve_table_entry(
         &self,
         handle: &TableHandle,
         key: &[u8],
-        _maybe_layout: Option<&MoveTypeLayout>,
-    ) -> Result<Option<Bytes>, Error> {
+    ) -> std::result::Result<Option<Vec<u8>>, Error> {
         Ok(self.tables.get(handle).and_then(|t| t.get(key).cloned()))
     }
 }

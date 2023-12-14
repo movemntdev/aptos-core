@@ -1,12 +1,12 @@
 
-<a id="0x1_storage_gas"></a>
+<a name="0x1_storage_gas"></a>
 
 # Module `0x1::storage_gas`
 
 Gas parameters for global storage.
 
 
-<a id="@General_overview_sections_0"></a>
+<a name="@General_overview_sections_0"></a>
 
 ## General overview sections
 
@@ -26,13 +26,13 @@ Gas parameters for global storage.
 * [Setting configurations](#setting-configurations)
 
 
-<a id="@Definitions_1"></a>
+<a name="@Definitions_1"></a>
 
 ## Definitions
 
 
 
-<a id="@Utilization_dimensions_2"></a>
+<a name="@Utilization_dimensions_2"></a>
 
 ### Utilization dimensions
 
@@ -50,7 +50,7 @@ global storage via a <code><b>move_to</b>()</code> operation.
 2.  Table entries.
 
 
-<a id="@Utilization_ratios_3"></a>
+<a name="@Utilization_ratios_3"></a>
 
 ### Utilization ratios
 
@@ -67,7 +67,7 @@ ratio is 50%.
 See <code><a href="storage_gas.md#0x1_storage_gas_base_8192_exponential_curve">base_8192_exponential_curve</a>()</code> for mathematical definitions.
 
 
-<a id="@Gas_curve_lookup_4"></a>
+<a name="@Gas_curve_lookup_4"></a>
 
 ### Gas curve lookup
 
@@ -94,7 +94,7 @@ per-byte reads will charge the minimum per-byte gas cost, plus
 See <code><a href="storage_gas.md#0x1_storage_gas_base_8192_exponential_curve">base_8192_exponential_curve</a>()</code> for a supporting calculation.
 
 
-<a id="@Item-wise_operations_5"></a>
+<a name="@Item-wise_operations_5"></a>
 
 ### Item-wise operations
 
@@ -110,7 +110,7 @@ global storage via <code><b>borrow_global_mut</b>&lt;T&gt;</code> or via a table
 mutation operation.
 
 
-<a id="@Byte-wise_operations_6"></a>
+<a name="@Byte-wise_operations_6"></a>
 
 ### Byte-wise operations
 
@@ -126,7 +126,7 @@ for $(5 * 128) / 8 + 1 = 81$ bytes. Vectors are similarly treated
 as fields.
 
 
-<a id="@Function_dependencies_7"></a>
+<a name="@Function_dependencies_7"></a>
 
 ## Function dependencies
 
@@ -138,7 +138,7 @@ a browser renders the diagrams with coloring that makes it difficult
 to read, try a different browser.
 
 
-<a id="@Initialization_8"></a>
+<a name="@Initialization_8"></a>
 
 ### Initialization
 
@@ -155,7 +155,7 @@ new_gas_curve --> validate_points
 ```
 
 
-<a id="@Reconfiguration_9"></a>
+<a name="@Reconfiguration_9"></a>
 
 ### Reconfiguration
 
@@ -179,7 +179,7 @@ Here, the function <code><a href="storage_gas.md#0x1_storage_gas_interpolate">in
 <code>interpolate</code> is a reserved word in <code>mermaid.js</code>.
 
 
-<a id="@Setting_configurations_10"></a>
+<a name="@Setting_configurations_10"></a>
 
 ### Setting configurations
 
@@ -193,7 +193,7 @@ gas_schedule::set_storage_gas_config --> set_config
 ```
 
 
-<a id="@Complete_docgen_index_11"></a>
+<a name="@Complete_docgen_index_11"></a>
 
 ## Complete docgen index
 
@@ -260,7 +260,7 @@ The below index is automatically generated from source code:
 
 
 
-<a id="0x1_storage_gas_StorageGas"></a>
+<a name="0x1_storage_gas_StorageGas"></a>
 
 ## Resource `StorageGas`
 
@@ -328,7 +328,7 @@ first transaction of an epoch.
 
 </details>
 
-<a id="0x1_storage_gas_Point"></a>
+<a name="0x1_storage_gas_Point"></a>
 
 ## Struct `Point`
 
@@ -372,7 +372,7 @@ given in basis points:
 
 </details>
 
-<a id="0x1_storage_gas_UsageGasConfig"></a>
+<a name="0x1_storage_gas_UsageGasConfig"></a>
 
 ## Struct `UsageGasConfig`
 
@@ -422,7 +422,7 @@ overwrites. See <code><a href="storage_gas.md#0x1_storage_gas_StorageGasConfig">
 
 </details>
 
-<a id="0x1_storage_gas_GasCurve"></a>
+<a name="0x1_storage_gas_GasCurve"></a>
 
 ## Struct `GasCurve`
 
@@ -480,7 +480,7 @@ See <code><a href="storage_gas.md#0x1_storage_gas_base_8192_exponential_curve">b
 
 </details>
 
-<a id="0x1_storage_gas_StorageGasConfig"></a>
+<a name="0x1_storage_gas_StorageGasConfig"></a>
 
 ## Resource `StorageGasConfig`
 
@@ -514,12 +514,12 @@ Gas configurations for per-item and per-byte prices.
 
 </details>
 
-<a id="@Constants_12"></a>
+<a name="@Constants_12"></a>
 
 ## Constants
 
 
-<a id="0x1_storage_gas_MAX_U64"></a>
+<a name="0x1_storage_gas_MAX_U64"></a>
 
 
 
@@ -528,7 +528,7 @@ Gas configurations for per-item and per-byte prices.
 
 
 
-<a id="0x1_storage_gas_BASIS_POINT_DENOMINATION"></a>
+<a name="0x1_storage_gas_BASIS_POINT_DENOMINATION"></a>
 
 
 
@@ -537,7 +537,7 @@ Gas configurations for per-item and per-byte prices.
 
 
 
-<a id="0x1_storage_gas_EINVALID_GAS_RANGE"></a>
+<a name="0x1_storage_gas_EINVALID_GAS_RANGE"></a>
 
 
 
@@ -546,7 +546,7 @@ Gas configurations for per-item and per-byte prices.
 
 
 
-<a id="0x1_storage_gas_EINVALID_MONOTONICALLY_NON_DECREASING_CURVE"></a>
+<a name="0x1_storage_gas_EINVALID_MONOTONICALLY_NON_DECREASING_CURVE"></a>
 
 
 
@@ -555,7 +555,7 @@ Gas configurations for per-item and per-byte prices.
 
 
 
-<a id="0x1_storage_gas_EINVALID_POINT_RANGE"></a>
+<a name="0x1_storage_gas_EINVALID_POINT_RANGE"></a>
 
 
 
@@ -564,7 +564,7 @@ Gas configurations for per-item and per-byte prices.
 
 
 
-<a id="0x1_storage_gas_ESTORAGE_GAS"></a>
+<a name="0x1_storage_gas_ESTORAGE_GAS"></a>
 
 
 
@@ -573,7 +573,7 @@ Gas configurations for per-item and per-byte prices.
 
 
 
-<a id="0x1_storage_gas_ESTORAGE_GAS_CONFIG"></a>
+<a name="0x1_storage_gas_ESTORAGE_GAS_CONFIG"></a>
 
 
 
@@ -582,7 +582,7 @@ Gas configurations for per-item and per-byte prices.
 
 
 
-<a id="0x1_storage_gas_ETARGET_USAGE_TOO_BIG"></a>
+<a name="0x1_storage_gas_ETARGET_USAGE_TOO_BIG"></a>
 
 
 
@@ -591,7 +591,7 @@ Gas configurations for per-item and per-byte prices.
 
 
 
-<a id="0x1_storage_gas_EZERO_TARGET_USAGE"></a>
+<a name="0x1_storage_gas_EZERO_TARGET_USAGE"></a>
 
 
 
@@ -600,14 +600,14 @@ Gas configurations for per-item and per-byte prices.
 
 
 
-<a id="0x1_storage_gas_base_8192_exponential_curve"></a>
+<a name="0x1_storage_gas_base_8192_exponential_curve"></a>
 
 ## Function `base_8192_exponential_curve`
 
 Default exponential curve having base 8192.
 
 
-<a id="@Function_definition_13"></a>
+<a name="@Function_definition_13"></a>
 
 ### Function definition
 
@@ -630,7 +630,7 @@ $$g(u_r) = g_{min} + u_m \Delta_g$$
 | $b = 8192$                          | Exponent base          |
 
 
-<a id="@Example_14"></a>
+<a name="@Example_14"></a>
 
 ### Example
 
@@ -645,7 +645,7 @@ Which means that the price above <code>min_gas</code> is approximately
 1.09% of the difference between <code>max_gas</code> and <code>min_gas</code>.
 
 
-<a id="@Utilization_multipliers_15"></a>
+<a name="@Utilization_multipliers_15"></a>
 
 ### Utilization multipliers
 
@@ -697,7 +697,7 @@ Which means that the price above <code>min_gas</code> is approximately
 
 </details>
 
-<a id="0x1_storage_gas_new_point"></a>
+<a name="0x1_storage_gas_new_point"></a>
 
 ## Function `new_point`
 
@@ -725,7 +725,7 @@ Which means that the price above <code>min_gas</code> is approximately
 
 </details>
 
-<a id="0x1_storage_gas_new_gas_curve"></a>
+<a name="0x1_storage_gas_new_gas_curve"></a>
 
 ## Function `new_gas_curve`
 
@@ -756,7 +756,7 @@ Which means that the price above <code>min_gas</code> is approximately
 
 </details>
 
-<a id="0x1_storage_gas_new_usage_gas_config"></a>
+<a name="0x1_storage_gas_new_usage_gas_config"></a>
 
 ## Function `new_usage_gas_config`
 
@@ -787,7 +787,7 @@ Which means that the price above <code>min_gas</code> is approximately
 
 </details>
 
-<a id="0x1_storage_gas_new_storage_gas_config"></a>
+<a name="0x1_storage_gas_new_storage_gas_config"></a>
 
 ## Function `new_storage_gas_config`
 
@@ -814,7 +814,7 @@ Which means that the price above <code>min_gas</code> is approximately
 
 </details>
 
-<a id="0x1_storage_gas_set_config"></a>
+<a name="0x1_storage_gas_set_config"></a>
 
 ## Function `set_config`
 
@@ -839,7 +839,7 @@ Which means that the price above <code>min_gas</code> is approximately
 
 </details>
 
-<a id="0x1_storage_gas_initialize"></a>
+<a name="0x1_storage_gas_initialize"></a>
 
 ## Function `initialize`
 
@@ -921,7 +921,7 @@ target utilization.
 
 </details>
 
-<a id="0x1_storage_gas_validate_points"></a>
+<a name="0x1_storage_gas_validate_points"></a>
 
 ## Function `validate_points`
 
@@ -964,7 +964,7 @@ target utilization.
 
 </details>
 
-<a id="0x1_storage_gas_calculate_gas"></a>
+<a name="0x1_storage_gas_calculate_gas"></a>
 
 ## Function `calculate_gas`
 
@@ -1029,7 +1029,7 @@ target utilization.
 
 </details>
 
-<a id="0x1_storage_gas_interpolate"></a>
+<a name="0x1_storage_gas_interpolate"></a>
 
 ## Function `interpolate`
 
@@ -1053,7 +1053,7 @@ target utilization.
 
 </details>
 
-<a id="0x1_storage_gas_calculate_read_gas"></a>
+<a name="0x1_storage_gas_calculate_read_gas"></a>
 
 ## Function `calculate_read_gas`
 
@@ -1077,7 +1077,7 @@ target utilization.
 
 </details>
 
-<a id="0x1_storage_gas_calculate_create_gas"></a>
+<a name="0x1_storage_gas_calculate_create_gas"></a>
 
 ## Function `calculate_create_gas`
 
@@ -1101,7 +1101,7 @@ target utilization.
 
 </details>
 
-<a id="0x1_storage_gas_calculate_write_gas"></a>
+<a name="0x1_storage_gas_calculate_write_gas"></a>
 
 ## Function `calculate_write_gas`
 
@@ -1125,7 +1125,7 @@ target utilization.
 
 </details>
 
-<a id="0x1_storage_gas_on_reconfig"></a>
+<a name="0x1_storage_gas_on_reconfig"></a>
 
 ## Function `on_reconfig`
 
@@ -1165,12 +1165,12 @@ target utilization.
 
 </details>
 
-<a id="@Specification_16"></a>
+<a name="@Specification_16"></a>
 
 ## Specification
 
 
-<a id="@Specification_16_Point"></a>
+<a name="@Specification_16_Point"></a>
 
 ### Struct `Point`
 
@@ -1205,7 +1205,7 @@ target utilization.
 
 
 
-<a id="@Specification_16_UsageGasConfig"></a>
+<a name="@Specification_16_UsageGasConfig"></a>
 
 ### Struct `UsageGasConfig`
 
@@ -1259,7 +1259,7 @@ target utilization.
 
 
 
-<a id="@Specification_16_GasCurve"></a>
+<a name="@Specification_16_GasCurve"></a>
 
 ### Struct `GasCurve`
 
@@ -1301,7 +1301,7 @@ target utilization.
 
 
 
-<a id="@Specification_16_base_8192_exponential_curve"></a>
+<a name="@Specification_16_base_8192_exponential_curve"></a>
 
 ### Function `base_8192_exponential_curve`
 
@@ -1317,7 +1317,7 @@ target utilization.
 
 
 
-<a id="@Specification_16_new_point"></a>
+<a name="@Specification_16_new_point"></a>
 
 ### Function `new_point`
 
@@ -1335,7 +1335,7 @@ target utilization.
 
 
 
-<a id="@Specification_16_new_gas_curve"></a>
+<a name="@Specification_16_new_gas_curve"></a>
 
 ### Function `new_gas_curve`
 
@@ -1358,7 +1358,7 @@ A non decreasing curve must ensure that next is greater than cur.
 
 
 
-<a id="@Specification_16_new_usage_gas_config"></a>
+<a name="@Specification_16_new_usage_gas_config"></a>
 
 ### Function `new_usage_gas_config`
 
@@ -1381,7 +1381,7 @@ A non decreasing curve must ensure that next is greater than cur.
 
 
 
-<a id="@Specification_16_new_storage_gas_config"></a>
+<a name="@Specification_16_new_storage_gas_config"></a>
 
 ### Function `new_storage_gas_config`
 
@@ -1399,7 +1399,7 @@ A non decreasing curve must ensure that next is greater than cur.
 
 
 
-<a id="@Specification_16_set_config"></a>
+<a name="@Specification_16_set_config"></a>
 
 ### Function `set_config`
 
@@ -1417,7 +1417,7 @@ Signer address must be @aptos_framework and StorageGasConfig exists.
 
 
 
-<a id="@Specification_16_initialize"></a>
+<a name="@Specification_16_initialize"></a>
 
 ### Function `initialize`
 
@@ -1440,7 +1440,7 @@ and exists after the function is executed.
 
 
 
-<a id="@Specification_16_validate_points"></a>
+<a name="@Specification_16_validate_points"></a>
 
 ### Function `validate_points`
 
@@ -1460,7 +1460,7 @@ A non decreasing curve must ensure that next is greater than cur.
 
 
 
-<a id="@Specification_16_calculate_gas"></a>
+<a name="@Specification_16_calculate_gas"></a>
 
 ### Function `calculate_gas`
 
@@ -1481,7 +1481,7 @@ A non decreasing curve must ensure that next is greater than cur.
 
 
 
-<a id="@Specification_16_interpolate"></a>
+<a name="@Specification_16_interpolate"></a>
 
 ### Function `interpolate`
 
@@ -1499,7 +1499,7 @@ A non decreasing curve must ensure that next is greater than cur.
 
 
 
-<a id="@Specification_16_on_reconfig"></a>
+<a name="@Specification_16_on_reconfig"></a>
 
 ### Function `on_reconfig`
 
@@ -1520,7 +1520,7 @@ Address @aptos_framework must exist StorageGasConfig and StorageGas and StateSto
 
 
 
-<a id="0x1_storage_gas_spec_calculate_gas"></a>
+<a name="0x1_storage_gas_spec_calculate_gas"></a>
 
 
 <pre><code><b>fun</b> <a href="storage_gas.md#0x1_storage_gas_spec_calculate_gas">spec_calculate_gas</a>(max_usage: u64, current_usage: u64, curve: <a href="storage_gas.md#0x1_storage_gas_GasCurve">GasCurve</a>): u64;
@@ -1529,7 +1529,7 @@ Address @aptos_framework must exist StorageGasConfig and StorageGas and StateSto
 
 
 
-<a id="0x1_storage_gas_NewGasCurveAbortsIf"></a>
+<a name="0x1_storage_gas_NewGasCurveAbortsIf"></a>
 
 
 <pre><code><b>schema</b> <a href="storage_gas.md#0x1_storage_gas_NewGasCurveAbortsIf">NewGasCurveAbortsIf</a> {
@@ -1544,7 +1544,7 @@ Address @aptos_framework must exist StorageGasConfig and StorageGas and StateSto
 A non decreasing curve must ensure that next is greater than cur.
 
 
-<a id="0x1_storage_gas_ValidatePointsAbortsIf"></a>
+<a name="0x1_storage_gas_ValidatePointsAbortsIf"></a>
 
 
 <pre><code><b>schema</b> <a href="storage_gas.md#0x1_storage_gas_ValidatePointsAbortsIf">ValidatePointsAbortsIf</a> {

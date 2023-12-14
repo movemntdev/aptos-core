@@ -13,6 +13,7 @@ use aptos_logger::prelude::*;
 use aptos_temppath::TempPath;
 use async_trait::async_trait;
 use clap::Parser;
+use once_cell::sync::Lazy;
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
@@ -24,6 +25,13 @@ use tokio::{
     io::{AsyncRead, AsyncReadExt},
 };
 use tokio_stream::{wrappers::ReadDirStream, StreamExt};
+
+static TEMP_METADATA_CACHE_DIR: Lazy<TempPath> = Lazy::new(|| {
+    let dir = TempPath::new();
+    dir.create_as_dir()
+        .expect("Temp metadata dir should create.");
+    dir
+});
 
 #[derive(Clone, Parser)]
 pub struct MetadataCacheOpt {
@@ -51,7 +59,7 @@ impl MetadataCacheOpt {
     pub(crate) fn cache_dir(&self) -> PathBuf {
         self.dir
             .clone()
-            .unwrap_or_else(|| TempPath::new().path().to_path_buf())
+            .unwrap_or_else(|| TEMP_METADATA_CACHE_DIR.path().to_path_buf())
             .join(Self::SUB_DIR)
     }
 }

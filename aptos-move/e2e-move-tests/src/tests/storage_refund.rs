@@ -92,6 +92,7 @@ const LEEWAY: u64 = 2000;
 fn read_slot_fee_from_gas_schedule(h: &MoveHarness) -> u64 {
     let slot_fee = h
         .new_vm()
+        .internals()
         .gas_params()
         .unwrap()
         .vm

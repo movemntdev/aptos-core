@@ -39,8 +39,6 @@ class node_tests_add_pfn(unittest.TestCase):
             "workspace",
             "storage-class-name",
             "storage-size",
-            "pfn-cpu",
-            "pfn-memory",
         )
 
         try:
@@ -68,8 +66,6 @@ class node_tests_add_pfn(unittest.TestCase):
             "",
             "storage-class-name",
             "storage-size",
-            "pfn-cpu",
-            "pfn-memory",
         )
         try:
             add_pfn_main(args, system_args)

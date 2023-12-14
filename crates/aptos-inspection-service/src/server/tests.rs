@@ -10,19 +10,15 @@ use crate::{
     CONFIGURATION_PATH, FORGE_METRICS_PATH, INDEX_PATH, JSON_METRICS_PATH, METRICS_PATH,
     PEER_INFORMATION_PATH, SYSTEM_INFORMATION_PATH,
 };
-use aptos_config::config::{AptosDataClientConfig, BaseConfig, NodeConfig};
-use aptos_data_client::client::AptosDataClient;
-use aptos_network::application::{interface::NetworkClient, storage::PeersAndMetadata};
-use aptos_storage_interface::DbReader;
-use aptos_storage_service_client::StorageServiceClient;
-use aptos_time_service::TimeService;
+use aptos_config::config::NodeConfig;
+use aptos_network::application::storage::PeersAndMetadata;
 use assert_approx_eq::assert_approx_eq;
 use futures::executor::block_on;
 use hyper::{body, Body, Method, Request, Response, StatusCode};
 use once_cell::sync::Lazy;
 use prometheus::{proto::MetricFamily, register_int_counter, Counter, IntCounter, Opts, Registry};
 use rusty_fork::rusty_fork_test;
-use std::{collections::HashMap, io::read_to_string, string::String, sync::Arc};
+use std::{io::read_to_string, string::String};
 
 // This metrics counter only exists in this test context; the rest of the
 // system's metrics counters don't exist, so we need to add this for tests.
@@ -177,7 +173,6 @@ async fn test_inspect_peer_information() {
     assert!(response_body_string.contains("Number of peers"));
     assert!(response_body_string.contains("Registered networks"));
     assert!(response_body_string.contains("Peers and network IDs"));
-    assert!(response_body_string.contains("State sync metadata"));
 }
 
 rusty_fork_test! {
@@ -251,21 +246,6 @@ async fn send_get_request_to_path(config: &NodeConfig, endpoint: &str) -> Respon
     // Build the URI
     let uri = format!("http://127.0.0.1:9201{}", endpoint);
 
-    // Create the peers and metadata
-    let peers_and_metadata = PeersAndMetadata::new(&[]);
-
-    // Create the data client
-    let network_client =
-        NetworkClient::new(vec![], vec![], HashMap::new(), peers_and_metadata.clone());
-    let (aptos_data_client, _) = AptosDataClient::new(
-        AptosDataClientConfig::default(),
-        BaseConfig::default(),
-        TimeService::mock(),
-        Arc::new(MockDatabaseReader {}),
-        StorageServiceClient::new(network_client),
-        None,
-    );
-
     // Serve the request
     serve_requests(
         Request::builder()
@@ -274,13 +254,8 @@ async fn send_get_request_to_path(config: &NodeConfig, endpoint: &str) -> Respon
             .body(Body::from(""))
             .unwrap(),
         config.clone(),
-        aptos_data_client,
-        peers_and_metadata,
+        PeersAndMetadata::new(&[]),
     )
     .await
     .unwrap()
 }
-
-/// A simple mock database reader
-pub struct MockDatabaseReader {}
-impl DbReader for MockDatabaseReader {}

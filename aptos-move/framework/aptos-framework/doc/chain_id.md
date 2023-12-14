@@ -1,5 +1,5 @@
 
-<a id="0x1_chain_id"></a>
+<a name="0x1_chain_id"></a>
 
 # Module `0x1::chain_id`
 
@@ -12,7 +12,6 @@ This code provides a container for storing a chain id and functions to initializ
 -  [Function `initialize`](#0x1_chain_id_initialize)
 -  [Function `get`](#0x1_chain_id_get)
 -  [Specification](#@Specification_0)
-    -  [Module-level Specification](#@Module-level_Specification_1)
     -  [Function `initialize`](#@Specification_0_initialize)
     -  [Function `get`](#@Specification_0_get)
 
@@ -22,7 +21,7 @@ This code provides a container for storing a chain id and functions to initializ
 
 
 
-<a id="0x1_chain_id_ChainId"></a>
+<a name="0x1_chain_id_ChainId"></a>
 
 ## Resource `ChainId`
 
@@ -49,7 +48,7 @@ This code provides a container for storing a chain id and functions to initializ
 
 </details>
 
-<a id="0x1_chain_id_initialize"></a>
+<a name="0x1_chain_id_initialize"></a>
 
 ## Function `initialize`
 
@@ -76,7 +75,7 @@ Publish the chain ID <code>id</code> of this instance under the SystemAddresses 
 
 </details>
 
-<a id="0x1_chain_id_get"></a>
+<a name="0x1_chain_id_get"></a>
 
 ## Function `get`
 
@@ -102,14 +101,9 @@ Return the chain ID of this instance.
 
 </details>
 
-<a id="@Specification_0"></a>
+<a name="@Specification_0"></a>
 
 ## Specification
-
-
-<a id="@Module-level_Specification_1"></a>
-
-### Module-level Specification
 
 
 
@@ -119,7 +113,7 @@ Return the chain ID of this instance.
 
 
 
-<a id="@Specification_0_initialize"></a>
+<a name="@Specification_0_initialize"></a>
 
 ### Function `initialize`
 
@@ -133,13 +127,11 @@ Return the chain ID of this instance.
 <pre><code><b>let</b> addr = <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework);
 <b>aborts_if</b> addr != @aptos_framework;
 <b>aborts_if</b> <b>exists</b>&lt;<a href="chain_id.md#0x1_chain_id_ChainId">ChainId</a>&gt;(@aptos_framework);
-<b>ensures</b> <b>exists</b>&lt;<a href="chain_id.md#0x1_chain_id_ChainId">ChainId</a>&gt;(addr);
-<b>ensures</b> <b>global</b>&lt;<a href="chain_id.md#0x1_chain_id_ChainId">ChainId</a>&gt;(addr).id == id;
 </code></pre>
 
 
 
-<a id="@Specification_0_get"></a>
+<a name="@Specification_0_get"></a>
 
 ### Function `get`
 

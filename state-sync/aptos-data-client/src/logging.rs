@@ -45,6 +45,7 @@ pub enum LogEntry {
     PeerStates,
     StorageServiceRequest,
     StorageServiceResponse,
+    StorageSummaryRequest,
     StorageSummaryResponse,
 }
 
@@ -57,14 +58,11 @@ pub enum LogEvent {
     PeerIgnored,
     PeerNoLongerIgnored,
     PeerPollingError,
-    PeerRequestResponseCounts,
     PeerSelectionError,
     PriorityAndRegularPeers,
-    PriorityPeerCategories,
     ResponseError,
     ResponseSuccess,
     SendRequest,
     StorageReadFailed,
     UnexpectedError,
-    WaitingForCatchup,
 }

@@ -18,7 +18,6 @@ use aptos_types::{
     access_path::AccessPath,
     account_config::CORE_CODE_ADDRESS,
     aggregate_signature::AggregateSignature,
-    block_executor::config::BlockExecutorConfigFromOnchain,
     block_info::{BlockInfo, GENESIS_EPOCH, GENESIS_ROUND, GENESIS_TIMESTAMP_USECS},
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
     on_chain_config::ConfigurationResource,
@@ -48,13 +47,13 @@ pub fn maybe_bootstrap<V: VMExecutor>(
     db: &DbReaderWriter,
     genesis_txn: &Transaction,
     waypoint: Waypoint,
-) -> Result<Option<LedgerInfoWithSignatures>> {
+) -> Result<bool> {
     let executed_trees = db.reader.get_latest_executed_trees()?;
     // if the waypoint is not targeted with the genesis txn, it may be either already bootstrapped, or
     // aiming for state sync to catch up.
     if executed_trees.version().map_or(0, |v| v + 1) != waypoint.version() {
         info!(waypoint = %waypoint, "Skip genesis txn.");
-        return Ok(None);
+        return Ok(false);
     }
 
     let committer = calculate_genesis::<V>(db, executed_trees, genesis_txn)?;
@@ -64,9 +63,8 @@ pub fn maybe_bootstrap<V: VMExecutor>(
         waypoint,
         committer.waypoint(),
     );
-    let ledger_info = committer.output.ledger_info.clone();
     committer.commit()?;
-    Ok(ledger_info)
+    Ok(true)
 }
 
 pub struct GenesisCommitter {
@@ -103,21 +101,12 @@ impl GenesisCommitter {
 
     pub fn commit(self) -> Result<()> {
         self.db.save_transactions(
-            self.output.transactions_to_commit(),
-            self.output
-                .ledger_update_output
-                .transaction_accumulator
-                .num_leaves()
-                - 1,
+            &self.output.transactions_to_commit()?,
+            self.output.result_view.txn_accumulator().version(),
             self.base_state_version,
             self.output.ledger_info.as_ref(),
             true, /* sync_commit */
-            self.output.result_state.clone(),
-            self.output
-                .ledger_update_output
-                .state_updates_until_last_checkpoint
-                .clone(),
-            Some(&self.output.ledger_update_output.sharded_state_cache),
+            self.output.result_view.state().clone(),
         )?;
         info!("Genesis commited.");
         // DB bootstrapped, avoid anything that could fail after this.
@@ -148,13 +137,13 @@ pub fn calculate_genesis<V: VMExecutor>(
     };
 
     let (mut output, _, _) = ChunkOutput::by_transaction_execution::<V>(
-        vec![genesis_txn.clone().into()].into(),
+        vec![genesis_txn.clone()].into(),
         base_state_view,
-        BlockExecutorConfigFromOnchain::new_no_block_limit(),
+        None,
     )?
-    .apply_to_ledger(&executed_trees, None, None)?;
+    .apply_to_ledger(&executed_trees, None)?;
     ensure!(
-        !output.transactions_to_commit().is_empty(),
+        !output.to_commit.is_empty(),
         "Genesis txn execution failed."
     );
 
@@ -162,7 +151,7 @@ pub fn calculate_genesis<V: VMExecutor>(
         // TODO(aldenhu): fix existing tests before using real timestamp and check on-chain epoch.
         GENESIS_TIMESTAMP_USECS
     } else {
-        let state_view = output.result_view().verified_state_view(
+        let state_view = output.result_view.verified_state_view(
             StateViewId::Miscellaneous,
             Arc::clone(&db.reader),
             Arc::new(AsyncProofFetcher::new(db.reader.clone())),
@@ -187,10 +176,7 @@ pub fn calculate_genesis<V: VMExecutor>(
                 epoch,
                 GENESIS_ROUND,
                 genesis_block_id(),
-                output
-                    .ledger_update_output
-                    .transaction_accumulator
-                    .root_hash(),
+                output.result_view.txn_accumulator().root_hash(),
                 genesis_version,
                 timestamp_usecs,
                 output.next_epoch_state.clone(),

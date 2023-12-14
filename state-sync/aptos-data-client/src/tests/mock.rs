@@ -5,13 +5,12 @@ use crate::{
     client::AptosDataClient,
     error::Result,
     global_summary::GlobalDataSummary,
-    interface::{AptosDataClientInterface, Response, SubscriptionRequestMetadata},
+    interface::{AptosDataClientInterface, Response},
     poller::DataSummaryPoller,
-    priority::PeerPriority,
 };
 use aptos_channels::{aptos_channel, message_queues::QueueStyle};
 use aptos_config::{
-    config::{AptosDataClientConfig, BaseConfig, RoleType},
+    config::{AptosDataClientConfig, BaseConfig},
     network_id::{NetworkId, PeerNetworkId},
 };
 use aptos_netcore::transport::ConnectionOrigin;
@@ -23,9 +22,6 @@ use aptos_network::{
         wire::handshake::v1::ProtocolId,
     },
     transport::ConnectionMetadata,
-};
-use aptos_peer_monitoring_service_types::{
-    response::NetworkInformationResponse, PeerMonitoringMetadata,
 };
 use aptos_storage_interface::DbReader;
 use aptos_storage_service_client::StorageServiceClient;
@@ -42,17 +38,15 @@ use aptos_types::{
 };
 use async_trait::async_trait;
 use futures::StreamExt;
+use maplit::hashmap;
 use mockall::mock;
-use rand::{rngs::OsRng, Rng};
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 /// A simple mock network for testing the data client
 pub struct MockNetwork {
-    base_config: BaseConfig,                   // The base config of the node
-    networks: Vec<NetworkId>,                  // The networks that the node is connected to
-    peers_and_metadata: Arc<PeersAndMetadata>, // The peers and metadata struct
-    peer_mgr_reqs_rxs:
-        HashMap<NetworkId, aptos_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>>, // The peer manager request receivers
+    network_id: NetworkId,
+    peer_mgr_reqs_rx: aptos_channel::Receiver<(PeerId, ProtocolId), PeerManagerRequest>,
+    peers_and_metadata: Arc<PeersAndMetadata>,
 }
 
 impl MockNetwork {
@@ -61,39 +55,25 @@ impl MockNetwork {
         data_client_config: Option<AptosDataClientConfig>,
         networks: Option<Vec<NetworkId>>,
     ) -> (Self, MockTimeService, AptosDataClient, DataSummaryPoller) {
-        // Initialize the logger for testing
-        ::aptos_logger::Logger::init_for_testing();
+        // Setup the request managers
+        let queue_cfg = aptos_channel::Config::new(10).queue_style(QueueStyle::FIFO);
+        let (peer_mgr_reqs_tx, peer_mgr_reqs_rx) = queue_cfg.build();
+        let (connection_reqs_tx, _connection_reqs_rx) = queue_cfg.build();
 
-        // Setup the network IDs
+        // Setup the network client
+        let network_sender = NetworkSender::new(
+            PeerManagerRequestSender::new(peer_mgr_reqs_tx),
+            ConnectionRequestSender::new(connection_reqs_tx),
+        );
         let networks = networks
             .unwrap_or_else(|| vec![NetworkId::Validator, NetworkId::Vfn, NetworkId::Public]);
-
-        // Create the network senders and receivers for each network
-        let mut network_senders = HashMap::new();
-        let mut peer_mgr_reqs_rxs = HashMap::new();
-        for network in &networks {
-            // Setup the request managers
-            let queue_cfg = aptos_channel::Config::new(10).queue_style(QueueStyle::FIFO);
-            let (peer_mgr_reqs_tx, peer_mgr_reqs_rx) = queue_cfg.build();
-            let (connection_reqs_tx, _connection_reqs_rx) = queue_cfg.build();
-
-            // Create the network sender
-            let network_sender = NetworkSender::new(
-                PeerManagerRequestSender::new(peer_mgr_reqs_tx),
-                ConnectionRequestSender::new(connection_reqs_tx),
-            );
-
-            // Save the network sender and the request receiver
-            network_senders.insert(*network, network_sender);
-            peer_mgr_reqs_rxs.insert(*network, peer_mgr_reqs_rx);
-        }
-
-        // Create the network client
         let peers_and_metadata = PeersAndMetadata::new(&networks);
+        let client_network_id = NetworkId::Validator;
         let network_client = NetworkClient::new(
             vec![],
             vec![ProtocolId::StorageServiceRpc],
-            network_senders,
+            hashmap! {
+            client_network_id => network_sender},
             peers_and_metadata.clone(),
         );
 
@@ -106,7 +86,7 @@ impl MockNetwork {
         let data_client_config = data_client_config.unwrap_or_default();
         let (client, poller) = AptosDataClient::new(
             data_client_config,
-            base_config.clone(),
+            base_config,
             mock_time.clone(),
             create_mock_db_reader(),
             storage_service_client,
@@ -115,9 +95,8 @@ impl MockNetwork {
 
         // Create the mock network
         let mock_network = Self {
-            base_config,
-            networks,
-            peer_mgr_reqs_rxs,
+            network_id: client_network_id,
+            peer_mgr_reqs_rx,
             peers_and_metadata,
         };
 
@@ -125,41 +104,14 @@ impl MockNetwork {
     }
 
     /// Add a new peer to the network peer DB
-    pub fn add_peer(&mut self, peer_priority: PeerPriority) -> PeerNetworkId {
-        // Determine the network ID and connection direction
-        // based on the given peer priority and the node role.
-        let (network_id, outbound_connection) = match self.base_config.role {
-            RoleType::Validator => {
-                // Validators prioritize other validators, then VFNs, then PFNs
-                match peer_priority {
-                    PeerPriority::HighPriority => (NetworkId::Validator, true),
-                    PeerPriority::MediumPriority => (NetworkId::Vfn, false),
-                    PeerPriority::LowPriority => (NetworkId::Public, false),
-                }
-            },
-            RoleType::FullNode => {
-                if self.networks.contains(&NetworkId::Vfn) {
-                    // VFNs prioritize validators, then other VFNs, then PFNs
-                    match peer_priority {
-                        PeerPriority::HighPriority => (NetworkId::Vfn, true),
-                        PeerPriority::MediumPriority => (NetworkId::Public, true), // Outbound connection to VFN
-                        PeerPriority::LowPriority => (NetworkId::Public, false), // Inbound connection from PFN
-                    }
-                } else {
-                    // PFNs prioritize VFNs, then other PFNs
-                    match peer_priority {
-                        PeerPriority::HighPriority => (NetworkId::Public, true), // Outbound connection to VFN
-                        PeerPriority::MediumPriority => {
-                            unimplemented!("Medium priority peers are not yet supported for PFNs!")
-                        },
-                        PeerPriority::LowPriority => (NetworkId::Public, false), // Inbound connection from PFN
-                    }
-                }
-            },
+    pub fn add_peer(&mut self, priority: bool) -> PeerNetworkId {
+        // Get the network id
+        let network_id = if priority {
+            NetworkId::Validator
+        } else {
+            NetworkId::Public
         };
-
-        // Create and add the new peer
-        self.add_peer_with_network_id(network_id, outbound_connection)
+        self.add_peer_with_network_id(network_id, false)
     }
 
     /// Add a new peer to the network peer DB with the specified network
@@ -186,24 +138,8 @@ impl MockNetwork {
             .insert_connection_metadata(peer_network_id, connection_metadata)
             .unwrap();
 
-        // Insert peer monitoring metadata for the peer
-        let network_info_response = NetworkInformationResponse {
-            connected_peers: Default::default(),
-            distance_from_validators: OsRng.gen(),
-        };
-        let peer_monitoring_metadata =
-            PeerMonitoringMetadata::new(Some(OsRng.gen()), Some(network_info_response), None, None);
-        self.peers_and_metadata
-            .update_peer_monitoring_metadata(peer_network_id, peer_monitoring_metadata)
-            .unwrap();
-
         // Return the new peer
         peer_network_id
-    }
-
-    /// Returns the peers and metadata
-    pub fn get_peers_and_metadata(&self) -> Arc<PeersAndMetadata> {
-        self.peers_and_metadata.clone()
     }
 
     /// Disconnects the peer in the network peer DB
@@ -224,11 +160,10 @@ impl MockNetwork {
     }
 
     /// Get the next request sent from the client
-    pub async fn next_request(&mut self, network_id: NetworkId) -> Option<NetworkRequest> {
-        let peer_mgr_reqs_rx = self.peer_mgr_reqs_rxs.get_mut(&network_id).unwrap();
-        match peer_mgr_reqs_rx.next().await {
+    pub async fn next_request(&mut self) -> Option<NetworkRequest> {
+        match self.peer_mgr_reqs_rx.next().await {
             Some(PeerManagerRequest::SendRpc(peer_id, network_request)) => {
-                let peer_network_id = PeerNetworkId::new(network_id, peer_id);
+                let peer_network_id = PeerNetworkId::new(self.network_id, peer_id);
                 let protocol_id = network_request.protocol_id;
                 let data = network_request.data;
                 let res_tx = network_request.res_tx;
@@ -335,26 +270,6 @@ mock! {
             include_events: bool,
             request_timeout_ms: u64,
         ) -> Result<Response<TransactionOrOutputListWithProof>>;
-
-        async fn subscribe_to_transaction_outputs_with_proof(
-            &self,
-            subscription_request_metadata: SubscriptionRequestMetadata,
-            request_timeout_ms: u64,
-        ) -> Result<Response<(TransactionOutputListWithProof, LedgerInfoWithSignatures)>>;
-
-        async fn subscribe_to_transactions_with_proof(
-            &self,
-            subscription_request_metadata: SubscriptionRequestMetadata,
-            include_events: bool,
-            request_timeout_ms: u64,
-        ) -> Result<Response<(TransactionListWithProof, LedgerInfoWithSignatures)>>;
-
-        async fn subscribe_to_transactions_or_outputs_with_proof(
-            &self,
-            subscription_request_metadata: SubscriptionRequestMetadata,
-            include_events: bool,
-            request_timeout_ms: u64,
-        ) -> Result<Response<(TransactionOrOutputListWithProof, LedgerInfoWithSignatures)>>;
     }
 }
 

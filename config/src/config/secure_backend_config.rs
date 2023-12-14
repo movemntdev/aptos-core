@@ -11,9 +11,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-// The default file name for the secure storage file
-pub const SECURE_STORAGE_FILENAME: &str = "secure_storage.json";
-
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "type")]
 pub enum SecureBackend {
@@ -131,7 +128,7 @@ impl Default for OnDiskStorageConfig {
     fn default() -> Self {
         Self {
             namespace: None,
-            path: PathBuf::from(SECURE_STORAGE_FILENAME),
+            path: PathBuf::from("secure_storage.json"),
             data_dir: PathBuf::from("/opt/aptos/data"),
         }
     }

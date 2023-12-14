@@ -33,10 +33,7 @@ fn test_invalid_signature() {
         Ed25519PrivateKey::generate_for_testing().public_key(),
         Ed25519Signature::try_from(&[1u8; 64][..]).unwrap(),
     );
-    assert!(
-        txn.verify_signature().is_err(),
-        "Signature checking should fail"
-    )
+    assert!(!txn.signature_is_valid(), "Signature checking should fail")
 }
 
 proptest! {

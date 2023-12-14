@@ -47,6 +47,8 @@ module knight::knight {
         mutator_ref: token::MutatorRef,
         /// Used to mutate properties
         property_mutator_ref: property_map::MutatorRef,
+        /// Used to emit HealthUpdateEvent
+        health_update_events: event::EventHandle<HealthUpdateEvent>,
         /// the base URI of the token
         base_uri: String,
     }
@@ -57,10 +59,8 @@ module knight::knight {
         value: u64,
     }
 
-    #[event]
     /// The health update event
-    struct HealthUpdate has drop, store {
-        token: address,
+    struct HealthUpdateEvent has drop, store {
         old_health: u64,
         new_health: u64,
     }
@@ -140,10 +140,11 @@ module knight::knight {
             1,
         );
 
-        // Publishes the KnightToken resource with the refs.
+        // Publishes the KnightToken resource with the refs and the event handle for `HealthUpdateEvent`.
         let knight_token = KnightToken {
             mutator_ref,
             property_mutator_ref,
+            health_update_events: object::new_event_handle(&object_signer),
             base_uri
         };
         move_to(&object_signer, knight_token);
@@ -159,12 +160,7 @@ module knight::knight {
         feed_food(from, meat_token, to, amount);
     }
 
-    public entry fun feed_food(
-        from: &signer,
-        food: Object<FoodToken>,
-        to: Object<KnightToken>,
-        amount: u64
-    ) acquires HealthPoint, KnightToken {
+    public entry fun feed_food(from: &signer, food: Object<FoodToken>, to: Object<KnightToken>, amount: u64) acquires HealthPoint, KnightToken {
         food::burn_food(from, food, amount);
 
         let restoration_amount = food::restoration_value(food) * amount;
@@ -180,9 +176,9 @@ module knight::knight {
         // Updates the health point in the property map.
         property_map::update_typed(property_mutator_ref, &string::utf8(HEALTH_POINT_PROPERTY_NAME), new_health_point);
 
-        event::emit(
-            HealthUpdate {
-                token: knight_token_address,
+        event::emit_event(
+            &mut knight.health_update_events,
+            HealthUpdateEvent {
                 old_health: old_health_point,
                 new_health: new_health_point,
             }
@@ -195,11 +191,7 @@ module knight::knight {
             CONDITION_GOOD
         };
         // Updates the condition in the property map.
-        property_map::update_typed(
-            property_mutator_ref,
-            &string::utf8(CONDITION_PROPERTY_NAME),
-            string::utf8(new_condition)
-        );
+        property_map::update_typed(property_mutator_ref, &string::utf8(CONDITION_PROPERTY_NAME), string::utf8(new_condition));
 
         // Updates the token URI based on the new condition.
         let uri = knight.base_uri;

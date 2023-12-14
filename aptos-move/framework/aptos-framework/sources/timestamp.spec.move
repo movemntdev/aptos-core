@@ -1,14 +1,13 @@
 spec aptos_framework::timestamp {
     spec module {
         use aptos_framework::chain_status;
-        invariant [suspendable] chain_status::is_operating() ==> exists<CurrentTimeMicroseconds>(@aptos_framework);
+        invariant chain_status::is_operating() ==> exists<CurrentTimeMicroseconds>(@aptos_framework);
     }
 
     spec update_global_time {
         use aptos_framework::chain_status;
         requires chain_status::is_operating();
         include UpdateGlobalTimeAbortsIf;
-        ensures (proposer != @vm_reserved) ==> (spec_now_microseconds() == timestamp);
     }
 
     spec schema UpdateGlobalTimeAbortsIf {

@@ -4,20 +4,17 @@
 //! This file defines the state snapshot committer running in background thread within StateStore.
 
 use crate::{
-    metrics::OTHER_TIMERS_SECONDS,
     state_store::{
         buffered_state::CommitMessage,
         state_merkle_batch_committer::{StateMerkleBatch, StateMerkleBatchCommitter},
         StateDb,
     },
     versioned_node_cache::VersionedNodeCache,
+    OTHER_TIMERS_SECONDS,
 };
 use anyhow::Result;
-use aptos_experimental_runtimes::thread_manager::THREAD_MANAGER;
 use aptos_logger::trace;
-use aptos_scratchpad::SmtAncestors;
 use aptos_storage_interface::{jmt_update_refs, jmt_updates, state_delta::StateDelta};
-use aptos_types::state_store::state_value::StateValue;
 use rayon::prelude::*;
 use static_assertions::const_assert;
 use std::{
@@ -42,7 +39,6 @@ impl StateSnapshotCommitter {
     pub fn new(
         state_db: Arc<StateDb>,
         state_snapshot_commit_receiver: Receiver<CommitMessage<Arc<StateDelta>>>,
-        smt_ancestors: SmtAncestors<StateValue>,
     ) -> Self {
         // Note: This is to ensure we cache nodes in memory from previous batches before they get committed to DB.
         const_assert!(
@@ -58,7 +54,6 @@ impl StateSnapshotCommitter {
                 let committer = StateMerkleBatchCommitter::new(
                     arc_state_db,
                     state_merkle_batch_commit_receiver,
-                    smt_ancestors,
                 );
                 committer.run();
             })
@@ -94,33 +89,36 @@ impl StateSnapshotCommitter {
                             .get_shard_persisted_versions(base_version)
                             .unwrap();
 
-                        THREAD_MANAGER.get_non_exe_cpu_pool().install(|| {
-                            (0..16)
-                                .into_par_iter()
-                                .map(|shard_id| {
-                                    let node_hashes = delta_to_commit
-                                        .current
-                                        .new_node_hashes_since(&delta_to_commit.base, shard_id);
-                                    self.state_db.state_merkle_db.merklize_value_set_for_shard(
+                        (0..16)
+                            .into_par_iter()
+                            .map(|shard_id| {
+                                let node_hashes = delta_to_commit
+                                    .current
+                                    .clone()
+                                    .freeze()
+                                    .new_node_hashes_since(
+                                        &delta_to_commit.base.clone().freeze(),
                                         shard_id,
-                                        jmt_update_refs(&jmt_updates(
-                                            &delta_to_commit.updates_since_base[shard_id as usize]
-                                                .iter()
-                                                .map(|(k, v)| (k, v.as_ref()))
-                                                .collect(),
-                                        )),
-                                        Some(&node_hashes),
-                                        version,
-                                        base_version,
-                                        shard_persisted_versions[shard_id as usize],
-                                        previous_epoch_ending_version,
-                                    )
-                                })
-                                .collect::<Result<Vec<_>>>()
-                                .expect("Error calculating StateMerkleBatch for shards.")
-                                .into_iter()
-                                .unzip()
-                        })
+                                    );
+                                self.state_db.state_merkle_db.merklize_value_set_for_shard(
+                                    shard_id,
+                                    jmt_update_refs(&jmt_updates(
+                                        &delta_to_commit.updates_since_base[shard_id as usize]
+                                            .iter()
+                                            .map(|(k, v)| (k, v.as_ref()))
+                                            .collect(),
+                                    )),
+                                    Some(&node_hashes),
+                                    version,
+                                    base_version,
+                                    shard_persisted_versions[shard_id as usize],
+                                    previous_epoch_ending_version,
+                                )
+                            })
+                            .collect::<Result<Vec<_>>>()
+                            .expect("Error calculating StateMerkleBatch for shards.")
+                            .into_iter()
+                            .unzip()
                     };
 
                     let (root_hash, top_levels_batch) = {

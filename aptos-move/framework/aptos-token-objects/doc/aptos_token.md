@@ -1,5 +1,5 @@
 
-<a id="0x4_aptos_token"></a>
+<a name="0x4_aptos_token"></a>
 
 # Module `0x4::aptos_token`
 
@@ -61,6 +61,7 @@ The key features are:
 
 
 <pre><code><b>use</b> <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error">0x1::error</a>;
+<b>use</b> <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features">0x1::features</a>;
 <b>use</b> <a href="../../aptos-framework/doc/object.md#0x1_object">0x1::object</a>;
 <b>use</b> <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option">0x1::option</a>;
 <b>use</b> <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">0x1::signer</a>;
@@ -73,7 +74,7 @@ The key features are:
 
 
 
-<a id="0x4_aptos_token_AptosCollection"></a>
+<a name="0x4_aptos_token_AptosCollection"></a>
 
 ## Resource `AptosCollection`
 
@@ -156,7 +157,7 @@ Storage state for managing the no-code Collection.
 
 </details>
 
-<a id="0x4_aptos_token_AptosToken"></a>
+<a name="0x4_aptos_token_AptosToken"></a>
 
 ## Resource `AptosToken`
 
@@ -203,12 +204,12 @@ Storage state for managing the no-code Token.
 
 </details>
 
-<a id="@Constants_0"></a>
+<a name="@Constants_0"></a>
 
 ## Constants
 
 
-<a id="0x4_aptos_token_ECOLLECTION_DOES_NOT_EXIST"></a>
+<a name="0x4_aptos_token_ECOLLECTION_DOES_NOT_EXIST"></a>
 
 The collection does not exist
 
@@ -218,7 +219,7 @@ The collection does not exist
 
 
 
-<a id="0x4_aptos_token_EFIELD_NOT_MUTABLE"></a>
+<a name="0x4_aptos_token_EFIELD_NOT_MUTABLE"></a>
 
 The field being changed is not mutable
 
@@ -228,7 +229,7 @@ The field being changed is not mutable
 
 
 
-<a id="0x4_aptos_token_ENOT_CREATOR"></a>
+<a name="0x4_aptos_token_ENOT_CREATOR"></a>
 
 The provided signer is not the creator
 
@@ -238,7 +239,7 @@ The provided signer is not the creator
 
 
 
-<a id="0x4_aptos_token_ETOKEN_DOES_NOT_EXIST"></a>
+<a name="0x4_aptos_token_ETOKEN_DOES_NOT_EXIST"></a>
 
 The token does not exist
 
@@ -248,7 +249,7 @@ The token does not exist
 
 
 
-<a id="0x4_aptos_token_EPROPERTIES_NOT_MUTABLE"></a>
+<a name="0x4_aptos_token_EPROPERTIES_NOT_MUTABLE"></a>
 
 The property map being mutated is not mutable
 
@@ -258,7 +259,7 @@ The property map being mutated is not mutable
 
 
 
-<a id="0x4_aptos_token_ETOKEN_NOT_BURNABLE"></a>
+<a name="0x4_aptos_token_ETOKEN_NOT_BURNABLE"></a>
 
 The token being burned is not burnable
 
@@ -268,7 +269,7 @@ The token being burned is not burnable
 
 
 
-<a id="0x4_aptos_token_create_collection"></a>
+<a name="0x4_aptos_token_create_collection"></a>
 
 ## Function `create_collection`
 
@@ -327,7 +328,7 @@ Create a new collection
 
 </details>
 
-<a id="0x4_aptos_token_create_collection_object"></a>
+<a name="0x4_aptos_token_create_collection_object"></a>
 
 ## Function `create_collection_object`
 
@@ -405,7 +406,7 @@ Create a new collection
 
 </details>
 
-<a id="0x4_aptos_token_mint"></a>
+<a name="0x4_aptos_token_mint"></a>
 
 ## Function `mint`
 
@@ -439,7 +440,7 @@ With an existing collection, directly mint a viable token into the creators acco
 
 </details>
 
-<a id="0x4_aptos_token_mint_token_object"></a>
+<a name="0x4_aptos_token_mint_token_object"></a>
 
 ## Function `mint_token_object`
 
@@ -495,7 +496,7 @@ Mint a token into an existing collection, and retrieve the object / address of t
 
 </details>
 
-<a id="0x4_aptos_token_mint_soul_bound"></a>
+<a name="0x4_aptos_token_mint_soul_bound"></a>
 
 ## Function `mint_soul_bound`
 
@@ -540,7 +541,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_mint_soul_bound_token_object"></a>
+<a name="0x4_aptos_token_mint_soul_bound_token_object"></a>
 
 ## Function `mint_soul_bound_token_object`
 
@@ -591,7 +592,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_mint_internal"></a>
+<a name="0x4_aptos_token_mint_internal"></a>
 
 ## Function `mint_internal`
 
@@ -616,7 +617,25 @@ With an existing collection, directly mint a soul bound token into the recipient
     property_types: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;String&gt;,
     property_values: <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;&gt;,
 ): ConstructorRef <b>acquires</b> <a href="aptos_token.md#0x4_aptos_token_AptosCollection">AptosCollection</a> {
-    <b>let</b> constructor_ref = <a href="token.md#0x4_token_create">token::create</a>(creator, <a href="collection.md#0x4_collection">collection</a>, description, name, <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_none">option::none</a>(), uri);
+    <b>let</b> constructor_ref = <b>if</b> (<a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_auids_enabled">features::auids_enabled</a>()) {
+        <a href="token.md#0x4_token_create">token::create</a>(
+            creator,
+            <a href="collection.md#0x4_collection">collection</a>,
+            description,
+            name,
+            <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_none">option::none</a>(),
+            uri,
+        )
+    } <b>else</b> {
+        <a href="token.md#0x4_token_create_from_account">token::create_from_account</a>(
+            creator,
+            <a href="collection.md#0x4_collection">collection</a>,
+            description,
+            name,
+            <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_none">option::none</a>(),
+            uri,
+        )
+    };
 
     <b>let</b> object_signer = <a href="../../aptos-framework/doc/object.md#0x1_object_generate_signer">object::generate_signer</a>(&constructor_ref);
 
@@ -658,7 +677,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_borrow"></a>
+<a name="0x4_aptos_token_borrow"></a>
 
 ## Function `borrow`
 
@@ -687,7 +706,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_are_properties_mutable"></a>
+<a name="0x4_aptos_token_are_properties_mutable"></a>
 
 ## Function `are_properties_mutable`
 
@@ -713,7 +732,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_is_burnable"></a>
+<a name="0x4_aptos_token_is_burnable"></a>
 
 ## Function `is_burnable`
 
@@ -738,7 +757,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_is_freezable_by_creator"></a>
+<a name="0x4_aptos_token_is_freezable_by_creator"></a>
 
 ## Function `is_freezable_by_creator`
 
@@ -763,7 +782,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_is_mutable_description"></a>
+<a name="0x4_aptos_token_is_mutable_description"></a>
 
 ## Function `is_mutable_description`
 
@@ -788,7 +807,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_is_mutable_name"></a>
+<a name="0x4_aptos_token_is_mutable_name"></a>
 
 ## Function `is_mutable_name`
 
@@ -813,7 +832,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_is_mutable_uri"></a>
+<a name="0x4_aptos_token_is_mutable_uri"></a>
 
 ## Function `is_mutable_uri`
 
@@ -838,7 +857,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_authorized_borrow"></a>
+<a name="0x4_aptos_token_authorized_borrow"></a>
 
 ## Function `authorized_borrow`
 
@@ -872,7 +891,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_burn"></a>
+<a name="0x4_aptos_token_burn"></a>
 
 ## Function `burn`
 
@@ -910,7 +929,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_freeze_transfer"></a>
+<a name="0x4_aptos_token_freeze_transfer"></a>
 
 ## Function `freeze_transfer`
 
@@ -940,7 +959,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_unfreeze_transfer"></a>
+<a name="0x4_aptos_token_unfreeze_transfer"></a>
 
 ## Function `unfreeze_transfer`
 
@@ -973,7 +992,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_set_description"></a>
+<a name="0x4_aptos_token_set_description"></a>
 
 ## Function `set_description`
 
@@ -1006,7 +1025,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_set_name"></a>
+<a name="0x4_aptos_token_set_name"></a>
 
 ## Function `set_name`
 
@@ -1039,7 +1058,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_set_uri"></a>
+<a name="0x4_aptos_token_set_uri"></a>
 
 ## Function `set_uri`
 
@@ -1072,7 +1091,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_add_property"></a>
+<a name="0x4_aptos_token_add_property"></a>
 
 ## Function `add_property`
 
@@ -1108,7 +1127,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_add_typed_property"></a>
+<a name="0x4_aptos_token_add_typed_property"></a>
 
 ## Function `add_typed_property`
 
@@ -1143,7 +1162,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_remove_property"></a>
+<a name="0x4_aptos_token_remove_property"></a>
 
 ## Function `remove_property`
 
@@ -1177,7 +1196,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_update_property"></a>
+<a name="0x4_aptos_token_update_property"></a>
 
 ## Function `update_property`
 
@@ -1213,7 +1232,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_update_typed_property"></a>
+<a name="0x4_aptos_token_update_typed_property"></a>
 
 ## Function `update_typed_property`
 
@@ -1248,7 +1267,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_collection_object"></a>
+<a name="0x4_aptos_token_collection_object"></a>
 
 ## Function `collection_object`
 
@@ -1273,7 +1292,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_borrow_collection"></a>
+<a name="0x4_aptos_token_borrow_collection"></a>
 
 ## Function `borrow_collection`
 
@@ -1302,7 +1321,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_is_mutable_collection_description"></a>
+<a name="0x4_aptos_token_is_mutable_collection_description"></a>
 
 ## Function `is_mutable_collection_description`
 
@@ -1328,7 +1347,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_is_mutable_collection_royalty"></a>
+<a name="0x4_aptos_token_is_mutable_collection_royalty"></a>
 
 ## Function `is_mutable_collection_royalty`
 
@@ -1354,7 +1373,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_is_mutable_collection_uri"></a>
+<a name="0x4_aptos_token_is_mutable_collection_uri"></a>
 
 ## Function `is_mutable_collection_uri`
 
@@ -1380,7 +1399,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_is_mutable_collection_token_description"></a>
+<a name="0x4_aptos_token_is_mutable_collection_token_description"></a>
 
 ## Function `is_mutable_collection_token_description`
 
@@ -1406,7 +1425,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_is_mutable_collection_token_name"></a>
+<a name="0x4_aptos_token_is_mutable_collection_token_name"></a>
 
 ## Function `is_mutable_collection_token_name`
 
@@ -1432,7 +1451,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_is_mutable_collection_token_uri"></a>
+<a name="0x4_aptos_token_is_mutable_collection_token_uri"></a>
 
 ## Function `is_mutable_collection_token_uri`
 
@@ -1458,7 +1477,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_is_mutable_collection_token_properties"></a>
+<a name="0x4_aptos_token_is_mutable_collection_token_properties"></a>
 
 ## Function `is_mutable_collection_token_properties`
 
@@ -1484,7 +1503,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_are_collection_tokens_burnable"></a>
+<a name="0x4_aptos_token_are_collection_tokens_burnable"></a>
 
 ## Function `are_collection_tokens_burnable`
 
@@ -1510,7 +1529,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_are_collection_tokens_freezable"></a>
+<a name="0x4_aptos_token_are_collection_tokens_freezable"></a>
 
 ## Function `are_collection_tokens_freezable`
 
@@ -1536,7 +1555,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_authorized_borrow_collection"></a>
+<a name="0x4_aptos_token_authorized_borrow_collection"></a>
 
 ## Function `authorized_borrow_collection`
 
@@ -1569,7 +1588,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_set_collection_description"></a>
+<a name="0x4_aptos_token_set_collection_description"></a>
 
 ## Function `set_collection_description`
 
@@ -1602,7 +1621,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_set_collection_royalties"></a>
+<a name="0x4_aptos_token_set_collection_royalties"></a>
 
 ## Function `set_collection_royalties`
 
@@ -1635,7 +1654,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_set_collection_royalties_call"></a>
+<a name="0x4_aptos_token_set_collection_royalties_call"></a>
 
 ## Function `set_collection_royalties_call`
 
@@ -1666,7 +1685,7 @@ With an existing collection, directly mint a soul bound token into the recipient
 
 </details>
 
-<a id="0x4_aptos_token_set_collection_uri"></a>
+<a name="0x4_aptos_token_set_collection_uri"></a>
 
 ## Function `set_collection_uri`
 

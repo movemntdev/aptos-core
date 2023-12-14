@@ -35,10 +35,7 @@ fn run(
             }}
         }}
     "#,
-        TEST_ADDR.to_hex(),
-        structs,
-        fun_sig,
-        fun_body
+        TEST_ADDR, structs, fun_sig, fun_body
     );
 
     let mut units = compile_units(&code).unwrap();

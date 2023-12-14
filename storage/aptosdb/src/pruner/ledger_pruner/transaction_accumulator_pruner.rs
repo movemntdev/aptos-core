@@ -4,7 +4,7 @@
 use crate::{
     pruner::{db_sub_pruner::DBSubPruner, pruner_utils::get_or_initialize_subpruner_progress},
     schema::db_metadata::{DbMetadataKey, DbMetadataSchema, DbMetadataValue},
-    transaction_store::TransactionStore,
+    TransactionStore,
 };
 use anyhow::Result;
 use aptos_logger::info;
@@ -19,10 +19,6 @@ pub struct TransactionAccumulatorPruner {
 }
 
 impl DBSubPruner for TransactionAccumulatorPruner {
-    fn name(&self) -> &str {
-        "TransactionAccumulatorPruner"
-    }
-
     fn prune(&self, current_progress: Version, target_version: Version) -> Result<()> {
         let batch = SchemaBatch::new();
         self.transaction_store.prune_transaction_accumulator(

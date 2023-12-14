@@ -2,10 +2,7 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{
-    monitor, persistent_liveness_storage::PersistentLivenessStorage,
-    pipeline::signing_phase::CommitSignerProvider,
-};
+use crate::{monitor, persistent_liveness_storage::PersistentLivenessStorage};
 use aptos_consensus_types::{
     block_data::BlockData,
     timeout_2chain::{TwoChainTimeout, TwoChainTimeoutCertificate},
@@ -13,7 +10,6 @@ use aptos_consensus_types::{
     vote_proposal::VoteProposal,
 };
 use aptos_crypto::bls12381;
-use aptos_infallible::Mutex;
 use aptos_logger::prelude::info;
 use aptos_safety_rules::{ConsensusState, Error, TSafetyRules};
 use aptos_types::{
@@ -134,16 +130,6 @@ impl TSafetyRules for MetricsSafetyRules {
                 inner.sign_commit_vote(ledger_info.clone(), new_ledger_info.clone())
             )
         })
-    }
-}
-
-impl CommitSignerProvider for Mutex<MetricsSafetyRules> {
-    fn sign_commit_vote(
-        &self,
-        ledger_info: LedgerInfoWithSignatures,
-        new_ledger_info: LedgerInfo,
-    ) -> Result<bls12381::Signature, Error> {
-        self.lock().sign_commit_vote(ledger_info, new_ledger_info)
     }
 }
 

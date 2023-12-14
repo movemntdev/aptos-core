@@ -264,8 +264,6 @@ class testnet_tests_create_testnet(unittest.TestCase):
             validator_image="",
             count=3,
             nodes_persistent_volume_claim_size="size",
-            cpu="1",
-            memory="1Gi",
         )
 
         blueprint2 = PanguNodeBlueprint(
@@ -279,8 +277,6 @@ class testnet_tests_create_testnet(unittest.TestCase):
             validator_image="",
             count=2,
             nodes_persistent_volume_claim_size="size",
-            cpu="1",
-            memory="1Gi",
         )
 
         #
@@ -340,7 +336,7 @@ class testnet_tests_create_testnet(unittest.TestCase):
         #
         # Define the expected reads for the filesystem
         expected_reads = {
-            "/path/to/pangu_node_configs.yaml": b"blueprints:\n \n nodebp:\n    nodes_persistent_volume_claim_size: size\n    validator_storage_class_name: standard\n    vfn_storage_class_name: standard\n    validator_config_path: /path/to/config.yaml\n    validator_image:  none\n    vfn_config_path:  /path/to/config2.yaml\n    vfn_image:  none\n    create_vfns: false\n    stake_amount: 1000\n    count: 10\n    cpu: '1'\n    memory: 1Gi\n"
+            "/path/to/pangu_node_configs.yaml": b"blueprints:\n \n nodebp:\n    nodes_persistent_volume_claim_size: size\n    validator_storage_class_name: standard\n    vfn_storage_class_name: standard\n    validator_config_path: /path/to/config.yaml\n    validator_image:  none\n    vfn_config_path:  /path/to/config2.yaml\n    vfn_image:  none\n    create_vfns: false\n    stake_amount: 1000\n    count: 10\n"
         }
 
         #
@@ -379,8 +375,6 @@ class testnet_tests_create_testnet(unittest.TestCase):
             stake_amount=1000,
             count=10,
             nodes_persistent_volume_claim_size="size",
-            cpu="1",
-            memory="1Gi",
         )
 
         #
@@ -446,8 +440,6 @@ class testnet_tests_create_testnet(unittest.TestCase):
             stake_amount=cur_stake_amount,
             count=1,
             nodes_persistent_volume_claim_size="size",
-            cpu="1",
-            memory="1Gi",
         )
 
         #
@@ -564,8 +556,6 @@ class testnet_tests_create_testnet(unittest.TestCase):
                     vfn_config_path,
                     "persistent_storage_size",
                     create_vfns,
-                    "1",
-                    "1Gi",
                 ),
                 CreateArgs(
                     pangu_node_configs_path="",
@@ -591,7 +581,7 @@ class testnet_tests_create_testnet(unittest.TestCase):
         # Define the expected reads for the filesystem
         expected_node_count: int = 5
         expected_reads = {
-            "/path/to/pangu_node_configs.yaml": b"blueprints:\n \n nodebp:\n    nodes_persistent_volume_claim_size: size\n    validator_storage_class_name: standard\n    vfn_storage_class_name: standard\n    validator_config_path: /path/to/config.yaml\n    validator_image:  none\n    vfn_config_path:  /path/to/config2.yaml\n    vfn_image:  none\n    create_vfns: false\n    stake_amount: 1000\n    count: 10\n    cpu: '1'\n    memory: 1Gi\n"
+            "/path/to/pangu_node_configs.yaml": b"blueprints:\n \n nodebp:\n    nodes_persistent_volume_claim_size: size\n    validator_storage_class_name: standard\n    vfn_storage_class_name: standard\n    validator_config_path: /path/to/config.yaml\n    validator_image:  none\n    vfn_config_path:  /path/to/config2.yaml\n    vfn_image:  none\n    create_vfns: false\n    stake_amount: 1000\n    count: 10\n"
         }
 
         #
@@ -727,8 +717,6 @@ class testnet_tests_create_testnet(unittest.TestCase):
                     vfn_config_path,
                     "persistent_storage_size",
                     create_vfns,
-                    "1",
-                    "1Gi",
                 ),
                 CreateArgs(
                     pangu_node_configs_path="pangu_node_configs_path",
@@ -860,8 +848,6 @@ class testnet_tests_create_testnet(unittest.TestCase):
                     vfn_config_path,
                     "persistent_storage_size",
                     create_vfns,
-                    "1",
-                    "1Gi",
                 ),
                 CreateArgs(
                     pangu_node_configs_path="pangu_node_configs_path",

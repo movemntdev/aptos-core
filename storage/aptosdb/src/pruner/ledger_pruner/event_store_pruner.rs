@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    event_store::EventStore,
     pruner::{db_sub_pruner::DBSubPruner, pruner_utils::get_or_initialize_subpruner_progress},
     schema::db_metadata::{DbMetadataKey, DbMetadataSchema, DbMetadataValue},
+    EventStore,
 };
 use anyhow::Result;
 use aptos_logger::info;
@@ -19,10 +19,6 @@ pub struct EventStorePruner {
 }
 
 impl DBSubPruner for EventStorePruner {
-    fn name(&self) -> &str {
-        "EventStorePruner"
-    }
-
     fn prune(&self, current_progress: Version, target_version: Version) -> Result<()> {
         let batch = SchemaBatch::new();
         self.event_store

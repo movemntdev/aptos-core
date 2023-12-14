@@ -6,7 +6,6 @@ use crate::{
     block::Block,
     common::{Payload, Round},
     quorum_cert::QuorumCert,
-    randomness::Randomness,
     vote_proposal::VoteProposal,
 };
 use aptos_crypto::hash::HashValue;
@@ -16,13 +15,8 @@ use aptos_types::{
     block_info::BlockInfo,
     contract_event::ContractEvent,
     transaction::{SignedTransaction, Transaction, TransactionStatus},
-    validator_txn::ValidatorTransaction,
 };
-use once_cell::sync::OnceCell;
-use std::{
-    fmt::{Debug, Display, Formatter},
-    time::{Duration, Instant},
-};
+use std::fmt::{Debug, Display, Formatter};
 
 /// ExecutedBlocks are managed in a speculative tree, the committed blocks form a chain. Besides
 /// block data, each executed block also has other derived meta data which could be regenerated from
@@ -31,34 +25,10 @@ use std::{
 pub struct ExecutedBlock {
     /// Block data that cannot be regenerated.
     block: Block,
-    /// Input transactions in the order of execution
-    input_transactions: Vec<SignedTransaction>,
     /// The state_compute_result is calculated for all the pending blocks prior to insertion to
     /// the tree. The execution results are not persisted: they're recalculated again for the
     /// pending blocks upon restart.
     state_compute_result: StateComputeResult,
-    randomness: OnceCell<Randomness>,
-    pipeline_insertion_time: OnceCell<Instant>,
-}
-
-impl ExecutedBlock {
-    pub fn replace_result(
-        mut self,
-        input_transactions: Vec<SignedTransaction>,
-        result: StateComputeResult,
-    ) -> Self {
-        self.state_compute_result = result;
-        self.input_transactions = input_transactions;
-        self
-    }
-
-    pub fn set_randomness(&self, randomness: Randomness) {
-        assert!(self.randomness.set(randomness).is_ok());
-    }
-
-    pub fn set_insertion_time(&self) {
-        assert!(self.pipeline_insertion_time.set(Instant::now()).is_ok());
-    }
 }
 
 impl Debug for ExecutedBlock {
@@ -74,17 +44,10 @@ impl Display for ExecutedBlock {
 }
 
 impl ExecutedBlock {
-    pub fn new(
-        block: Block,
-        input_transactions: Vec<SignedTransaction>,
-        state_compute_result: StateComputeResult,
-    ) -> Self {
+    pub fn new(block: Block, state_compute_result: StateComputeResult) -> Self {
         Self {
             block,
-            input_transactions,
             state_compute_result,
-            randomness: OnceCell::new(),
-            pipeline_insertion_time: OnceCell::new(),
         }
     }
 
@@ -96,10 +59,6 @@ impl ExecutedBlock {
         self.block().id()
     }
 
-    pub fn input_transactions(&self) -> &Vec<SignedTransaction> {
-        &self.input_transactions
-    }
-
     pub fn epoch(&self) -> u64 {
         self.block.epoch()
     }
@@ -109,7 +68,7 @@ impl ExecutedBlock {
     }
 
     pub fn parent_id(&self) -> HashValue {
-        self.block.parent_id()
+        self.quorum_cert().certified_block().id()
     }
 
     pub fn quorum_cert(&self) -> &QuorumCert {
@@ -120,24 +79,12 @@ impl ExecutedBlock {
         self.block().round()
     }
 
-    pub fn validator_txns(&self) -> Option<&Vec<ValidatorTransaction>> {
-        self.block().validator_txns()
-    }
-
     pub fn timestamp_usecs(&self) -> u64 {
         self.block().timestamp_usecs()
     }
 
     pub fn compute_result(&self) -> &StateComputeResult {
         &self.state_compute_result
-    }
-
-    pub fn randomness(&self) -> Option<&Randomness> {
-        self.randomness.get()
-    }
-
-    pub fn has_randomness(&self) -> bool {
-        self.randomness.get().is_some()
     }
 
     pub fn block_info(&self) -> BlockInfo {
@@ -160,9 +107,8 @@ impl ExecutedBlock {
     pub fn transactions_to_commit(
         &self,
         validators: &[AccountAddress],
-        validator_txns: Vec<ValidatorTransaction>,
         txns: Vec<SignedTransaction>,
-        is_block_gas_limit: bool,
+        block_gas_limit: Option<u64>,
     ) -> Vec<Transaction> {
         // reconfiguration suffix don't execute
 
@@ -170,13 +116,10 @@ impl ExecutedBlock {
             return vec![];
         }
 
-        let mut txns_with_state_checkpoint = self.block.transactions_to_execute(
-            validators,
-            validator_txns,
-            txns,
-            is_block_gas_limit,
-        );
-        if is_block_gas_limit && !self.state_compute_result.has_reconfiguration() {
+        let mut txns_with_state_checkpoint =
+            self.block
+                .transactions_to_execute(validators, txns, block_gas_limit);
+        if block_gas_limit.is_some() && !self.state_compute_result.has_reconfiguration() {
             // After the per-block gas limit change,
             // insert state checkpoint at the position
             // 1) after last txn if there is no Retry
@@ -217,9 +160,5 @@ impl ExecutedBlock {
     pub fn is_reconfiguration_suffix(&self) -> bool {
         self.state_compute_result.has_reconfiguration()
             && self.state_compute_result.compute_status().is_empty()
-    }
-
-    pub fn elapsed_in_pipeline(&self) -> Option<Duration> {
-        self.pipeline_insertion_time.get().map(|t| t.elapsed())
     }
 }

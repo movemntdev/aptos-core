@@ -1,5 +1,5 @@
 
-<a id="0x1_fixed_point64"></a>
+<a name="0x1_fixed_point64"></a>
 
 # Module `0x1::fixed_point64`
 
@@ -30,7 +30,6 @@ a 64-bit fractional part.
 -  [Function `ceil`](#0x1_fixed_point64_ceil)
 -  [Function `round`](#0x1_fixed_point64_round)
 -  [Specification](#@Specification_1)
-    -  [Module-level Specification](#@Module-level_Specification_2)
     -  [Function `sub`](#@Specification_1_sub)
     -  [Function `add`](#@Specification_1_add)
     -  [Function `multiply_u128`](#@Specification_1_multiply_u128)
@@ -55,7 +54,7 @@ a 64-bit fractional part.
 
 
 
-<a id="0x1_fixed_point64_FixedPoint64"></a>
+<a name="0x1_fixed_point64_FixedPoint64"></a>
 
 ## Struct `FixedPoint64`
 
@@ -91,12 +90,12 @@ decimal.
 
 </details>
 
-<a id="@Constants_0"></a>
+<a name="@Constants_0"></a>
 
 ## Constants
 
 
-<a id="0x1_fixed_point64_MAX_U128"></a>
+<a name="0x1_fixed_point64_MAX_U128"></a>
 
 
 
@@ -105,7 +104,7 @@ decimal.
 
 
 
-<a id="0x1_fixed_point64_EDENOMINATOR"></a>
+<a name="0x1_fixed_point64_EDENOMINATOR"></a>
 
 The denominator provided was zero
 
@@ -115,7 +114,7 @@ The denominator provided was zero
 
 
 
-<a id="0x1_fixed_point64_EDIVISION"></a>
+<a name="0x1_fixed_point64_EDIVISION"></a>
 
 The quotient value would be too large to be held in a <code>u128</code>
 
@@ -125,7 +124,7 @@ The quotient value would be too large to be held in a <code>u128</code>
 
 
 
-<a id="0x1_fixed_point64_EDIVISION_BY_ZERO"></a>
+<a name="0x1_fixed_point64_EDIVISION_BY_ZERO"></a>
 
 A division by zero was encountered
 
@@ -135,7 +134,7 @@ A division by zero was encountered
 
 
 
-<a id="0x1_fixed_point64_EMULTIPLICATION"></a>
+<a name="0x1_fixed_point64_EMULTIPLICATION"></a>
 
 The multiplied value would be too large to be held in a <code>u128</code>
 
@@ -145,7 +144,7 @@ The multiplied value would be too large to be held in a <code>u128</code>
 
 
 
-<a id="0x1_fixed_point64_ENEGATIVE_RESULT"></a>
+<a name="0x1_fixed_point64_ENEGATIVE_RESULT"></a>
 
 Abort code on calculation result is negative.
 
@@ -155,7 +154,7 @@ Abort code on calculation result is negative.
 
 
 
-<a id="0x1_fixed_point64_ERATIO_OUT_OF_RANGE"></a>
+<a name="0x1_fixed_point64_ERATIO_OUT_OF_RANGE"></a>
 
 The computed ratio when converting to a <code><a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a></code> would be unrepresentable
 
@@ -165,7 +164,7 @@ The computed ratio when converting to a <code><a href="fixed_point64.md#0x1_fixe
 
 
 
-<a id="0x1_fixed_point64_sub"></a>
+<a name="0x1_fixed_point64_sub"></a>
 
 ## Function `sub`
 
@@ -193,7 +192,7 @@ Returns x - y. x must be not less than y.
 
 </details>
 
-<a id="0x1_fixed_point64_add"></a>
+<a name="0x1_fixed_point64_add"></a>
 
 ## Function `add`
 
@@ -222,7 +221,7 @@ Returns x + y. The result cannot be greater than MAX_U128.
 
 </details>
 
-<a id="0x1_fixed_point64_multiply_u128"></a>
+<a name="0x1_fixed_point64_multiply_u128"></a>
 
 ## Function `multiply_u128`
 
@@ -258,7 +257,7 @@ overflows.
 
 </details>
 
-<a id="0x1_fixed_point64_divide_u128"></a>
+<a name="0x1_fixed_point64_divide_u128"></a>
 
 ## Function `divide_u128`
 
@@ -295,7 +294,7 @@ is zero or if the quotient overflows.
 
 </details>
 
-<a id="0x1_fixed_point64_create_from_rational"></a>
+<a name="0x1_fixed_point64_create_from_rational"></a>
 
 ## Function `create_from_rational`
 
@@ -339,7 +338,7 @@ rounding, e.g., 0.0125 will round down to 0.012 instead of up to 0.013.
 
 </details>
 
-<a id="0x1_fixed_point64_create_from_raw_value"></a>
+<a name="0x1_fixed_point64_create_from_raw_value"></a>
 
 ## Function `create_from_raw_value`
 
@@ -364,7 +363,7 @@ Create a fixedpoint value from a raw value.
 
 </details>
 
-<a id="0x1_fixed_point64_get_raw_value"></a>
+<a name="0x1_fixed_point64_get_raw_value"></a>
 
 ## Function `get_raw_value`
 
@@ -391,7 +390,7 @@ values directly.
 
 </details>
 
-<a id="0x1_fixed_point64_is_zero"></a>
+<a name="0x1_fixed_point64_is_zero"></a>
 
 ## Function `is_zero`
 
@@ -416,7 +415,7 @@ Returns true if the ratio is zero.
 
 </details>
 
-<a id="0x1_fixed_point64_min"></a>
+<a name="0x1_fixed_point64_min"></a>
 
 ## Function `min`
 
@@ -445,7 +444,7 @@ Returns the smaller of the two FixedPoint64 numbers.
 
 </details>
 
-<a id="0x1_fixed_point64_max"></a>
+<a name="0x1_fixed_point64_max"></a>
 
 ## Function `max`
 
@@ -474,7 +473,7 @@ Returns the larger of the two FixedPoint64 numbers.
 
 </details>
 
-<a id="0x1_fixed_point64_less_or_equal"></a>
+<a name="0x1_fixed_point64_less_or_equal"></a>
 
 ## Function `less_or_equal`
 
@@ -499,7 +498,7 @@ Returns true if num1 <= num2
 
 </details>
 
-<a id="0x1_fixed_point64_less"></a>
+<a name="0x1_fixed_point64_less"></a>
 
 ## Function `less`
 
@@ -524,7 +523,7 @@ Returns true if num1 < num2
 
 </details>
 
-<a id="0x1_fixed_point64_greater_or_equal"></a>
+<a name="0x1_fixed_point64_greater_or_equal"></a>
 
 ## Function `greater_or_equal`
 
@@ -549,7 +548,7 @@ Returns true if num1 >= num2
 
 </details>
 
-<a id="0x1_fixed_point64_greater"></a>
+<a name="0x1_fixed_point64_greater"></a>
 
 ## Function `greater`
 
@@ -574,7 +573,7 @@ Returns true if num1 > num2
 
 </details>
 
-<a id="0x1_fixed_point64_equal"></a>
+<a name="0x1_fixed_point64_equal"></a>
 
 ## Function `equal`
 
@@ -599,7 +598,7 @@ Returns true if num1 = num2
 
 </details>
 
-<a id="0x1_fixed_point64_almost_equal"></a>
+<a name="0x1_fixed_point64_almost_equal"></a>
 
 ## Function `almost_equal`
 
@@ -628,7 +627,7 @@ Returns true if num1 almost equals to num2, which means abs(num1-num2) <= precis
 
 </details>
 
-<a id="0x1_fixed_point64_create_from_u128"></a>
+<a name="0x1_fixed_point64_create_from_u128"></a>
 
 ## Function `create_from_u128`
 
@@ -655,7 +654,7 @@ Create a fixedpoint value from a u128 value.
 
 </details>
 
-<a id="0x1_fixed_point64_floor"></a>
+<a name="0x1_fixed_point64_floor"></a>
 
 ## Function `floor`
 
@@ -680,7 +679,7 @@ Returns the largest integer less than or equal to a given number.
 
 </details>
 
-<a id="0x1_fixed_point64_ceil"></a>
+<a name="0x1_fixed_point64_ceil"></a>
 
 ## Function `ceil`
 
@@ -710,7 +709,7 @@ Rounds up the given FixedPoint64 to the next largest integer.
 
 </details>
 
-<a id="0x1_fixed_point64_round"></a>
+<a name="0x1_fixed_point64_round"></a>
 
 ## Function `round`
 
@@ -741,14 +740,9 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 </details>
 
-<a id="@Specification_1"></a>
+<a name="@Specification_1"></a>
 
 ## Specification
-
-
-<a id="@Module-level_Specification_2"></a>
-
-### Module-level Specification
 
 
 
@@ -758,7 +752,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="@Specification_1_sub"></a>
+<a name="@Specification_1_sub"></a>
 
 ### Function `sub`
 
@@ -776,7 +770,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="@Specification_1_add"></a>
+<a name="@Specification_1_add"></a>
 
 ### Function `add`
 
@@ -794,7 +788,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="@Specification_1_multiply_u128"></a>
+<a name="@Specification_1_multiply_u128"></a>
 
 ### Function `multiply_u128`
 
@@ -813,7 +807,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="0x1_fixed_point64_MultiplyAbortsIf"></a>
+<a name="0x1_fixed_point64_MultiplyAbortsIf"></a>
 
 
 <pre><code><b>schema</b> <a href="fixed_point64.md#0x1_fixed_point64_MultiplyAbortsIf">MultiplyAbortsIf</a> {
@@ -826,7 +820,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="0x1_fixed_point64_spec_multiply_u128"></a>
+<a name="0x1_fixed_point64_spec_multiply_u128"></a>
 
 
 <pre><code><b>fun</b> <a href="fixed_point64.md#0x1_fixed_point64_spec_multiply_u128">spec_multiply_u128</a>(val: num, multiplier: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>): num {
@@ -836,7 +830,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="@Specification_1_divide_u128"></a>
+<a name="@Specification_1_divide_u128"></a>
 
 ### Function `divide_u128`
 
@@ -855,7 +849,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="0x1_fixed_point64_DivideAbortsIf"></a>
+<a name="0x1_fixed_point64_DivideAbortsIf"></a>
 
 
 <pre><code><b>schema</b> <a href="fixed_point64.md#0x1_fixed_point64_DivideAbortsIf">DivideAbortsIf</a> {
@@ -869,7 +863,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="0x1_fixed_point64_spec_divide_u128"></a>
+<a name="0x1_fixed_point64_spec_divide_u128"></a>
 
 
 <pre><code><b>fun</b> <a href="fixed_point64.md#0x1_fixed_point64_spec_divide_u128">spec_divide_u128</a>(val: num, divisor: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>): num {
@@ -879,7 +873,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="@Specification_1_create_from_rational"></a>
+<a name="@Specification_1_create_from_rational"></a>
 
 ### Function `create_from_rational`
 
@@ -891,7 +885,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 <pre><code><b>pragma</b> opaque;
-<b>pragma</b> verify_duration_estimate = 1000;
+<b>pragma</b> verify_duration_estimate = 120;
 <b>include</b> <a href="fixed_point64.md#0x1_fixed_point64_CreateFromRationalAbortsIf">CreateFromRationalAbortsIf</a>;
 <b>ensures</b> result == <a href="fixed_point64.md#0x1_fixed_point64_spec_create_from_rational">spec_create_from_rational</a>(numerator, denominator);
 </code></pre>
@@ -899,7 +893,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="0x1_fixed_point64_CreateFromRationalAbortsIf"></a>
+<a name="0x1_fixed_point64_CreateFromRationalAbortsIf"></a>
 
 
 <pre><code><b>schema</b> <a href="fixed_point64.md#0x1_fixed_point64_CreateFromRationalAbortsIf">CreateFromRationalAbortsIf</a> {
@@ -917,7 +911,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="0x1_fixed_point64_spec_create_from_rational"></a>
+<a name="0x1_fixed_point64_spec_create_from_rational"></a>
 
 
 <pre><code><b>fun</b> <a href="fixed_point64.md#0x1_fixed_point64_spec_create_from_rational">spec_create_from_rational</a>(numerator: num, denominator: num): <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a> {
@@ -927,7 +921,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="@Specification_1_create_from_raw_value"></a>
+<a name="@Specification_1_create_from_raw_value"></a>
 
 ### Function `create_from_raw_value`
 
@@ -945,7 +939,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="@Specification_1_min"></a>
+<a name="@Specification_1_min"></a>
 
 ### Function `min`
 
@@ -964,7 +958,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="0x1_fixed_point64_spec_min"></a>
+<a name="0x1_fixed_point64_spec_min"></a>
 
 
 <pre><code><b>fun</b> <a href="fixed_point64.md#0x1_fixed_point64_spec_min">spec_min</a>(num1: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>, num2: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>): <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a> {
@@ -978,7 +972,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="@Specification_1_max"></a>
+<a name="@Specification_1_max"></a>
 
 ### Function `max`
 
@@ -997,7 +991,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="0x1_fixed_point64_spec_max"></a>
+<a name="0x1_fixed_point64_spec_max"></a>
 
 
 <pre><code><b>fun</b> <a href="fixed_point64.md#0x1_fixed_point64_spec_max">spec_max</a>(num1: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>, num2: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>): <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a> {
@@ -1011,7 +1005,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="@Specification_1_less_or_equal"></a>
+<a name="@Specification_1_less_or_equal"></a>
 
 ### Function `less_or_equal`
 
@@ -1030,7 +1024,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="0x1_fixed_point64_spec_less_or_equal"></a>
+<a name="0x1_fixed_point64_spec_less_or_equal"></a>
 
 
 <pre><code><b>fun</b> <a href="fixed_point64.md#0x1_fixed_point64_spec_less_or_equal">spec_less_or_equal</a>(num1: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>, num2: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>): bool {
@@ -1040,7 +1034,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="@Specification_1_less"></a>
+<a name="@Specification_1_less"></a>
 
 ### Function `less`
 
@@ -1059,7 +1053,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="0x1_fixed_point64_spec_less"></a>
+<a name="0x1_fixed_point64_spec_less"></a>
 
 
 <pre><code><b>fun</b> <a href="fixed_point64.md#0x1_fixed_point64_spec_less">spec_less</a>(num1: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>, num2: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>): bool {
@@ -1069,7 +1063,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="@Specification_1_greater_or_equal"></a>
+<a name="@Specification_1_greater_or_equal"></a>
 
 ### Function `greater_or_equal`
 
@@ -1088,7 +1082,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="0x1_fixed_point64_spec_greater_or_equal"></a>
+<a name="0x1_fixed_point64_spec_greater_or_equal"></a>
 
 
 <pre><code><b>fun</b> <a href="fixed_point64.md#0x1_fixed_point64_spec_greater_or_equal">spec_greater_or_equal</a>(num1: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>, num2: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>): bool {
@@ -1098,7 +1092,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="@Specification_1_greater"></a>
+<a name="@Specification_1_greater"></a>
 
 ### Function `greater`
 
@@ -1117,7 +1111,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="0x1_fixed_point64_spec_greater"></a>
+<a name="0x1_fixed_point64_spec_greater"></a>
 
 
 <pre><code><b>fun</b> <a href="fixed_point64.md#0x1_fixed_point64_spec_greater">spec_greater</a>(num1: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>, num2: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>): bool {
@@ -1127,7 +1121,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="@Specification_1_equal"></a>
+<a name="@Specification_1_equal"></a>
 
 ### Function `equal`
 
@@ -1146,7 +1140,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="0x1_fixed_point64_spec_equal"></a>
+<a name="0x1_fixed_point64_spec_equal"></a>
 
 
 <pre><code><b>fun</b> <a href="fixed_point64.md#0x1_fixed_point64_spec_equal">spec_equal</a>(num1: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>, num2: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>): bool {
@@ -1156,7 +1150,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="@Specification_1_almost_equal"></a>
+<a name="@Specification_1_almost_equal"></a>
 
 ### Function `almost_equal`
 
@@ -1175,7 +1169,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="0x1_fixed_point64_spec_almost_equal"></a>
+<a name="0x1_fixed_point64_spec_almost_equal"></a>
 
 
 <pre><code><b>fun</b> <a href="fixed_point64.md#0x1_fixed_point64_spec_almost_equal">spec_almost_equal</a>(num1: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>, num2: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>, precision: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>): bool {
@@ -1189,7 +1183,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="@Specification_1_create_from_u128"></a>
+<a name="@Specification_1_create_from_u128"></a>
 
 ### Function `create_from_u128`
 
@@ -1208,7 +1202,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="0x1_fixed_point64_CreateFromU64AbortsIf"></a>
+<a name="0x1_fixed_point64_CreateFromU64AbortsIf"></a>
 
 
 <pre><code><b>schema</b> <a href="fixed_point64.md#0x1_fixed_point64_CreateFromU64AbortsIf">CreateFromU64AbortsIf</a> {
@@ -1221,7 +1215,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="0x1_fixed_point64_spec_create_from_u128"></a>
+<a name="0x1_fixed_point64_spec_create_from_u128"></a>
 
 
 <pre><code><b>fun</b> <a href="fixed_point64.md#0x1_fixed_point64_spec_create_from_u128">spec_create_from_u128</a>(val: num): <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a> {
@@ -1231,7 +1225,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="@Specification_1_floor"></a>
+<a name="@Specification_1_floor"></a>
 
 ### Function `floor`
 
@@ -1250,7 +1244,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="0x1_fixed_point64_spec_floor"></a>
+<a name="0x1_fixed_point64_spec_floor"></a>
 
 
 <pre><code><b>fun</b> <a href="fixed_point64.md#0x1_fixed_point64_spec_floor">spec_floor</a>(val: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>): u128 {
@@ -1265,7 +1259,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="@Specification_1_ceil"></a>
+<a name="@Specification_1_ceil"></a>
 
 ### Function `ceil`
 
@@ -1275,8 +1269,10 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
+TODO: worked in the past but started to time out since last z3 update
 
-<pre><code><b>pragma</b> verify_duration_estimate = 1000;
+
+<pre><code><b>pragma</b> verify = <b>false</b>;
 <b>pragma</b> opaque;
 <b>aborts_if</b> <b>false</b>;
 <b>ensures</b> result == <a href="fixed_point64.md#0x1_fixed_point64_spec_ceil">spec_ceil</a>(num);
@@ -1285,7 +1281,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="0x1_fixed_point64_spec_ceil"></a>
+<a name="0x1_fixed_point64_spec_ceil"></a>
 
 
 <pre><code><b>fun</b> <a href="fixed_point64.md#0x1_fixed_point64_spec_ceil">spec_ceil</a>(val: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>): u128 {
@@ -1301,7 +1297,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="@Specification_1_round"></a>
+<a name="@Specification_1_round"></a>
 
 ### Function `round`
 
@@ -1320,7 +1316,7 @@ Returns the value of a FixedPoint64 to the nearest integer.
 
 
 
-<a id="0x1_fixed_point64_spec_round"></a>
+<a name="0x1_fixed_point64_spec_round"></a>
 
 
 <pre><code><b>fun</b> <a href="fixed_point64.md#0x1_fixed_point64_spec_round">spec_round</a>(val: <a href="fixed_point64.md#0x1_fixed_point64_FixedPoint64">FixedPoint64</a>): u128 {

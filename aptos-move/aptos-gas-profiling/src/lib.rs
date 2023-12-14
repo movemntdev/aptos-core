@@ -8,7 +8,7 @@ mod log;
 mod misc;
 mod profiler;
 mod render;
-mod report;
+mod textualize;
 
 pub use log::{FrameName, TransactionGasLog};
 pub use profiler::GasProfiler;

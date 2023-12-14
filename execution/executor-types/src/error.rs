@@ -5,12 +5,11 @@
 use aptos_crypto::HashValue;
 use aptos_types::transaction::Version;
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
 use thiserror::Error;
 
 #[derive(Debug, Deserialize, Error, PartialEq, Eq, Serialize)]
 /// Different reasons for proposal rejection
-pub enum ExecutorError {
+pub enum Error {
     #[error("Cannot find speculation result for block id {0}")]
     BlockNotFound(HashValue),
 
@@ -42,7 +41,7 @@ pub enum ExecutorError {
     CouldNotGetData,
 }
 
-impl From<anyhow::Error> for ExecutorError {
+impl From<anyhow::Error> for Error {
     fn from(error: anyhow::Error) -> Self {
         Self::InternalError {
             error: format!("{}", error),
@@ -50,26 +49,16 @@ impl From<anyhow::Error> for ExecutorError {
     }
 }
 
-impl From<bcs::Error> for ExecutorError {
+impl From<bcs::Error> for Error {
     fn from(error: bcs::Error) -> Self {
         Self::SerializationError(format!("{}", error))
     }
 }
 
-impl From<aptos_secure_net::Error> for ExecutorError {
+impl From<aptos_secure_net::Error> for Error {
     fn from(error: aptos_secure_net::Error) -> Self {
         Self::InternalError {
             error: format!("{}", error),
         }
     }
 }
-
-impl ExecutorError {
-    pub fn internal_err<E: Display>(e: E) -> Self {
-        Self::InternalError {
-            error: format!("{}", e),
-        }
-    }
-}
-
-pub type ExecutorResult<T> = Result<T, ExecutorError>;

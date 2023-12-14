@@ -3,7 +3,7 @@
 
 use crate::{
     accept_type::AcceptType,
-    context::{api_spawn_blocking, Context},
+    context::Context,
     failpoint::fail_point_poem,
     response::{BasicResponse, BasicResponseStatus, BasicResultWith404},
     ApiTags,
@@ -16,6 +16,7 @@ use poem_openapi::{
 use std::sync::Arc;
 
 /// API for block transactions and information
+///
 #[derive(Clone)]
 pub struct BlocksApi {
     pub context: Arc<Context>,
@@ -34,10 +35,10 @@ impl BlocksApi {
     ///
     /// If the block is pruned, it will return a 410
     #[oai(
-        path = "/blocks/by_height/:block_height",
-        method = "get",
-        operation_id = "get_block_by_height",
-        tag = "ApiTags::Blocks"
+    path = "/blocks/by_height/:block_height",
+    method = "get",
+    operation_id = "get_block_by_height",
+    tag = "ApiTags::Blocks"
     )]
     async fn get_block_by_height(
         &self,
@@ -52,15 +53,27 @@ impl BlocksApi {
         fail_point_poem("endpoint_get_block_by_height")?;
         self.context
             .check_api_output_enabled("Get block by height", &accept_type)?;
-        let api = self.clone();
-        api_spawn_blocking(move || {
-            api.get_by_height(
-                accept_type,
-                block_height.0,
-                with_transactions.0.unwrap_or_default(),
-            )
-        })
-        .await
+        self.get_by_height(
+            accept_type,
+            block_height.0,
+            with_transactions.0.unwrap_or_default(),
+        )
+    }
+
+    pub async fn get_block_by_height_raw(
+        &self,
+        accept_type: AcceptType,
+        block_height: u64,
+        with_transactions: Option<bool>,
+    ) -> BasicResultWith404<Block> {
+        fail_point_poem("endpoint_get_block_by_height")?;
+        self.context
+            .check_api_output_enabled("Get block by height", &accept_type)?;
+        self.get_by_height(
+            accept_type,
+            block_height,
+            with_transactions.unwrap_or_default(),
+        )
     }
 
     /// Get blocks by version
@@ -74,10 +87,10 @@ impl BlocksApi {
     ///
     /// If the block has been pruned, it will return a 410
     #[oai(
-        path = "/blocks/by_version/:version",
-        method = "get",
-        operation_id = "get_block_by_version",
-        tag = "ApiTags::Blocks"
+    path = "/blocks/by_version/:version",
+    method = "get",
+    operation_id = "get_block_by_version",
+    tag = "ApiTags::Blocks"
     )]
     async fn get_block_by_version(
         &self,
@@ -92,15 +105,27 @@ impl BlocksApi {
         fail_point_poem("endpoint_get_block_by_version")?;
         self.context
             .check_api_output_enabled("Get block by version", &accept_type)?;
-        let api = self.clone();
-        api_spawn_blocking(move || {
-            api.get_by_version(
-                accept_type,
-                version.0,
-                with_transactions.0.unwrap_or_default(),
-            )
-        })
-        .await
+        self.get_by_version(
+            accept_type,
+            version.0,
+            with_transactions.0.unwrap_or_default(),
+        )
+    }
+
+    pub async fn get_block_by_version_raw(
+        &self,
+        accept_type: AcceptType,
+        version: u64,
+        with_transactions: Option<bool>,
+    ) -> BasicResultWith404<Block> {
+        fail_point_poem("endpoint_get_block_by_version")?;
+        self.context
+            .check_api_output_enabled("Get block by version", &accept_type)?;
+        self.get_by_version(
+            accept_type,
+            version,
+            with_transactions.unwrap_or_default(),
+        )
     }
 }
 
@@ -162,7 +187,7 @@ impl BlocksApi {
                     transactions,
                 };
                 BasicResponse::try_from_json((block, &latest_ledger_info, BasicResponseStatus::Ok))
-            },
+            }
             AcceptType::Bcs => BasicResponse::try_from_bcs((
                 bcs_block,
                 &latest_ledger_info,

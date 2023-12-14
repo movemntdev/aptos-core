@@ -21,14 +21,9 @@ backoff = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
+crossbeam-channel = { workspace = true }
 csv = { workspace = true }
-diesel = { workspace = true, features = [
-    "chrono",
-    "postgres",
-    "r2d2",
-    "numeric",
-    "serde_json",
-] }
+diesel = { workspace = true }
 diesel_migrations = { workspace = true }
 field_count = { workspace = true }
 futures = { workspace = true }
@@ -40,6 +35,7 @@ regex = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+time = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }

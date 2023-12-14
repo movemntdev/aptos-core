@@ -2,15 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::chain_id::{ChainId, NamedChain};
-use serde::Serialize;
-use strum::{EnumCount, IntoEnumIterator};
-use strum_macros::{EnumCount as EnumCountMacro, EnumIter};
 
 // A placeholder that can be used to represent activation times that have not been determined.
 const NOT_YET_SPECIFIED: u64 = END_OF_TIME; /* Thursday, December 31, 2099 11:59:59 PM */
 
 pub const END_OF_TIME: u64 = 4102444799000; /* Thursday, December 31, 2099 11:59:59 PM */
-#[derive(Debug, EnumCountMacro, EnumIter, Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum TimedFeatureFlag {
     DisableInvariantViolationCheckInSwapLoc,
     LimitTypeTagSize,
@@ -49,6 +46,12 @@ impl TimedFeatureOverride {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct TimedFeatures {
+    inner: TimedFeaturesImpl,
+    override_: Option<TimedFeatureOverride>,
+}
+
 impl TimedFeatureFlag {
     pub const fn activation_time_on(&self, chain_id: &NamedChain) -> u64 {
         use NamedChain::*;
@@ -64,13 +67,7 @@ impl TimedFeatureFlag {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct TimedFeaturesBuilder {
-    inner: TimedFeaturesImpl,
-    override_: Option<TimedFeatureOverride>,
-}
-
-impl TimedFeaturesBuilder {
+impl TimedFeatures {
     pub fn new(chain_id: ChainId, timestamp: u64) -> Self {
         let inner = match NamedChain::from_chain_id(&chain_id) {
             Ok(named_chain) => TimedFeaturesImpl::OnNamedChain {
@@ -100,7 +97,7 @@ impl TimedFeaturesBuilder {
     }
 
     /// Determine whether the given feature should be enabled or not.
-    fn is_enabled(&self, flag: TimedFeatureFlag) -> bool {
+    pub fn is_enabled(&self, flag: TimedFeatureFlag) -> bool {
         use TimedFeaturesImpl::*;
 
         if let Some(override_) = &self.override_ {
@@ -116,23 +113,5 @@ impl TimedFeaturesBuilder {
             } => *timestamp >= flag.activation_time_on(named_chain),
             EnableAll => true,
         }
-    }
-
-    pub fn build(self) -> TimedFeatures {
-        let mut enabled = [false; TimedFeatureFlag::COUNT];
-        for flag in TimedFeatureFlag::iter() {
-            enabled[flag as usize] = self.is_enabled(flag)
-        }
-
-        TimedFeatures(enabled)
-    }
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct TimedFeatures([bool; TimedFeatureFlag::COUNT]);
-
-impl TimedFeatures {
-    pub fn is_enabled(&self, flag: TimedFeatureFlag) -> bool {
-        self.0[flag as usize]
     }
 }

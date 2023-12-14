@@ -9,7 +9,6 @@ use crate::{
     monitor,
     network::{IncomingBlockRetrievalRequest, NetworkSender},
     network_interface::ConsensusMsg,
-    payload_manager::PayloadManager,
     persistent_liveness_storage::{LedgerRecoveryData, PersistentLivenessStorage, RecoveryData},
     state_replication::StateComputer,
 };
@@ -17,8 +16,9 @@ use anyhow::{bail, Context};
 use aptos_consensus_types::{
     block::Block,
     block_retrieval::{
-        BlockRetrievalRequest, BlockRetrievalResponse, BlockRetrievalStatus, NUM_PEERS_PER_RETRY,
-        NUM_RETRIES, RETRY_INTERVAL_MSEC, RPC_TIMEOUT_MSEC,
+        BlockRetrievalRequest, BlockRetrievalResponse, BlockRetrievalStatus,
+        MAX_BLOCKS_PER_REQUEST, NUM_PEERS_PER_RETRY, NUM_RETRIES, RETRY_INTERVAL_MSEC,
+        RPC_TIMEOUT_MSEC,
     },
     common::Author,
     quorum_cert::QuorumCert,
@@ -185,7 +185,6 @@ impl BlockStore {
             retriever,
             self.storage.clone(),
             self.state_computer.clone(),
-            self.payload_manager.clone(),
         )
         .await?
         .take();
@@ -215,7 +214,6 @@ impl BlockStore {
         retriever: &'a mut BlockRetriever,
         storage: Arc<dyn PersistentLivenessStorage>,
         state_computer: Arc<dyn StateComputer>,
-        payload_manager: Arc<PayloadManager>,
     ) -> anyhow::Result<RecoveryData> {
         info!(
             LogSchema::new(LogEvent::StateSync).remote_peer(retriever.preferred_peer),
@@ -297,9 +295,6 @@ impl BlockStore {
         assert_eq!(blocks.len(), quorum_certs.len());
         for (i, block) in blocks.iter().enumerate() {
             assert_eq!(block.id(), quorum_certs[i].certified_block().id());
-            if let Some(payload) = block.payload() {
-                payload_manager.prefetch_payload_data(payload, block.timestamp_usecs());
-            }
         }
 
         // Check early that recovery will succeed, and return before corrupting our state in case it will not.
@@ -406,7 +401,6 @@ pub struct BlockRetriever {
     network: NetworkSender,
     preferred_peer: Author,
     validator_addresses: Vec<AccountAddress>,
-    max_blocks_to_request: u64,
 }
 
 impl BlockRetriever {
@@ -414,13 +408,11 @@ impl BlockRetriever {
         network: NetworkSender,
         preferred_peer: Author,
         validator_addresses: Vec<AccountAddress>,
-        max_blocks_to_request: u64,
     ) -> Self {
         Self {
             network,
             preferred_peer,
             validator_addresses,
-            max_blocks_to_request,
         }
     }
 
@@ -527,7 +519,7 @@ impl BlockRetriever {
         let mut progress = 0;
         let mut last_block_id = block_id;
         let mut result_blocks: Vec<Block> = vec![];
-        let mut retrieve_batch_size = self.max_blocks_to_request;
+        let mut retrieve_batch_size = MAX_BLOCKS_PER_REQUEST;
         if peers.is_empty() {
             bail!("Failed to fetch block {}: no peers available", block_id);
         }

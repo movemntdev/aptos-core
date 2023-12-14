@@ -15,20 +15,19 @@ use crossbeam_channel::{unbounded, Receiver, Sender};
 use once_cell::sync::Lazy;
 use std::{
     collections::HashMap,
-    string::ToString,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
     time::Duration,
 };
-use threadpool::ThreadPool;
 
-static IO_POOL: Lazy<ThreadPool> = Lazy::new(|| {
-    ThreadPool::with_name(
-        "proof_reader".to_string(),
-        AptosVM::get_num_proof_reading_threads(),
-    )
+static IO_POOL: Lazy<rayon::ThreadPool> = Lazy::new(|| {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(AptosVM::get_num_proof_reading_threads())
+        .thread_name(|index| format!("proof_reader-{}", index))
+        .build()
+        .unwrap()
 });
 
 struct Proof {
@@ -119,7 +118,7 @@ impl AsyncProofFetcher {
         self.num_proofs_to_read.fetch_add(1, Ordering::SeqCst);
         let reader = self.reader.clone();
         let data_sender = self.data_sender.clone();
-        IO_POOL.execute(move || {
+        IO_POOL.spawn(move || {
             let proof = reader
                 .get_state_proof_by_version_ext(&state_key, version)
                 .expect("Proof reading should succeed.");

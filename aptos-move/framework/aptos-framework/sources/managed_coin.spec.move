@@ -1,43 +1,4 @@
 spec aptos_framework::managed_coin {
-    /// <high-level-req>
-    /// No.: 1
-    /// Property: The initializing account should hold the capabilities to operate the coin.
-    /// Criticality: Critical
-    /// Implementation: The capabilities are stored under the initializing account under the Capabilities resource,
-    /// which is distinct for a distinct type of coin.
-    /// Enforcement: Enforced via: initialize
-    ///
-    /// No.: 2
-    /// Property: A new coin should be properly initialized.
-    /// Criticality: High
-    /// Implementation: In the initialize function, a new coin is initialized via the coin module with the specified
-    /// properties.
-    /// Enforcement: Enforced via: initialize_internal
-    ///
-    /// No.: 3
-    /// Property: Minting/Burning should only be done by the account who hold the valid capabilities.
-    /// Criticality: High
-    /// Implementation: The mint and burn capabilities are moved under the initializing account and retrieved, while
-    /// minting/burning
-    /// Enforcement: Enforced via: [managed_coin::high-level-spec-3.1](initialize), [high-level-spec-3.2](burn),
-    /// [high-level-spec-3.3](mint).
-    ///
-    /// No.: 4
-    /// Property: If the total supply of coins is being monitored, burn and mint operations will appropriately adjust
-    /// the total supply.
-    /// Criticality: High
-    /// Implementation: The coin::burn and coin::mint functions, when tracking the supply, adjusts the total coin
-    /// supply accordingly.
-    /// Enforcement: Formally Verified: TotalSupplyNoChange
-    ///
-    /// No.: 5
-    /// Property: Before burning coins, exact amount of coins are withdrawn.
-    /// Criticality: High
-    /// Implementation: After utilizing the coin::withdraw function to withdraw coins, they are then burned,
-    /// and the function ensures the precise return of the initially specified coin amount.
-    /// Enforcement: Enforced via: burn_from
-    /// </high-level-req>
-    ///
     spec module {
         pragma verify = true;
         pragma aborts_if_is_strict;
@@ -47,7 +8,10 @@ spec aptos_framework::managed_coin {
         account: &signer,
         amount: u64,
     ) {
+        use aptos_framework::optional_aggregator;
         use aptos_std::type_info;
+        use std::option;
+        use aptos_framework::aggregator;
 
         let account_addr = signer::address_of(account);
 
@@ -57,7 +21,6 @@ spec aptos_framework::managed_coin {
         let balance = coin_store.coin.value;
 
         // Resource CoinStore<CoinType> should exists in the signer.
-        /// [high-level-spec-3.2]
         aborts_if !exists<coin::CoinStore<CoinType>>(account_addr);
 
         // Account should not be frozen and should have sufficient balance.
@@ -66,13 +29,16 @@ spec aptos_framework::managed_coin {
 
         let addr =  type_info::type_of<CoinType>().account_address;
         let maybe_supply = global<coin::CoinInfo<CoinType>>(addr).supply;
+
         // Ensure the amount won't be overflow.
         aborts_if amount <= 0;
         aborts_if !exists<coin::CoinInfo<CoinType>>(addr);
-        include coin::CoinSubAbortsIf<CoinType> { amount:amount };
-
-        // Ensure that the global 'supply' decreases by 'amount'.
-        ensures coin::supply<CoinType> == old(coin::supply<CoinType>) - amount;
+        aborts_if option::is_some(maybe_supply) && optional_aggregator::is_parallelizable(option::borrow(maybe_supply))
+            && aggregator::spec_aggregator_get_val(option::borrow(option::borrow(maybe_supply).aggregator)) <
+            amount;
+        aborts_if option::is_some(maybe_supply) && !optional_aggregator::is_parallelizable(option::borrow(maybe_supply))
+            && option::borrow(option::borrow(maybe_supply).integer).value <
+            amount;
     }
 
     /// Make sure `name` and `symbol` are legal length.
@@ -91,7 +57,6 @@ spec aptos_framework::managed_coin {
         aborts_if !string::spec_internal_check_utf8(name);
         aborts_if !string::spec_internal_check_utf8(symbol);
         aborts_if exists<Capabilities<CoinType>>(signer::address_of(account));
-        /// [managed_coin::high-level-spec-3.1]
         ensures exists<Capabilities<CoinType>>(signer::address_of(account));
     }
 
@@ -102,18 +67,11 @@ spec aptos_framework::managed_coin {
         dst_addr: address,
         amount: u64,
     ) {
-        use aptos_std::type_info;
         let account_addr = signer::address_of(account);
-        /// [high-level-spec-3.3]
         aborts_if !exists<Capabilities<CoinType>>(account_addr);
-        let addr = type_info::type_of<CoinType>().account_address;
-        aborts_if (amount != 0) && !exists<coin::CoinInfo<CoinType>>(addr);
         let coin_store = global<coin::CoinStore<CoinType>>(dst_addr);
         aborts_if !exists<coin::CoinStore<CoinType>>(dst_addr);
         aborts_if coin_store.frozen;
-        include coin::CoinAddAbortsIf<CoinType>;
-        ensures coin::supply<CoinType> == old(coin::supply<CoinType>) + amount;
-        ensures global<coin::CoinStore<CoinType>>(dst_addr).coin.value == old(global<coin::CoinStore<CoinType>>(dst_addr)).coin.value + amount;
     }
 
     /// An account can only be registered once.
@@ -129,6 +87,5 @@ spec aptos_framework::managed_coin {
         aborts_if !exists<coin::CoinStore<CoinType>>(account_addr) && acc.guid_creation_num + 2 > MAX_U64;
         aborts_if !exists<coin::CoinStore<CoinType>>(account_addr) && !exists<account::Account>(account_addr);
         aborts_if !exists<coin::CoinStore<CoinType>>(account_addr) && !type_info::spec_is_struct<CoinType>();
-        ensures exists<coin::CoinStore<CoinType>>(account_addr);
     }
 }

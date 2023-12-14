@@ -24,7 +24,7 @@ pub enum BatchCoordinatorCommand {
 pub struct BatchCoordinator {
     my_peer_id: PeerId,
     network_sender: NetworkSender,
-    batch_store: Arc<BatchStore>,
+    batch_store: Arc<BatchStore<NetworkSender>>,
     max_batch_txns: u64,
     max_batch_bytes: u64,
     max_total_txns: u64,
@@ -35,7 +35,7 @@ impl BatchCoordinator {
     pub(crate) fn new(
         my_peer_id: PeerId,
         network_sender: NetworkSender,
-        batch_store: Arc<BatchStore>,
+        batch_store: Arc<BatchStore<NetworkSender>>,
         max_batch_txns: u64,
         max_batch_bytes: u64,
         max_total_txns: u64,
@@ -108,8 +108,7 @@ impl BatchCoordinator {
 
     async fn handle_batches_msg(&mut self, author: PeerId, batches: Vec<Batch>) {
         if let Err(e) = self.ensure_max_limits(&batches) {
-            error!("Batch from {}: {}", author, e);
-            counters::RECEIVED_BATCH_MAX_LIMIT_FAILED.inc();
+            warn!("Batch from {}: {}", author, e);
             return;
         }
 

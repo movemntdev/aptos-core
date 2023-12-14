@@ -5,17 +5,14 @@ from __future__ import annotations
 
 import hashlib
 import unittest
-from dataclasses import dataclass
 
-from . import asymmetric_crypto, asymmetric_crypto_wrapper, ed25519
+from . import ed25519
 from .bcs import Deserializer, Serializer
 
 
 class AuthKeyScheme:
     Ed25519: bytes = b"\x00"
     MultiEd25519: bytes = b"\x01"
-    SingleKey: bytes = b"\x02"
-    MultiKey: bytes = b"\x03"
     DeriveObjectAddressFromGuid: bytes = b"\xFD"
     DeriveObjectAddressFromSeed: bytes = b"\xFE"
     DeriveResourceAccountAddress: bytes = b"\xFF"
@@ -198,19 +195,17 @@ class AccountAddress:
         return AccountAddress(bytes.fromhex(addr))
 
     @staticmethod
-    def from_key(key: asymmetric_crypto.PublicKey) -> AccountAddress:
+    def from_key(key: ed25519.PublicKey) -> AccountAddress:
         hasher = hashlib.sha3_256()
-        hasher.update(key.to_crypto_bytes())
+        hasher.update(key.key.encode())
+        hasher.update(AuthKeyScheme.Ed25519)
+        return AccountAddress(hasher.digest())
 
-        if isinstance(key, ed25519.PublicKey):
-            hasher.update(AuthKeyScheme.Ed25519)
-        elif isinstance(key, ed25519.MultiPublicKey):
-            hasher.update(AuthKeyScheme.MultiEd25519)
-        elif isinstance(key, asymmetric_crypto_wrapper.PublicKey):
-            hasher.update(AuthKeyScheme.SingleKey)
-        else:
-            raise Exception("Unsupported asymmetric_crypto.PublicKey key type.")
-
+    @staticmethod
+    def from_multi_ed25519(keys: ed25519.MultiPublicKey) -> AccountAddress:
+        hasher = hashlib.sha3_256()
+        hasher.update(keys.to_bytes())
+        hasher.update(AuthKeyScheme.MultiEd25519)
         return AccountAddress(hasher.digest())
 
     @staticmethod
@@ -263,9 +258,12 @@ class AccountAddress:
         serializer.fixed_bytes(self.address)
 
 
-"""
-Tests
-"""
+###
+### Tests
+###
+
+
+from dataclasses import dataclass
 
 
 @dataclass(init=True, frozen=True)
@@ -369,7 +367,7 @@ class Test(unittest.TestCase):
         expected = AccountAddress.from_str_relaxed(
             "835bb8c5ee481062946b18bbb3b42a40b998d6bf5316ca63834c959dc739acf0"
         )
-        actual = AccountAddress.from_key(multisig_public_key)
+        actual = AccountAddress.from_multi_ed25519(multisig_public_key)
         self.assertEqual(actual, expected)
 
     def test_resource_account(self):

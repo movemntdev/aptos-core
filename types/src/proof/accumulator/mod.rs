@@ -21,10 +21,7 @@ use super::MerkleTreeInternalNode;
 use crate::proof::definition::{LeafCount, MAX_ACCUMULATOR_LEAVES};
 use anyhow::{ensure, format_err, Result};
 use aptos_crypto::{
-    hash::{
-        CryptoHash, CryptoHasher, EventAccumulatorHasher, TransactionAccumulatorHasher,
-        ACCUMULATOR_PLACEHOLDER_HASH,
-    },
+    hash::{CryptoHash, CryptoHasher, ACCUMULATOR_PLACEHOLDER_HASH},
     HashValue,
 };
 use serde::{Deserialize, Serialize};
@@ -326,7 +323,3 @@ where
         Self::new(vec![], 0).expect("Constructing empty accumulator should work.")
     }
 }
-
-pub type InMemoryTransactionAccumulator = InMemoryAccumulator<TransactionAccumulatorHasher>;
-
-pub type InMemoryEventAccumulator = InMemoryAccumulator<EventAccumulatorHasher>;

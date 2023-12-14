@@ -13,7 +13,8 @@ module message_board::acl_based_mb {
     use std::acl::Self;
     use std::signer;
     use std::vector;
-    use aptos_framework::event;
+    use aptos_framework::account;
+    use aptos_framework::event::{Self, EventHandle};
 
     // Error map
     const EACCOUNT_NOT_IN_ACL: u64 = 1;
@@ -24,22 +25,27 @@ module message_board::acl_based_mb {
         pinned_post: vector<u8>
     }
 
-    #[event]
+    struct MessageChangeEventHandle has key {
+        change_events: EventHandle<MessageChangeEvent>
+    }
+
     /// emit an event from participant account showing the board and the new message
-    struct MessageChange has store, drop {
-        board: address,
+    struct MessageChangeEvent has store, drop {
         message: vector<u8>,
         participant: address
     }
 
     /// init message board
     public entry fun message_board_init(account: &signer) {
-        let board = ACLBasedMB {
+        let board = ACLBasedMB{
             participants: acl::empty(),
             pinned_post: vector::empty<u8>()
         };
         acl::add(&mut board.participants, signer::address_of(account));
         move_to(account, board);
+        move_to(account, MessageChangeEventHandle{
+            change_events: account::new_event_handle<MessageChangeEvent>(account)
+        })
     }
 
     public fun view_message(board_addr: address): vector<u8> acquires ACLBasedMB {
@@ -63,7 +69,7 @@ module message_board::acl_based_mb {
     /// an account publish the message to update the notice
     public entry fun send_pinned_message(
         account: &signer, board_addr: address, message: vector<u8>
-    ) acquires ACLBasedMB {
+    ) acquires ACLBasedMB, MessageChangeEventHandle {
         let board = borrow_global<ACLBasedMB>(board_addr);
         assert!(acl::contains(&board.participants, signer::address_of(account)), EACCOUNT_NOT_IN_ACL);
 
@@ -71,9 +77,10 @@ module message_board::acl_based_mb {
         board.pinned_post = message;
 
         let send_acct = signer::address_of(account);
-        event::emit(
-            MessageChange {
-                board: board_addr,
+        let event_handle = borrow_global_mut<MessageChangeEventHandle>(board_addr);
+        event::emit_event<MessageChangeEvent>(
+            &mut event_handle.change_events,
+            MessageChangeEvent{
                 message,
                 participant: send_acct
             }
@@ -81,10 +88,13 @@ module message_board::acl_based_mb {
     }
 
     /// an account can send events containing message
-    public entry fun send_message_to(account: signer, board_addr: address, message: vector<u8>) {
-        event::emit(
-            MessageChange {
-                board: board_addr,
+    public entry fun send_message_to(
+        account: signer, board_addr: address, message: vector<u8>
+    ) acquires MessageChangeEventHandle {
+        let event_handle = borrow_global_mut<MessageChangeEventHandle>(board_addr);
+        event::emit_event<MessageChangeEvent>(
+            &mut event_handle.change_events,
+            MessageChangeEvent{
                 message,
                 participant: signer::address_of(&account)
             }
@@ -100,8 +110,8 @@ module message_board::MessageBoardTests {
 
     use message_board::acl_based_mb;
 
-    const HELLO_WORLD: vector<u8> = vector<u8>[150, 145, 154, 154, 157, 040, 167, 157, 162, 154, 144];
-    const BOB_IS_HERE: vector<u8> = vector<u8>[142, 157, 142, 040, 151, 163, 040, 150, 145, 162, 145];
+    const  HELLO_WORLD: vector<u8> = vector<u8>[150, 145, 154, 154, 157, 040, 167, 157, 162, 154, 144];
+    const  BOB_IS_HERE: vector<u8> = vector<u8>[142, 157, 142, 040, 151, 163, 040, 150, 145, 162, 145];
 
     #[test]
     public entry fun test_init_messageboard() {
@@ -117,9 +127,9 @@ module message_board::MessageBoardTests {
         acl_based_mb::add_participant(&alice, signer::address_of(&bob));
         acl_based_mb::send_pinned_message(&bob, signer::address_of(&alice), BOB_IS_HERE);
         let message = acl_based_mb::view_message(signer::address_of(&alice));
-        assert!(message == BOB_IS_HERE, 1);
+        assert!( message == BOB_IS_HERE, 1);
         let message = acl_based_mb::view_message(signer::address_of(&alice));
-        assert!(message == BOB_IS_HERE, 1);
+        assert!( message == BOB_IS_HERE, 1);
     }
 
     #[test]
@@ -136,9 +146,9 @@ module message_board::MessageBoardTests {
         acl_based_mb::add_participant(&alice, signer::address_of(&bob));
         acl_based_mb::send_pinned_message(&bob, signer::address_of(&alice), BOB_IS_HERE);
         let message = acl_based_mb::view_message(signer::address_of(&alice));
-        assert!(message == BOB_IS_HERE, 1);
+        assert!( message == BOB_IS_HERE, 1);
         let message = acl_based_mb::view_message(signer::address_of(&alice));
-        assert!(message == BOB_IS_HERE, 1);
+        assert!( message == BOB_IS_HERE, 1);
     }
 
     #[test]

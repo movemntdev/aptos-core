@@ -72,6 +72,9 @@ use std::{
     time::Duration,
 };
 use tempfile::TempDir;
+use thiserror::__private::PathAsDisplay;
+#[cfg(feature = "cli-framework-test-move")]
+use thiserror::__private::PathAsDisplay;
 use tokio::time::{sleep, Instant};
 
 #[cfg(test)]
@@ -778,7 +781,7 @@ impl CliTestFramework {
         let source_path = sources_dir.join("hello_blockchain.move");
         write_to_file(
             source_path.as_path(),
-            &source_path.display().to_string(),
+            &source_path.as_display().to_string(),
             hello_blockchain_contents.as_bytes(),
         )
         .unwrap();
@@ -787,7 +790,7 @@ impl CliTestFramework {
         let test_path = sources_dir.join("hello_blockchain_test.move");
         write_to_file(
             test_path.as_path(),
-            &test_path.display().to_string(),
+            &test_path.as_display().to_string(),
             hello_blockchain_test_contents.as_bytes(),
         )
         .unwrap();
@@ -886,7 +889,6 @@ impl CliTestFramework {
             account: self.account_id(index),
             package,
             output_dir: Some(output_dir),
-            print_metadata: false,
         }
         .execute()
         .await
@@ -974,7 +976,7 @@ impl CliTestFramework {
         let source_path = temp_dir.path().join("script.move");
         write_to_file(
             source_path.as_path(),
-            &source_path.display().to_string(),
+            &source_path.as_display().to_string(),
             script_contents.as_bytes(),
         )
         .unwrap();
@@ -1045,7 +1047,6 @@ impl CliTestFramework {
             bytecode_version: None,
             compiler_version: None,
             skip_attribute_checks: false,
-            check_test_code: false,
         }
     }
 

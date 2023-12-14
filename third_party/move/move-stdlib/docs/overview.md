@@ -1,5 +1,5 @@
 
-<a id="@Move_Stdlib_Modules_0"></a>
+<a name="@Move_Stdlib_Modules_0"></a>
 
 # Move Stdlib Modules
 
@@ -7,7 +7,7 @@
 This is the root document for the Move stdlib module documentation. The Move stdlib provides modules that can be used to access or interact with core language features.
 
 
-<a id="@Index_1"></a>
+<a name="@Index_1"></a>
 
 ## Index
 

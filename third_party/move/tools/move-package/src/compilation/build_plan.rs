@@ -17,7 +17,6 @@ use move_compiler::{
     diagnostics::{report_diagnostics_to_color_buffer, report_warnings, FilesSourceText},
     Compiler,
 };
-use move_model::model;
 use petgraph::algo::toposort;
 use std::{collections::BTreeSet, io::Write, path::Path};
 #[cfg(feature = "evm-backend")]
@@ -119,7 +118,6 @@ impl BuildPlan {
             |compiler| compiler.build_and_report(),
             build_and_report_v2_driver,
         )
-        .map(|(package, _)| package)
     }
 
     /// Compilation process does not exit even if warnings/failures are encountered
@@ -127,7 +125,7 @@ impl BuildPlan {
         &self,
         config: &CompilerConfig,
         writer: &mut W,
-    ) -> Result<(CompiledPackage, Option<model::GlobalEnv>)> {
+    ) -> Result<CompiledPackage> {
         self.compile_with_driver(
             writer,
             config,
@@ -158,7 +156,7 @@ impl BuildPlan {
         config: &CompilerConfig,
         compiler_driver_v1: impl FnMut(Compiler) -> CompilerDriverResult,
         compiler_driver_v2: impl FnMut(move_compiler_v2::Options) -> CompilerDriverResult,
-    ) -> Result<(CompiledPackage, Option<model::GlobalEnv>)> {
+    ) -> Result<CompiledPackage> {
         let root_package = &self.resolution_graph.package_table[&self.root];
         let project_root = match &self.resolution_graph.build_options.install_dir {
             Some(under_path) => under_path.clone(),
@@ -194,7 +192,7 @@ impl BuildPlan {
             })
             .collect();
 
-        let (compiled, model) = CompiledPackage::build_all(
+        let compiled = CompiledPackage::build_all(
             writer,
             &project_root,
             root_package.clone(),
@@ -209,7 +207,7 @@ impl BuildPlan {
             &project_root.join(CompiledPackageLayout::Root.path()),
             self.sorted_deps.iter().copied().collect(),
         )?;
-        Ok((compiled, model))
+        Ok(compiled)
     }
 
     #[cfg(feature = "evm-backend")]

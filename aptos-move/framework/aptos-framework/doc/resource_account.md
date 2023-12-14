@@ -1,5 +1,5 @@
 
-<a id="0x1_resource_account"></a>
+<a name="0x1_resource_account"></a>
 
 # Module `0x1::resource_account`
 
@@ -7,7 +7,7 @@ A resource account is used to manage resources independent of an account managed
 This contains several utilities to make using resource accounts more effective.
 
 
-<a id="@Resource_Accounts_to_manage_liquidity_pools_0"></a>
+<a name="@Resource_Accounts_to_manage_liquidity_pools_0"></a>
 
 ### Resource Accounts to manage liquidity pools
 
@@ -48,7 +48,7 @@ move_to(&create_signer_with_capability(&lp.cap), LiquidityCoin<X, Y>{ mint, burn
 }
 ```
 
-<a id="@Resource_accounts_to_manage_an_account_for_module_publishing_(i.e.,_contract_account)_1"></a>
+<a name="@Resource_accounts_to_manage_an_account_for_module_publishing_(i.e.,_contract_account)_1"></a>
 
 ### Resource accounts to manage an account for module publishing (i.e., contract account)
 
@@ -85,7 +85,6 @@ module.resource_signer_cap = option::some(resource_signer_cap);
 -  [Function `rotate_account_authentication_key_and_store_capability`](#0x1_resource_account_rotate_account_authentication_key_and_store_capability)
 -  [Function `retrieve_resource_account_cap`](#0x1_resource_account_retrieve_resource_account_cap)
 -  [Specification](#@Specification_3)
-    -  [Module-level Specification](#@Module-level_Specification_4)
     -  [Function `create_resource_account`](#@Specification_3_create_resource_account)
     -  [Function `create_resource_account_and_fund`](#@Specification_3_create_resource_account_and_fund)
     -  [Function `create_resource_account_and_publish_package`](#@Specification_3_create_resource_account_and_publish_package)
@@ -105,7 +104,7 @@ module.resource_signer_cap = option::some(resource_signer_cap);
 
 
 
-<a id="0x1_resource_account_Container"></a>
+<a name="0x1_resource_account_Container"></a>
 
 ## Resource `Container`
 
@@ -132,12 +131,12 @@ module.resource_signer_cap = option::some(resource_signer_cap);
 
 </details>
 
-<a id="@Constants_2"></a>
+<a name="@Constants_2"></a>
 
 ## Constants
 
 
-<a id="0x1_resource_account_ZERO_AUTH_KEY"></a>
+<a name="0x1_resource_account_ZERO_AUTH_KEY"></a>
 
 
 
@@ -146,7 +145,7 @@ module.resource_signer_cap = option::some(resource_signer_cap);
 
 
 
-<a id="0x1_resource_account_ECONTAINER_NOT_PUBLISHED"></a>
+<a name="0x1_resource_account_ECONTAINER_NOT_PUBLISHED"></a>
 
 Container resource not found in account
 
@@ -156,7 +155,7 @@ Container resource not found in account
 
 
 
-<a id="0x1_resource_account_EUNAUTHORIZED_NOT_OWNER"></a>
+<a name="0x1_resource_account_EUNAUTHORIZED_NOT_OWNER"></a>
 
 The resource account was not created by the specified source account
 
@@ -166,7 +165,7 @@ The resource account was not created by the specified source account
 
 
 
-<a id="0x1_resource_account_create_resource_account"></a>
+<a name="0x1_resource_account_create_resource_account"></a>
 
 ## Function `create_resource_account`
 
@@ -203,7 +202,7 @@ or the source accounts current auth key.
 
 </details>
 
-<a id="0x1_resource_account_create_resource_account_and_fund"></a>
+<a name="0x1_resource_account_create_resource_account_and_fund"></a>
 
 ## Function `create_resource_account_and_fund`
 
@@ -245,7 +244,7 @@ used for resource accounts that need access to <code>Coin&lt;AptosCoin&gt;</code
 
 </details>
 
-<a id="0x1_resource_account_create_resource_account_and_publish_package"></a>
+<a name="0x1_resource_account_create_resource_account_and_publish_package"></a>
 
 ## Function `create_resource_account_and_publish_package`
 
@@ -283,7 +282,7 @@ this account and leaves the signer cap readily available for pickup.
 
 </details>
 
-<a id="0x1_resource_account_rotate_account_authentication_key_and_store_capability"></a>
+<a name="0x1_resource_account_rotate_account_authentication_key_and_store_capability"></a>
 
 ## Function `rotate_account_authentication_key_and_store_capability`
 
@@ -326,7 +325,7 @@ this account and leaves the signer cap readily available for pickup.
 
 </details>
 
-<a id="0x1_resource_account_retrieve_resource_account_cap"></a>
+<a name="0x1_resource_account_retrieve_resource_account_cap"></a>
 
 ## Function `retrieve_resource_account_cap`
 
@@ -373,14 +372,9 @@ the SignerCapability.
 
 </details>
 
-<a id="@Specification_3"></a>
+<a name="@Specification_3"></a>
 
 ## Specification
-
-
-<a id="@Module-level_Specification_4"></a>
-
-### Module-level Specification
 
 
 
@@ -390,7 +384,7 @@ the SignerCapability.
 
 
 
-<a id="@Specification_3_create_resource_account"></a>
+<a name="@Specification_3_create_resource_account"></a>
 
 ### Function `create_resource_account`
 
@@ -408,7 +402,7 @@ the SignerCapability.
 
 
 
-<a id="@Specification_3_create_resource_account_and_fund"></a>
+<a name="@Specification_3_create_resource_account_and_fund"></a>
 
 ### Function `create_resource_account_and_fund`
 
@@ -431,7 +425,7 @@ the SignerCapability.
 
 
 
-<a id="@Specification_3_create_resource_account_and_publish_package"></a>
+<a name="@Specification_3_create_resource_account_and_publish_package"></a>
 
 ### Function `create_resource_account_and_publish_package`
 
@@ -451,7 +445,7 @@ the SignerCapability.
 
 
 
-<a id="@Specification_3_rotate_account_authentication_key_and_store_capability"></a>
+<a name="@Specification_3_rotate_account_authentication_key_and_store_capability"></a>
 
 ### Function `rotate_account_authentication_key_and_store_capability`
 
@@ -472,7 +466,7 @@ the SignerCapability.
 
 
 
-<a id="0x1_resource_account_RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIf"></a>
+<a name="0x1_resource_account_RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIf"></a>
 
 
 <pre><code><b>schema</b> <a href="resource_account.md#0x1_resource_account_RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIf">RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIf</a> {
@@ -494,7 +488,7 @@ the SignerCapability.
 
 
 
-<a id="0x1_resource_account_RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIfWithoutAccountLimit"></a>
+<a name="0x1_resource_account_RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIfWithoutAccountLimit"></a>
 
 
 <pre><code><b>schema</b> <a href="resource_account.md#0x1_resource_account_RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIfWithoutAccountLimit">RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIfWithoutAccountLimit</a> {
@@ -519,7 +513,7 @@ the SignerCapability.
 
 
 
-<a id="@Specification_3_retrieve_resource_account_cap"></a>
+<a name="@Specification_3_retrieve_resource_account_cap"></a>
 
 ### Function `retrieve_resource_account_cap`
 

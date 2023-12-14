@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::compiler::{as_module, as_script, compile_units};
-use bytes::Bytes;
 use move_binary_format::errors::{Location, PartialVMError};
 use move_core_types::{
     account_address::AccountAddress,
@@ -12,7 +11,7 @@ use move_core_types::{
     language_storage::{ModuleId, StructTag},
     metadata::Metadata,
     resolver::{ModuleResolver, ResourceResolver},
-    value::{serialize_values, MoveTypeLayout, MoveValue},
+    value::{serialize_values, MoveValue},
     vm_status::{StatusCode, StatusType},
 };
 use move_vm_runtime::move_vm::MoveVM;
@@ -67,7 +66,7 @@ fn test_malformed_resource() {
             }
         }
     "#;
-    let code = code.replace("{{ADDR}}", &format!("0x{}", TEST_ADDR.to_hex()));
+    let code = code.replace("{{ADDR}}", &format!("0x{}", TEST_ADDR));
     let mut units = compile_units(&code).unwrap();
 
     let s2 = as_script(units.pop().unwrap());
@@ -162,7 +161,7 @@ fn test_malformed_module() {
         }
     "#;
 
-    let code = code.replace("{{ADDR}}", &format!("0x{}", TEST_ADDR.to_hex()));
+    let code = code.replace("{{ADDR}}", &format!("0x{}", TEST_ADDR));
     let mut units = compile_units(&code).unwrap();
 
     let m = as_module(units.pop().unwrap());
@@ -226,7 +225,7 @@ fn test_unverifiable_module() {
         }
     "#;
 
-    let code = code.replace("{{ADDR}}", &format!("0x{}", TEST_ADDR.to_hex()));
+    let code = code.replace("{{ADDR}}", &format!("0x{}", TEST_ADDR));
     let mut units = compile_units(&code).unwrap();
     let m = as_module(units.pop().unwrap());
 
@@ -296,7 +295,7 @@ fn test_missing_module_dependency() {
             public fun bar() { M::foo(); }
         }
     "#;
-    let code = code.replace("{{ADDR}}", &format!("0x{}", TEST_ADDR.to_hex()));
+    let code = code.replace("{{ADDR}}", &format!("0x{}", TEST_ADDR));
     let mut units = compile_units(&code).unwrap();
     let n = as_module(units.pop().unwrap());
     let m = as_module(units.pop().unwrap());
@@ -366,7 +365,7 @@ fn test_malformed_module_dependency() {
             public fun bar() { M::foo(); }
         }
     "#;
-    let code = code.replace("{{ADDR}}", &format!("0x{}", TEST_ADDR.to_hex()));
+    let code = code.replace("{{ADDR}}", &format!("0x{}", TEST_ADDR));
     let mut units = compile_units(&code).unwrap();
     let n = as_module(units.pop().unwrap());
     let m = as_module(units.pop().unwrap());
@@ -442,7 +441,7 @@ fn test_unverifiable_module_dependency() {
             public fun bar() { M::foo(); }
         }
     "#;
-    let code = code.replace("{{ADDR}}", &format!("0x{}", TEST_ADDR.to_hex()));
+    let code = code.replace("{{ADDR}}", &format!("0x{}", TEST_ADDR));
     let mut units = compile_units(&code).unwrap();
     let n = as_module(units.pop().unwrap());
     let m = as_module(units.pop().unwrap());
@@ -514,7 +513,7 @@ impl ModuleResolver for BogusStorage {
         vec![]
     }
 
-    fn get_module(&self, _module_id: &ModuleId) -> Result<Option<Bytes>, anyhow::Error> {
+    fn get_module(&self, _module_id: &ModuleId) -> Result<Option<Vec<u8>>, anyhow::Error> {
         Ok(Err(
             PartialVMError::new(self.bad_status_code).finish(Location::Undefined)
         )?)
@@ -522,13 +521,12 @@ impl ModuleResolver for BogusStorage {
 }
 
 impl ResourceResolver for BogusStorage {
-    fn get_resource_bytes_with_metadata_and_layout(
+    fn get_resource_with_metadata(
         &self,
         _address: &AccountAddress,
         _tag: &StructTag,
         _metadata: &[Metadata],
-        _maybe_layout: Option<&MoveTypeLayout>,
-    ) -> anyhow::Result<(Option<Bytes>, usize)> {
+    ) -> anyhow::Result<(Option<Vec<u8>>, usize)> {
         Ok(Err(
             PartialVMError::new(self.bad_status_code).finish(Location::Undefined)
         )?)
@@ -596,7 +594,7 @@ fn test_storage_returns_bogus_error_when_loading_resource() {
             }
         }
     "#;
-    let code = code.replace("{{ADDR}}", &format!("0x{}", TEST_ADDR.to_hex()));
+    let code = code.replace("{{ADDR}}", &format!("0x{}", TEST_ADDR));
 
     let mut units = compile_units(&code).unwrap();
     let m = as_module(units.pop().unwrap());
@@ -606,12 +604,8 @@ fn test_storage_returns_bogus_error_when_loading_resource() {
     m.serialize(&mut m_blob).unwrap();
     s.serialize(&mut s_blob).unwrap();
     let mut delta = ChangeSet::new();
-    delta
-        .add_module_op(m.self_id(), Op::New(m_blob.into()))
-        .unwrap();
-    delta
-        .add_module_op(s.self_id(), Op::New(s_blob.into()))
-        .unwrap();
+    delta.add_module_op(m.self_id(), Op::New(m_blob)).unwrap();
+    delta.add_module_op(s.self_id(), Op::New(s_blob)).unwrap();
 
     let m_id = m.self_id();
     let foo_name = Identifier::new("foo").unwrap();

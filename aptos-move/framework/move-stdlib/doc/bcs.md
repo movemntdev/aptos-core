@@ -1,5 +1,5 @@
 
-<a id="0x1_bcs"></a>
+<a name="0x1_bcs"></a>
 
 # Module `0x1::bcs`
 
@@ -11,14 +11,13 @@ details on BCS.
 
 -  [Function `to_bytes`](#0x1_bcs_to_bytes)
 -  [Specification](#@Specification_0)
-    -  [Module-level Specification](#@Module-level_Specification_1)
 
 
 <pre><code></code></pre>
 
 
 
-<a id="0x1_bcs_to_bytes"></a>
+<a name="0x1_bcs_to_bytes"></a>
 
 ## Function `to_bytes`
 
@@ -41,21 +40,16 @@ Return the binary representation of <code>v</code> in BCS (Binary Canonical Seri
 
 </details>
 
-<a id="@Specification_0"></a>
+<a name="@Specification_0"></a>
 
 ## Specification
-
-
-<a id="@Module-level_Specification_1"></a>
-
-### Module-level Specification
 
 
 
 Native function which is defined in the prover's prelude.
 
 
-<a id="0x1_bcs_serialize"></a>
+<a name="0x1_bcs_serialize"></a>
 
 
 <pre><code><b>native</b> <b>fun</b> <a href="bcs.md#0x1_bcs_serialize">serialize</a>&lt;MoveValue&gt;(v: &MoveValue): <a href="vector.md#0x1_vector">vector</a>&lt;u8&gt;;

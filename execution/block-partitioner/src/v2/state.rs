@@ -3,20 +3,18 @@
 #![allow(unused_variables)]
 
 use crate::{
+    pre_partition::start_txn_idxs,
     v2::{
         conflicting_txn_tracker::ConflictingTxnTracker,
         counters::MISC_TIMERS_SECONDS,
-        types::{
-            FinalTxnIdx, OriginalTxnIdx, PrePartitionedTxnIdx, SenderIdx, ShardedTxnIndexV2,
-            StorageKeyIdx, SubBlockIdx,
-        },
+        types::{PrePartitionedTxnIdx, SenderIdx, ShardedTxnIndexV2, StorageKeyIdx, SubBlockIdx},
     },
     Sender,
 };
 use aptos_types::{
     block_executor::partitioner::{
         CrossShardDependencies, RoundId, ShardId, ShardedTxnIndex, SubBlock,
-        TransactionWithDependencies,
+        TransactionWithDependencies, TxnIndex,
     },
     state_store::state_key::StateKey,
     transaction::analyzed_transaction::{AnalyzedTransaction, StorageLocation},
@@ -34,86 +32,64 @@ use std::{
     },
 };
 
-/// All the parameters, indexes, temporary states needed in a `PartitionerV2` session,
-/// wrapped in a single struct, so we don't forget to async drop any large states.
+/// All the parameters, indexes, temporary states needed in a `PartitionerV2` session wrapped in a single struct
+/// to make async drop easy.
 pub struct PartitionState {
-    //
-    // Initial params/utils begin.
-    //
+    // Params/utils from partitioner.
     pub(crate) num_executor_shards: ShardId,
     pub(crate) num_rounds_limit: usize,
     pub(crate) dashmap_num_shards: usize,
     pub(crate) cross_shard_dep_avoid_threshold: f32,
     pub(crate) partition_last_round: bool,
     pub(crate) thread_pool: Arc<ThreadPool>,
-    /// OriginalTxnIdx -> the actual txn.
+
+    /// Holding all the txns.
     /// Wrapped in `RwLock` to allow being taking in parallel in `add_edges` phase and parallel reads in other phases.
     pub(crate) txns: Vec<RwLock<Option<AnalyzedTransaction>>>,
-    //
-    // Initial params/utils ends.
-    //
-    /// A `ConflictingTxnTracker` for each key that helps resolve conflicts and speed-up edge creation.
-    /// Updated in multiple stages of partitioning.
-    pub(crate) trackers: DashMap<StorageKeyIdx, RwLock<ConflictingTxnTracker>>,
 
-    //
-    // States computed in `init()` begin.
-    //
-    /// For txn of OriginalTxnIdx i, the sender index.
+    // Pre-partitioning results.
+    pub(crate) pre_partitioned: Vec<Vec<PrePartitionedTxnIdx>>,
+    pub(crate) start_txn_idxs_by_shard: Vec<PrePartitionedTxnIdx>,
+
+    // The discretized txn info, populated in `init()`.
+    /// Sender index by `PreParedTxnIdx`.
     pub(crate) sender_idxs: Vec<RwLock<Option<SenderIdx>>>,
-
-    /// For txn of OriginalTxnIdx i, the writer set.
+    /// Write key indices by `PreParedTxnIdx`.
     pub(crate) write_sets: Vec<RwLock<HashSet<StorageKeyIdx>>>,
-
-    /// For txn of OriginalTxnIdx i, the read set.
+    /// Read key indices by `PreParedTxnIdx`.
     pub(crate) read_sets: Vec<RwLock<HashSet<StorageKeyIdx>>>,
 
+    // Used in `init()` to discretize senders.
     pub(crate) sender_counter: AtomicUsize,
     pub(crate) sender_idx_table: DashMap<Sender, SenderIdx>,
 
+    // Used in `init()` to discretize storage locations.
     pub(crate) storage_key_counter: AtomicUsize,
     pub(crate) key_idx_table: DashMap<StateKey, StorageKeyIdx>,
 
-    //
-    // States computed in `init()` end.
-    // States computed in `pre_partition()` begin.
-    //
-    /// For shard i, the `PrePartitionedTxnIdx`s of the txns pre-partitioned into shard i.
-    pub(crate) pre_partitioned: Vec<Vec<PrePartitionedTxnIdx>>,
+    // A `ConflictingTxnTracker` for each key that helps resolve conflicts and speed-up edge creation.
+    pub(crate) trackers: DashMap<StorageKeyIdx, RwLock<ConflictingTxnTracker>>,
 
-    /// For shard i, the num of txns pre-partitioned into shard 0..=i-1.
-    pub(crate) start_txn_idxs_by_shard: Vec<PrePartitionedTxnIdx>,
-
-    /// Map the `PrePartitionedTxnIdx` of a transaction to its `OriginalTxnIdx`.
-    pub(crate) ori_idxs_by_pre_partitioned: Vec<OriginalTxnIdx>,
-
-    //
-    // States computed in `pre_partition()` end.
-    // States computed in `remove_cross_shard_dependencies()` begin.
-    //
+    // Results of `remove_cross_shard_dependencies()`.
     pub(crate) finalized_txn_matrix: Vec<Vec<Vec<PrePartitionedTxnIdx>>>,
     pub(crate) start_index_matrix: Vec<Vec<PrePartitionedTxnIdx>>,
-
-    /// Map the PrePartitionedTxnIdx of a transaction to its FinalTxnIdx.
-    pub(crate) final_idxs_by_pre_partitioned: Vec<RwLock<FinalTxnIdx>>,
-    //
-    // States computed in `remove_cross_shard_dependencies()` end.
-    //
+    pub(crate) new_txn_idxs: Vec<RwLock<TxnIndex>>,
 
     // Temporary sub-block matrix used in `add_edges()`.
     pub(crate) sub_block_matrix: Vec<Vec<Mutex<Option<SubBlock<AnalyzedTransaction>>>>>,
 }
 
-/// Some utils.
+/// Some small operations.
 impl PartitionState {
     pub fn new(
         thread_pool: Arc<ThreadPool>,
         dashmap_num_shards: usize,
         txns: Vec<AnalyzedTransaction>,
         num_executor_shards: ShardId,
+        pre_partitioned: Vec<Vec<PrePartitionedTxnIdx>>,
         num_rounds_limit: usize,
         cross_shard_dep_avoid_threshold: f32,
-        partition_last_round: bool,
+        merge_discarded: bool,
     ) -> Self {
         let _timer = MISC_TIMERS_SECONDS
             .with_label_values(&["new"])
@@ -140,14 +116,14 @@ impl PartitionState {
                 .map(|txn| RwLock::new(Some(txn)))
                 .collect()
         });
-
+        let start_txn_idxs_by_shard = start_txn_idxs(&pre_partitioned);
         Self {
             dashmap_num_shards,
-            partition_last_round,
+            partition_last_round: merge_discarded,
             thread_pool,
             num_executor_shards,
-            pre_partitioned: vec![],
-            start_txn_idxs_by_shard: vec![0; num_executor_shards],
+            pre_partitioned,
+            start_txn_idxs_by_shard,
             sender_counter,
             storage_key_counter: key_counter,
             sender_idxs: senders,
@@ -159,24 +135,15 @@ impl PartitionState {
             cross_shard_dep_avoid_threshold,
             num_rounds_limit,
             finalized_txn_matrix: Vec::with_capacity(num_rounds_limit),
-            final_idxs_by_pre_partitioned: vec![],
+            new_txn_idxs: vec![],
             start_index_matrix: vec![],
             txns: takable_txns,
             sub_block_matrix: vec![],
-            ori_idxs_by_pre_partitioned: vec![0; num_txns],
         }
     }
 
     pub(crate) fn num_txns(&self) -> usize {
         self.txns.len()
-    }
-
-    pub(crate) fn num_keys(&self) -> usize {
-        self.storage_key_counter.load(Ordering::SeqCst)
-    }
-
-    pub(crate) fn num_senders(&self) -> usize {
-        self.sender_counter.load(Ordering::SeqCst)
     }
 
     pub(crate) fn add_key(&self, key: &StateKey) -> StorageKeyIdx {
@@ -192,12 +159,8 @@ impl PartitionState {
         tracker.storage_location.clone()
     }
 
-    pub(crate) fn sender_idx(&self, ori_txn_idx: OriginalTxnIdx) -> SenderIdx {
-        *self.sender_idxs[ori_txn_idx]
-            .read()
-            .unwrap()
-            .as_ref()
-            .unwrap()
+    pub(crate) fn sender_idx(&self, txn_idx: PrePartitionedTxnIdx) -> SenderIdx {
+        *self.sender_idxs[txn_idx].read().unwrap().as_ref().unwrap()
     }
 
     pub(crate) fn add_sender(&self, sender: Sender) -> SenderIdx {
@@ -218,11 +181,10 @@ impl PartitionState {
 
     pub(crate) fn update_trackers_on_accepting(
         &self,
-        txn_idx: PrePartitionedTxnIdx,
+        ori_txn_idx: PrePartitionedTxnIdx,
         round_id: RoundId,
         shard_id: ShardId,
     ) {
-        let ori_txn_idx = self.ori_idxs_by_pre_partitioned[txn_idx];
         let write_set = self.write_sets[ori_txn_idx].read().unwrap();
         let read_set = self.read_sets[ori_txn_idx].read().unwrap();
         for &key_idx in write_set.iter().chain(read_set.iter()) {
@@ -231,7 +193,7 @@ impl PartitionState {
                 .unwrap()
                 .write()
                 .unwrap()
-                .mark_txn_ordered(txn_idx, round_id, shard_id);
+                .mark_txn_ordered(ori_txn_idx, round_id, shard_id);
         }
     }
 
@@ -249,7 +211,7 @@ impl PartitionState {
             .finalized_writes
             .range(start..end)
             .last()
-            .map(|t| t.pre_partitioned_txn_idx);
+            .map(|t| t.ori_txn_idx);
         ret
     }
 
@@ -293,9 +255,8 @@ impl PartitionState {
         &self,
         round_id: RoundId,
         shard_id: ShardId,
-        txn_idx: PrePartitionedTxnIdx,
+        ori_txn_idx: PrePartitionedTxnIdx,
     ) -> TransactionWithDependencies<AnalyzedTransaction> {
-        let ori_txn_idx = self.ori_idxs_by_pre_partitioned[txn_idx];
         let txn = self.txns[ori_txn_idx].write().unwrap().take().unwrap();
         let mut deps = CrossShardDependencies::default();
 
@@ -311,9 +272,7 @@ impl PartitionState {
                 .last()
             {
                 let src_txn_idx = ShardedTxnIndex {
-                    txn_index: *self.final_idxs_by_pre_partitioned[txn_idx.pre_partitioned_txn_idx]
-                        .read()
-                        .unwrap(),
+                    txn_index: *self.new_txn_idxs[txn_idx.ori_txn_idx].read().unwrap(),
                     shard_id: txn_idx.shard_id(),
                     round_id: txn_idx.round_id(),
                 };
@@ -323,7 +282,7 @@ impl PartitionState {
 
         // Build dependent edges.
         for &key_idx in self.write_sets[ori_txn_idx].read().unwrap().iter() {
-            if Some(txn_idx) == self.last_writer(key_idx, SubBlockIdx { round_id, shard_id }) {
+            if Some(ori_txn_idx) == self.last_writer(key_idx, SubBlockIdx { round_id, shard_id }) {
                 let start_of_next_sub_block = ShardedTxnIndexV2::new(round_id, shard_id + 1, 0);
                 let next_writer = self.first_writer(key_idx, start_of_next_sub_block);
                 let end_follower = match next_writer {
@@ -336,8 +295,7 @@ impl PartitionState {
                     let final_sub_blk_idx =
                         self.final_sub_block_idx(follower_txn_idx.sub_block_idx);
                     let dst_txn_idx = ShardedTxnIndex {
-                        txn_index: *self.final_idxs_by_pre_partitioned
-                            [follower_txn_idx.pre_partitioned_txn_idx]
+                        txn_index: *self.new_txn_idxs[follower_txn_idx.ori_txn_idx]
                             .read()
                             .unwrap(),
                         shard_id: final_sub_blk_idx.shard_id,

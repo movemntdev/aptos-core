@@ -88,7 +88,6 @@
             "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -147,7 +146,6 @@
             "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -206,7 +204,6 @@
             "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -265,7 +262,6 @@
             "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -337,7 +333,6 @@
             "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -430,7 +425,6 @@
             "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -523,7 +517,6 @@
             "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -557,7 +550,7 @@
           "editorMode": "code",
           "expr": "rate(quorum_store_batch_creation_duration_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\"}[$__rate_interval]) / rate(quorum_store_batch_creation_duration_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\"}[$__rate_interval])",
           "interval": "",
-          "legendFormat": "{{cluster}}:{{kubernetes_pod_name}}",
+          "legendFormat": "{{kubernetes_pod_name}}",
           "range": true,
           "refId": "A"
         }
@@ -581,7 +574,6 @@
             "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -614,7 +606,7 @@
           "datasource": { "type": "prometheus", "uid": "${Datasource}" },
           "editorMode": "code",
           "expr": "rate(quorum_store_batch_to_PoS_duration_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\"}[$__rate_interval]) / rate(quorum_store_batch_to_PoS_duration_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\"}[$__rate_interval])",
-          "legendFormat": "{{cluster}}:{{kubernetes_pod_name}}",
+          "legendFormat": "{{kubernetes_pod_name}}",
           "range": true,
           "refId": "A"
         }
@@ -646,7 +638,6 @@
             "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -738,7 +729,6 @@
             "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -831,7 +821,6 @@
             "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -887,7 +876,6 @@
             "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -943,7 +931,6 @@
             "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -974,8 +961,8 @@
         {
           "datasource": { "type": "prometheus", "uid": "${Datasource}" },
           "editorMode": "code",
-          "expr": "sum by (cluster, kubernetes_pod_name, role) (rate(quorum_store_pos_to_pull_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\"}[$__rate_interval])) / sum by (cluster, kubernetes_pod_name, role) (rate(quorum_store_pos_to_pull_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\"}[$__rate_interval]))",
-          "legendFormat": "{{cluster}}:{{kubernetes_pod_name}}",
+          "expr": "sum by (kubernetes_pod_name, role) (rate(quorum_store_pos_to_pull_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\"}[$__rate_interval])) / sum by (kubernetes_pod_name, role) (rate(quorum_store_pos_to_pull_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\"}[$__rate_interval]))",
+          "legendFormat": "{{kubernetes_pod_name}}",
           "range": true,
           "refId": "A"
         }
@@ -999,7 +986,6 @@
             "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -1031,8 +1017,8 @@
         {
           "datasource": { "type": "prometheus", "uid": "${Datasource}" },
           "editorMode": "code",
-          "expr": "sum by (cluster, kubernetes_pod_name, role) (rate(quorum_store_pos_to_commit_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\"}[$__rate_interval])) / sum by (cluster, kubernetes_pod_name, role) (rate(quorum_store_pos_to_commit_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\"}[$__rate_interval]))",
-          "legendFormat": "{{cluster}}:{{kubernetes_pod_name}}",
+          "expr": "sum by (kubernetes_pod_name, role) (rate(quorum_store_pos_to_commit_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\"}[$__rate_interval])) / sum by (kubernetes_pod_name, role) (rate(quorum_store_pos_to_commit_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\"}[$__rate_interval]))",
+          "legendFormat": "{{kubernetes_pod_name}}",
           "range": true,
           "refId": "A"
         }
@@ -1041,8 +1027,9 @@
       "type": "timeseries"
     }
   ],
-  "refresh": "",
+  "refresh": false,
   "schemaVersion": 38,
+  "style": "dark",
   "tags": ["aptos-core"],
   "templating": {
     "list": [
@@ -1249,6 +1236,6 @@
   "timezone": "",
   "title": "validator-txn-latency",
   "uid": "validator-txn-latency",
-  "version": 8,
+  "version": 7,
   "weekStart": ""
 }

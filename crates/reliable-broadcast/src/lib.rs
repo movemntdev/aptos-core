@@ -2,49 +2,47 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use aptos_consensus_types::common::Author;
-use aptos_logger::info;
 use aptos_time_service::{TimeService, TimeServiceTrait};
 use async_trait::async_trait;
-use futures::{future::AbortHandle, stream::FuturesUnordered, Future, StreamExt};
-use std::{collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
+use futures::{stream::FuturesUnordered, Future, StreamExt};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 pub trait RBMessage: Send + Sync + Clone {}
 
 #[async_trait]
-pub trait RBNetworkSender<Req: RBMessage, Res: RBMessage = Req>: Send + Sync {
+pub trait RBNetworkSender<M: RBMessage>: Send + Sync {
     async fn send_rb_rpc(
         &self,
         receiver: Author,
-        message: Req,
+        message: M,
         timeout: Duration,
-    ) -> anyhow::Result<Res>;
+    ) -> anyhow::Result<M>;
 }
 
-pub trait BroadcastStatus<Req: RBMessage, Res: RBMessage = Req> {
-    type Ack: Into<Res> + TryFrom<Res> + Clone;
+pub trait BroadcastStatus<M: RBMessage> {
+    type Ack: Into<M> + TryFrom<M> + Clone;
     type Aggregated;
-    type Message: Into<Req> + TryFrom<Req> + Clone;
+    type Message: Into<M> + TryFrom<M> + Clone;
 
     fn add(&mut self, peer: Author, ack: Self::Ack) -> anyhow::Result<Option<Self::Aggregated>>;
 }
 
-pub struct ReliableBroadcast<Req: RBMessage, TBackoff, Res: RBMessage = Req> {
+pub struct ReliableBroadcast<M: RBMessage, TBackoff> {
     validators: Vec<Author>,
-    network_sender: Arc<dyn RBNetworkSender<Req, Res>>,
+    network_sender: Arc<dyn RBNetworkSender<M>>,
     backoff_policy: TBackoff,
     time_service: TimeService,
     rpc_timeout_duration: Duration,
 }
 
-impl<Req, TBackoff, Res> ReliableBroadcast<Req, TBackoff, Res>
+impl<M, TBackoff> ReliableBroadcast<M, TBackoff>
 where
-    Req: RBMessage,
+    M: RBMessage,
     TBackoff: Iterator<Item = Duration> + Clone,
-    Res: RBMessage,
 {
     pub fn new(
         validators: Vec<Author>,
-        network_sender: Arc<dyn RBNetworkSender<Req, Res>>,
+        network_sender: Arc<dyn RBNetworkSender<M>>,
         backoff_policy: TBackoff,
         time_service: TimeService,
         rpc_timeout_duration: Duration,
@@ -58,14 +56,11 @@ where
         }
     }
 
-    pub fn broadcast<S: BroadcastStatus<Req, Res>>(
+    pub fn broadcast<S: BroadcastStatus<M>>(
         &self,
         message: S::Message,
         mut aggregating: S,
-    ) -> impl Future<Output = S::Aggregated>
-    where
-        <<S as BroadcastStatus<Req, Res>>::Ack as TryFrom<Res>>::Error: Debug,
-    {
+    ) -> impl Future<Output = S::Aggregated> {
         let receivers: Vec<_> = self.validators.clone();
         let network_sender = self.network_sender.clone();
         let time_service = self.time_service.clone();
@@ -93,21 +88,20 @@ where
                     )
                 }
             };
-            let message: Req = message.into();
+            let message: M = message.into();
             for receiver in receivers {
                 fut.push(send_message(receiver, message.clone(), None));
             }
             while let Some((receiver, result)) = fut.next().await {
-                match result.and_then(|msg| msg.try_into().map_err(|e| anyhow::anyhow!("{:?}", e)))
-                {
-                    Ok(ack) => {
-                        if let Ok(Some(aggregated)) = aggregating.add(receiver, ack) {
-                            return aggregated;
+                match result {
+                    Ok(msg) => {
+                        if let Ok(ack) = msg.try_into() {
+                            if let Ok(Some(aggregated)) = aggregating.add(receiver, ack) {
+                                return aggregated;
+                            }
                         }
                     },
-                    Err(e) => {
-                        info!(error = ?e, "rpc to {} failed", receiver);
-
+                    Err(_) => {
                         let backoff_strategy = backoff_policies
                             .get_mut(&receiver)
                             .expect("should be present");
@@ -118,22 +112,6 @@ where
             }
             unreachable!("Should aggregate with all responses");
         }
-    }
-}
-
-pub struct DropGuard {
-    abort_handle: AbortHandle,
-}
-
-impl DropGuard {
-    pub fn new(abort_handle: AbortHandle) -> Self {
-        Self { abort_handle }
-    }
-}
-
-impl Drop for DropGuard {
-    fn drop(&mut self) {
-        self.abort_handle.abort();
     }
 }
 

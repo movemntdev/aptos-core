@@ -11,24 +11,13 @@ use aptos_crypto::{hash::SPARSE_MERKLE_PLACEHOLDER_HASH, HashValue};
 use aptos_executor_types::BlockExecutorTrait;
 use aptos_state_view::StateView;
 use aptos_storage_interface::{
-    cached_state_view::{CachedStateView, ShardedStateCache},
-    state_delta::StateDelta,
-    DbReader, DbReaderWriter, DbWriter,
+    cached_state_view::CachedStateView, state_delta::StateDelta, DbReader, DbReaderWriter, DbWriter,
 };
 use aptos_types::{
-    block_executor::{
-        config::BlockExecutorConfigFromOnchain,
-        partitioner::{ExecutableTransactions, PartitionedTransactions},
-    },
+    block_executor::partitioner::{ExecutableTransactions, PartitionedTransactions},
     ledger_info::LedgerInfoWithSignatures,
-    state_store::ShardedStateUpdates,
-    test_helpers::transaction_test_helpers::TEST_BLOCK_EXECUTOR_ONCHAIN_CONFIG,
-    transaction::{
-        signature_verified_transaction::{
-            into_signature_verified_block, SignatureVerifiedTransaction,
-        },
-        Transaction, TransactionOutput, TransactionToCommit, Version,
-    },
+    test_helpers::transaction_test_helpers::BLOCK_GAS_LIMIT,
+    transaction::{Transaction, TransactionOutput, TransactionToCommit, Version},
     vm_status::VMStatus,
 };
 use aptos_vm::{
@@ -54,12 +43,8 @@ pub fn fuzz_execute_and_commit_blocks(
     let mut block_ids = vec![];
     for block in blocks {
         let block_id = block.0;
-        let sig_verified_block = into_signature_verified_block(block.1);
-        let _execution_results = executor.execute_block(
-            (block_id, sig_verified_block).into(),
-            parent_block_id,
-            TEST_BLOCK_EXECUTOR_ONCHAIN_CONFIG,
-        );
+        let _execution_results =
+            executor.execute_block(block.into(), parent_block_id, BLOCK_GAS_LIMIT);
         parent_block_id = block_id;
         block_ids.push(block_id);
     }
@@ -73,9 +58,13 @@ impl TransactionBlockExecutor for FakeVM {
     fn execute_transaction_block(
         transactions: ExecutableTransactions,
         state_view: CachedStateView,
-        onchain_config: BlockExecutorConfigFromOnchain,
+        maybe_block_gas_limit: Option<u64>,
     ) -> Result<ChunkOutput> {
-        ChunkOutput::by_transaction_execution::<FakeVM>(transactions, state_view, onchain_config)
+        ChunkOutput::by_transaction_execution::<FakeVM>(
+            transactions,
+            state_view,
+            maybe_block_gas_limit,
+        )
     }
 }
 
@@ -84,15 +73,15 @@ impl VMExecutor for FakeVM {
         _sharded_block_executor: &ShardedBlockExecutor<S, E>,
         _transactions: PartitionedTransactions,
         _state_view: Arc<S>,
-        _onchain_config: BlockExecutorConfigFromOnchain,
+        _maybe_block_gas_limit: Option<u64>,
     ) -> Result<Vec<TransactionOutput>, VMStatus> {
         Ok(Vec::new())
     }
 
     fn execute_block(
-        _transactions: &[SignatureVerifiedTransaction],
+        _transactions: Vec<Transaction>,
         _state_view: &impl StateView,
-        _onchain_config: BlockExecutorConfigFromOnchain,
+        _maybe_block_gas_limit: Option<u64>,
     ) -> Result<Vec<TransactionOutput>, VMStatus> {
         Ok(Vec::new())
     }
@@ -122,8 +111,6 @@ impl DbWriter for FakeDb {
         _ledger_info_with_sigs: Option<&LedgerInfoWithSignatures>,
         _sync_commit: bool,
         _in_memory_state: StateDelta,
-        _block_state_updates: Option<ShardedStateUpdates>,
-        _sharded_state_cache: Option<&ShardedStateCache>,
     ) -> Result<()> {
         Ok(())
     }

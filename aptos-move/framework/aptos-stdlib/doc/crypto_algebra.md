@@ -1,5 +1,5 @@
 
-<a id="0x1_crypto_algebra"></a>
+<a name="0x1_crypto_algebra"></a>
 
 # Module `0x1::crypto_algebra`
 
@@ -91,7 +91,6 @@ See <code>*_algebra.<b>move</b></code> for currently implemented algebraic struc
 -  [Function `upcast_internal`](#0x1_crypto_algebra_upcast_internal)
 -  [Function `zero_internal`](#0x1_crypto_algebra_zero_internal)
 -  [Specification](#@Specification_1)
-    -  [Function `handles_from_elements`](#@Specification_1_handles_from_elements)
     -  [Function `add_internal`](#@Specification_1_add_internal)
     -  [Function `deserialize_internal`](#@Specification_1_deserialize_internal)
     -  [Function `div_internal`](#@Specification_1_div_internal)
@@ -123,7 +122,7 @@ See <code>*_algebra.<b>move</b></code> for currently implemented algebraic struc
 
 
 
-<a id="0x1_crypto_algebra_Element"></a>
+<a name="0x1_crypto_algebra_Element"></a>
 
 ## Struct `Element`
 
@@ -151,12 +150,12 @@ This struct represents an element of a structure <code>S</code>.
 
 </details>
 
-<a id="@Constants_0"></a>
+<a name="@Constants_0"></a>
 
 ## Constants
 
 
-<a id="0x1_crypto_algebra_E_NON_EQUAL_LENGTHS"></a>
+<a name="0x1_crypto_algebra_E_NON_EQUAL_LENGTHS"></a>
 
 
 
@@ -165,7 +164,7 @@ This struct represents an element of a structure <code>S</code>.
 
 
 
-<a id="0x1_crypto_algebra_E_NOT_IMPLEMENTED"></a>
+<a name="0x1_crypto_algebra_E_NOT_IMPLEMENTED"></a>
 
 
 
@@ -174,7 +173,7 @@ This struct represents an element of a structure <code>S</code>.
 
 
 
-<a id="0x1_crypto_algebra_E_TOO_MUCH_MEMORY_USED"></a>
+<a name="0x1_crypto_algebra_E_TOO_MUCH_MEMORY_USED"></a>
 
 
 
@@ -183,7 +182,7 @@ This struct represents an element of a structure <code>S</code>.
 
 
 
-<a id="0x1_crypto_algebra_eq"></a>
+<a name="0x1_crypto_algebra_eq"></a>
 
 ## Function `eq`
 
@@ -209,7 +208,7 @@ Check if <code>x == y</code> for elements <code>x</code> and <code>y</code> of a
 
 </details>
 
-<a id="0x1_crypto_algebra_from_u64"></a>
+<a name="0x1_crypto_algebra_from_u64"></a>
 
 ## Function `from_u64`
 
@@ -237,7 +236,7 @@ Convert a u64 to an element of a structure <code>S</code>.
 
 </details>
 
-<a id="0x1_crypto_algebra_zero"></a>
+<a name="0x1_crypto_algebra_zero"></a>
 
 ## Function `zero`
 
@@ -265,7 +264,7 @@ Return the additive identity of field <code>S</code>, or the identity of group <
 
 </details>
 
-<a id="0x1_crypto_algebra_one"></a>
+<a name="0x1_crypto_algebra_one"></a>
 
 ## Function `one`
 
@@ -293,7 +292,7 @@ Return the multiplicative identity of field <code>S</code>, or a fixed generator
 
 </details>
 
-<a id="0x1_crypto_algebra_neg"></a>
+<a name="0x1_crypto_algebra_neg"></a>
 
 ## Function `neg`
 
@@ -321,7 +320,7 @@ Compute <code>-x</code> for an element <code>x</code> of a structure <code>S</co
 
 </details>
 
-<a id="0x1_crypto_algebra_add"></a>
+<a name="0x1_crypto_algebra_add"></a>
 
 ## Function `add`
 
@@ -349,7 +348,7 @@ Compute <code>x + y</code> for elements <code>x</code> and <code>y</code> of str
 
 </details>
 
-<a id="0x1_crypto_algebra_sub"></a>
+<a name="0x1_crypto_algebra_sub"></a>
 
 ## Function `sub`
 
@@ -377,7 +376,7 @@ Compute <code>x - y</code> for elements <code>x</code> and <code>y</code> of a s
 
 </details>
 
-<a id="0x1_crypto_algebra_mul"></a>
+<a name="0x1_crypto_algebra_mul"></a>
 
 ## Function `mul`
 
@@ -405,7 +404,7 @@ Compute <code>x * y</code> for elements <code>x</code> and <code>y</code> of a s
 
 </details>
 
-<a id="0x1_crypto_algebra_div"></a>
+<a name="0x1_crypto_algebra_div"></a>
 
 ## Function `div`
 
@@ -438,7 +437,7 @@ Return none if <code>y</code> does not have a multiplicative inverse in the stru
 
 </details>
 
-<a id="0x1_crypto_algebra_sqr"></a>
+<a name="0x1_crypto_algebra_sqr"></a>
 
 ## Function `sqr`
 
@@ -466,7 +465,7 @@ Compute <code>x^2</code> for an element <code>x</code> of a structure <code>S</c
 
 </details>
 
-<a id="0x1_crypto_algebra_inv"></a>
+<a name="0x1_crypto_algebra_inv"></a>
 
 ## Function `inv`
 
@@ -500,7 +499,7 @@ Return none if <code>x</code> does not have a multiplicative inverse in the stru
 
 </details>
 
-<a id="0x1_crypto_algebra_double"></a>
+<a name="0x1_crypto_algebra_double"></a>
 
 ## Function `double`
 
@@ -528,7 +527,7 @@ Compute <code>2*P</code> for an element <code>P</code> of a structure <code>S</c
 
 </details>
 
-<a id="0x1_crypto_algebra_multi_scalar_mul"></a>
+<a name="0x1_crypto_algebra_multi_scalar_mul"></a>
 
 ## Function `multi_scalar_mul`
 
@@ -561,7 +560,7 @@ Abort with code <code>std::error::invalid_argument(<a href="crypto_algebra.md#0x
 
 </details>
 
-<a id="0x1_crypto_algebra_scalar_mul"></a>
+<a name="0x1_crypto_algebra_scalar_mul"></a>
 
 ## Function `scalar_mul`
 
@@ -589,7 +588,7 @@ Compute <code>k*P</code>, where <code>P</code> is an element of a group <code>G<
 
 </details>
 
-<a id="0x1_crypto_algebra_multi_pairing"></a>
+<a name="0x1_crypto_algebra_multi_pairing"></a>
 
 ## Function `multi_pairing`
 
@@ -627,7 +626,7 @@ rather than a multiplicative one (which is typically the case).
 
 </details>
 
-<a id="0x1_crypto_algebra_pairing"></a>
+<a name="0x1_crypto_algebra_pairing"></a>
 
 ## Function `pairing`
 
@@ -656,7 +655,7 @@ Return an element in the target group <code>Gt</code>.
 
 </details>
 
-<a id="0x1_crypto_algebra_deserialize"></a>
+<a name="0x1_crypto_algebra_deserialize"></a>
 
 ## Function `deserialize`
 
@@ -688,7 +687,7 @@ Return none if the deserialization failed.
 
 </details>
 
-<a id="0x1_crypto_algebra_serialize"></a>
+<a name="0x1_crypto_algebra_serialize"></a>
 
 ## Function `serialize`
 
@@ -714,7 +713,7 @@ Serialize an element of an algebraic structure <code>S</code> to a byte array us
 
 </details>
 
-<a id="0x1_crypto_algebra_order"></a>
+<a name="0x1_crypto_algebra_order"></a>
 
 ## Function `order`
 
@@ -740,7 +739,7 @@ Get the order of structure <code>S</code>, a big integer little-endian encoded a
 
 </details>
 
-<a id="0x1_crypto_algebra_upcast"></a>
+<a name="0x1_crypto_algebra_upcast"></a>
 
 ## Function `upcast`
 
@@ -768,7 +767,7 @@ Cast an element of a structure <code>S</code> to a parent structure <code>L</cod
 
 </details>
 
-<a id="0x1_crypto_algebra_downcast"></a>
+<a name="0x1_crypto_algebra_downcast"></a>
 
 ## Function `downcast`
 
@@ -802,7 +801,7 @@ NOTE: Membership check in <code>S</code> is performed inside, which can be expen
 
 </details>
 
-<a id="0x1_crypto_algebra_hash_to"></a>
+<a name="0x1_crypto_algebra_hash_to"></a>
 
 ## Function `hash_to`
 
@@ -833,7 +832,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_abort_unless_cryptography_algebra_natives_enabled"></a>
+<a name="0x1_crypto_algebra_abort_unless_cryptography_algebra_natives_enabled"></a>
 
 ## Function `abort_unless_cryptography_algebra_natives_enabled`
 
@@ -858,7 +857,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_handles_from_elements"></a>
+<a name="0x1_crypto_algebra_handles_from_elements"></a>
 
 ## Function `handles_from_elements`
 
@@ -877,13 +876,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
     <b>let</b> num_elements = std::vector::length(elements);
     <b>let</b> element_handles = std::vector::empty();
     <b>let</b> i = 0;
-    <b>while</b> ({
-        <b>spec</b> {
-            <b>invariant</b> len(element_handles) == i;
-            <b>invariant</b> <b>forall</b> k in 0..i: element_handles[k] == elements[k].handle;
-        };
-        i &lt; num_elements
-    }) {
+    <b>while</b> (i &lt; num_elements) {
         std::vector::push_back(&<b>mut</b> element_handles, std::vector::borrow(elements, i).handle);
         i = i + 1;
     };
@@ -895,7 +888,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_add_internal"></a>
+<a name="0x1_crypto_algebra_add_internal"></a>
 
 ## Function `add_internal`
 
@@ -917,7 +910,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_deserialize_internal"></a>
+<a name="0x1_crypto_algebra_deserialize_internal"></a>
 
 ## Function `deserialize_internal`
 
@@ -939,7 +932,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_div_internal"></a>
+<a name="0x1_crypto_algebra_div_internal"></a>
 
 ## Function `div_internal`
 
@@ -961,7 +954,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_double_internal"></a>
+<a name="0x1_crypto_algebra_double_internal"></a>
 
 ## Function `double_internal`
 
@@ -983,7 +976,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_downcast_internal"></a>
+<a name="0x1_crypto_algebra_downcast_internal"></a>
 
 ## Function `downcast_internal`
 
@@ -1005,7 +998,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_from_u64_internal"></a>
+<a name="0x1_crypto_algebra_from_u64_internal"></a>
 
 ## Function `from_u64_internal`
 
@@ -1027,7 +1020,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_eq_internal"></a>
+<a name="0x1_crypto_algebra_eq_internal"></a>
 
 ## Function `eq_internal`
 
@@ -1049,7 +1042,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_hash_to_internal"></a>
+<a name="0x1_crypto_algebra_hash_to_internal"></a>
 
 ## Function `hash_to_internal`
 
@@ -1071,7 +1064,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_inv_internal"></a>
+<a name="0x1_crypto_algebra_inv_internal"></a>
 
 ## Function `inv_internal`
 
@@ -1093,7 +1086,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_mul_internal"></a>
+<a name="0x1_crypto_algebra_mul_internal"></a>
 
 ## Function `mul_internal`
 
@@ -1115,7 +1108,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_multi_pairing_internal"></a>
+<a name="0x1_crypto_algebra_multi_pairing_internal"></a>
 
 ## Function `multi_pairing_internal`
 
@@ -1137,7 +1130,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_multi_scalar_mul_internal"></a>
+<a name="0x1_crypto_algebra_multi_scalar_mul_internal"></a>
 
 ## Function `multi_scalar_mul_internal`
 
@@ -1159,7 +1152,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_neg_internal"></a>
+<a name="0x1_crypto_algebra_neg_internal"></a>
 
 ## Function `neg_internal`
 
@@ -1181,7 +1174,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_one_internal"></a>
+<a name="0x1_crypto_algebra_one_internal"></a>
 
 ## Function `one_internal`
 
@@ -1203,7 +1196,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_order_internal"></a>
+<a name="0x1_crypto_algebra_order_internal"></a>
 
 ## Function `order_internal`
 
@@ -1225,7 +1218,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_pairing_internal"></a>
+<a name="0x1_crypto_algebra_pairing_internal"></a>
 
 ## Function `pairing_internal`
 
@@ -1247,7 +1240,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_scalar_mul_internal"></a>
+<a name="0x1_crypto_algebra_scalar_mul_internal"></a>
 
 ## Function `scalar_mul_internal`
 
@@ -1269,7 +1262,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_serialize_internal"></a>
+<a name="0x1_crypto_algebra_serialize_internal"></a>
 
 ## Function `serialize_internal`
 
@@ -1291,7 +1284,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_sqr_internal"></a>
+<a name="0x1_crypto_algebra_sqr_internal"></a>
 
 ## Function `sqr_internal`
 
@@ -1313,7 +1306,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_sub_internal"></a>
+<a name="0x1_crypto_algebra_sub_internal"></a>
 
 ## Function `sub_internal`
 
@@ -1335,7 +1328,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_upcast_internal"></a>
+<a name="0x1_crypto_algebra_upcast_internal"></a>
 
 ## Function `upcast_internal`
 
@@ -1357,7 +1350,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="0x1_crypto_algebra_zero_internal"></a>
+<a name="0x1_crypto_algebra_zero_internal"></a>
 
 ## Function `zero_internal`
 
@@ -1379,29 +1372,12 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 </details>
 
-<a id="@Specification_1"></a>
+<a name="@Specification_1"></a>
 
 ## Specification
 
 
-<a id="@Specification_1_handles_from_elements"></a>
-
-### Function `handles_from_elements`
-
-
-<pre><code><b>fun</b> <a href="crypto_algebra.md#0x1_crypto_algebra_handles_from_elements">handles_from_elements</a>&lt;S&gt;(elements: &<a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="crypto_algebra.md#0x1_crypto_algebra_Element">crypto_algebra::Element</a>&lt;S&gt;&gt;): <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u64&gt;
-</code></pre>
-
-
-
-
-<pre><code><b>aborts_if</b> <b>false</b>;
-<b>ensures</b> <b>forall</b> i in 0..len(elements): result[i] == elements[i].handle;
-</code></pre>
-
-
-
-<a id="@Specification_1_add_internal"></a>
+<a name="@Specification_1_add_internal"></a>
 
 ### Function `add_internal`
 
@@ -1417,7 +1393,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_deserialize_internal"></a>
+<a name="@Specification_1_deserialize_internal"></a>
 
 ### Function `deserialize_internal`
 
@@ -1433,7 +1409,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_div_internal"></a>
+<a name="@Specification_1_div_internal"></a>
 
 ### Function `div_internal`
 
@@ -1449,7 +1425,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_double_internal"></a>
+<a name="@Specification_1_double_internal"></a>
 
 ### Function `double_internal`
 
@@ -1465,7 +1441,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_downcast_internal"></a>
+<a name="@Specification_1_downcast_internal"></a>
 
 ### Function `downcast_internal`
 
@@ -1481,7 +1457,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_from_u64_internal"></a>
+<a name="@Specification_1_from_u64_internal"></a>
 
 ### Function `from_u64_internal`
 
@@ -1497,7 +1473,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_eq_internal"></a>
+<a name="@Specification_1_eq_internal"></a>
 
 ### Function `eq_internal`
 
@@ -1513,7 +1489,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_hash_to_internal"></a>
+<a name="@Specification_1_hash_to_internal"></a>
 
 ### Function `hash_to_internal`
 
@@ -1529,7 +1505,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_inv_internal"></a>
+<a name="@Specification_1_inv_internal"></a>
 
 ### Function `inv_internal`
 
@@ -1545,7 +1521,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_mul_internal"></a>
+<a name="@Specification_1_mul_internal"></a>
 
 ### Function `mul_internal`
 
@@ -1561,7 +1537,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_multi_pairing_internal"></a>
+<a name="@Specification_1_multi_pairing_internal"></a>
 
 ### Function `multi_pairing_internal`
 
@@ -1577,7 +1553,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_multi_scalar_mul_internal"></a>
+<a name="@Specification_1_multi_scalar_mul_internal"></a>
 
 ### Function `multi_scalar_mul_internal`
 
@@ -1593,7 +1569,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_neg_internal"></a>
+<a name="@Specification_1_neg_internal"></a>
 
 ### Function `neg_internal`
 
@@ -1609,7 +1585,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_one_internal"></a>
+<a name="@Specification_1_one_internal"></a>
 
 ### Function `one_internal`
 
@@ -1625,7 +1601,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_order_internal"></a>
+<a name="@Specification_1_order_internal"></a>
 
 ### Function `order_internal`
 
@@ -1641,7 +1617,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_pairing_internal"></a>
+<a name="@Specification_1_pairing_internal"></a>
 
 ### Function `pairing_internal`
 
@@ -1657,7 +1633,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_scalar_mul_internal"></a>
+<a name="@Specification_1_scalar_mul_internal"></a>
 
 ### Function `scalar_mul_internal`
 
@@ -1673,7 +1649,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_serialize_internal"></a>
+<a name="@Specification_1_serialize_internal"></a>
 
 ### Function `serialize_internal`
 
@@ -1689,7 +1665,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_sqr_internal"></a>
+<a name="@Specification_1_sqr_internal"></a>
 
 ### Function `sqr_internal`
 
@@ -1705,7 +1681,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_sub_internal"></a>
+<a name="@Specification_1_sub_internal"></a>
 
 ### Function `sub_internal`
 
@@ -1721,7 +1697,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_upcast_internal"></a>
+<a name="@Specification_1_upcast_internal"></a>
 
 ### Function `upcast_internal`
 
@@ -1737,7 +1713,7 @@ NOTE: some hashing methods do not accept a <code>dst</code> and will abort if a 
 
 
 
-<a id="@Specification_1_zero_internal"></a>
+<a name="@Specification_1_zero_internal"></a>
 
 ### Function `zero_internal`
 

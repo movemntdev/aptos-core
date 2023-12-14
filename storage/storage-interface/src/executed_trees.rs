@@ -6,11 +6,10 @@ use crate::{
     state_delta::StateDelta, DbReader,
 };
 use anyhow::Result;
-use aptos_crypto::HashValue;
+use aptos_crypto::{hash::TransactionAccumulatorHasher, HashValue};
 use aptos_state_view::StateViewId;
 use aptos_types::{
-    proof::accumulator::{InMemoryAccumulator, InMemoryTransactionAccumulator},
-    state_store::state_storage_usage::StateStorageUsage,
+    proof::accumulator::InMemoryAccumulator, state_store::state_storage_usage::StateStorageUsage,
     transaction::Version,
 };
 use std::sync::Arc;
@@ -20,11 +19,11 @@ use std::sync::Arc;
 #[derive(Clone, Debug)]
 pub struct ExecutedTrees {
     /// The in-memory representation of state after execution.
-    pub state: StateDelta,
+    state: StateDelta,
 
     /// The in-memory Merkle Accumulator representing a blockchain state consistent with the
     /// `state_tree`.
-    pub transaction_accumulator: Arc<InMemoryTransactionAccumulator>,
+    transaction_accumulator: Arc<InMemoryAccumulator<TransactionAccumulatorHasher>>,
 }
 
 impl ExecutedTrees {
@@ -32,7 +31,7 @@ impl ExecutedTrees {
         &self.state
     }
 
-    pub fn txn_accumulator(&self) -> &Arc<InMemoryTransactionAccumulator> {
+    pub fn txn_accumulator(&self) -> &Arc<InMemoryAccumulator<TransactionAccumulatorHasher>> {
         &self.transaction_accumulator
     }
 
@@ -50,7 +49,7 @@ impl ExecutedTrees {
 
     pub fn new(
         state: StateDelta,
-        transaction_accumulator: Arc<InMemoryTransactionAccumulator>,
+        transaction_accumulator: Arc<InMemoryAccumulator<TransactionAccumulatorHasher>>,
     ) -> Self {
         assert_eq!(
             state.current_version.map_or(0, |v| v + 1),

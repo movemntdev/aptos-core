@@ -3,10 +3,7 @@
 
 use aptos_state_view::StateView;
 use aptos_types::{
-    block_executor::{
-        config::BlockExecutorConfigFromOnchain, partitioner::PartitionedTransactions,
-    },
-    transaction::TransactionOutput,
+    block_executor::partitioner::PartitionedTransactions, transaction::TransactionOutput,
 };
 use move_core_types::vm_status::VMStatus;
 use std::sync::Arc;
@@ -43,8 +40,6 @@ pub trait ExecutorClient<S: StateView + Sync + Send + 'static>: Send + Sync {
         state_view: Arc<S>,
         transactions: PartitionedTransactions,
         concurrency_level_per_shard: usize,
-        onchain_config: BlockExecutorConfigFromOnchain,
+        maybe_block_gas_limit: Option<u64>,
     ) -> Result<ShardedExecutionOutput, VMStatus>;
-
-    fn shutdown(&mut self);
 }

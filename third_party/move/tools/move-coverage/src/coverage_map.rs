@@ -68,8 +68,7 @@ impl CoverageMap {
         for line in BufReader::new(file).lines() {
             let line = line.unwrap();
             let mut splits = line.split(',');
-            // Use a dummy key so that the data structure of the coverage map does not need to be changed
-            let exec_id = "dummy_exec_id";
+            let exec_id = splits.next().unwrap();
             let context = splits.next().unwrap();
             let pc = splits.next().unwrap().parse::<u64>().unwrap();
 
@@ -278,8 +277,7 @@ impl TraceMap {
         for line in BufReader::new(file).lines() {
             let line = line.unwrap();
             let mut splits = line.split(',');
-            // Use a dummy key so that the data structure of the coverage map does not need to be changed
-            let exec_id = "dummy_exec_id";
+            let exec_id = splits.next().unwrap();
             let context = splits.next().unwrap();
             let pc = splits.next().unwrap().parse::<u64>().unwrap();
 

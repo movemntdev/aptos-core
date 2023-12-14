@@ -10,7 +10,7 @@ use crate::{
         ForbiddenError, InternalError, NotFoundError, ServiceUnavailableError, StdApiError,
     },
 };
-use anyhow::{anyhow, bail, ensure, format_err, Context as AnyhowContext, Result};
+use anyhow::{bail, ensure, format_err, Context as AnyhowContext, Result};
 use aptos_api_types::{
     AptosErrorCode, AsConverter, BcsBlock, GasEstimation, LedgerInfo, ResourceGroup,
     TransactionOnChainData,
@@ -18,7 +18,7 @@ use aptos_api_types::{
 use aptos_config::config::{NodeConfig, RoleType};
 use aptos_crypto::HashValue;
 use aptos_gas_schedule::{AptosGasParameters, FromOnChainGasSchedule};
-use aptos_logger::{error, warn};
+use aptos_logger::error;
 use aptos_mempool::{MempoolClientRequest, MempoolClientSender, SubmissionStatus};
 use aptos_state_view::TStateView;
 use aptos_storage_interface::{
@@ -28,8 +28,9 @@ use aptos_storage_interface::{
 use aptos_types::{
     access_path::{AccessPath, Path},
     account_address::AccountAddress,
-    account_config::{AccountResource, NewBlockEvent},
-    block_executor::config::BlockExecutorConfigFromOnchain,
+    account_config::NewBlockEvent,
+    account_state::AccountState,
+    account_view::AccountView,
     chain_id::ChainId,
     contract_event::EventWithVersion,
     event::EventKey,
@@ -43,13 +44,12 @@ use aptos_types::{
     transaction::{SignedTransaction, TransactionWithProof, Version},
 };
 use aptos_utils::aptos_try;
-use aptos_vm::data_cache::AsMoveResolver;
-use futures::{channel::oneshot, SinkExt};
-use move_core_types::{
-    language_storage::{ModuleId, StructTag},
-    move_resource::MoveResource,
-    resolver::ModuleResolver,
+use aptos_vm::{
+    data_cache::{AsMoveResolver, StorageAdapter},
+    move_vm_ext::AptosMoveResolver,
 };
+use futures::{channel::oneshot, SinkExt};
+use move_core_types::language_storage::{ModuleId, StructTag};
 use std::{
     collections::{BTreeMap, HashMap},
     ops::{Bound::Included, Deref},
@@ -63,7 +63,7 @@ pub struct Context {
     chain_id: ChainId,
     pub db: Arc<dyn DbReader>,
     mp_sender: MempoolClientSender,
-    pub node_config: Arc<NodeConfig>,
+    pub node_config: NodeConfig,
     gas_schedule_cache: Arc<RwLock<GasScheduleCache>>,
     gas_estimation_cache: Arc<RwLock<GasEstimationCache>>,
     gas_limit_cache: Arc<RwLock<GasLimitCache>>,
@@ -86,7 +86,7 @@ impl Context {
             chain_id,
             db,
             mp_sender,
-            node_config: Arc::new(node_config),
+            node_config,
             gas_schedule_cache: Arc::new(RwLock::new(GasScheduleCache {
                 last_updated_epoch: None,
                 gas_schedule_params: None,
@@ -99,8 +99,7 @@ impl Context {
             })),
             gas_limit_cache: Arc::new(RwLock::new(GasLimitCache {
                 last_updated_epoch: None,
-                block_executor_onchain_config: OnChainExecutionConfig::default_if_missing()
-                    .block_executor_onchain_config(),
+                block_gas_limit: None,
             })),
         }
     }
@@ -206,42 +205,27 @@ impl Context {
             .map_err(|e| {
                 E::service_unavailable_with_code_no_info(e, AptosErrorCode::InternalError)
             })?;
-
-        let (oldest_version, oldest_block_height, block_height) = match self
+        let (oldest_version, oldest_block_event) = self
             .db
             .get_next_block_event(maybe_oldest_version)
-        {
-            Ok((version, oldest_block_event)) => {
-                let (_, _, newest_block_event) = self
-                    .db
-                    .get_block_info_by_version(ledger_info.ledger_info().version())
-                    .context("Failed to retrieve latest block information")
-                    .map_err(|e| {
-                        E::service_unavailable_with_code_no_info(e, AptosErrorCode::InternalError)
-                    })?;
-                (
-                    version,
-                    oldest_block_event.height(),
-                    newest_block_event.height(),
-                )
-            },
-            Err(err) => {
-                // when event index is disabled, we won't be able to search the NewBlock event stream.
-                // TODO(grao): evaluate adding dedicated block_height_by_version index
-                warn!(
-                    error = ?err,
-                    "Failed to query event indices, might be turned off. Ignoring.",
-                );
-                (maybe_oldest_version, 0, 0)
-            },
-        };
+            .context("Failed to retrieve oldest block information")
+            .map_err(|e| {
+                E::service_unavailable_with_code_no_info(e, AptosErrorCode::InternalError)
+            })?;
+        let (_, _, newest_block_event) = self
+            .db
+            .get_block_info_by_version(ledger_info.ledger_info().version())
+            .context("Failed to retrieve latest block information")
+            .map_err(|e| {
+                E::service_unavailable_with_code_no_info(e, AptosErrorCode::InternalError)
+            })?;
 
         Ok(LedgerInfo::new(
             &self.chain_id(),
             &ledger_info,
             oldest_version,
-            oldest_block_height,
-            block_height,
+            oldest_block_event.height(),
+            newest_block_event.height(),
         ))
     }
 
@@ -275,11 +259,9 @@ impl Context {
     }
 
     pub fn get_state_value(&self, state_key: &StateKey, version: u64) -> Result<Option<Vec<u8>>> {
-        Ok(self
-            .db
+        self.db
             .state_view_at_version(Some(version))?
-            .get_state_value_bytes(state_key)?
-            .map(|val| val.to_vec()))
+            .get_state_value_bytes(state_key)
     }
 
     pub fn get_state_value_poem<E: InternalError>(
@@ -291,52 +273,6 @@ impl Context {
         self.get_state_value(state_key, version)
             .context("Failed to retrieve state value")
             .map_err(|e| E::internal_with_code(e, AptosErrorCode::InternalError, ledger_info))
-    }
-
-    pub fn get_resource<T: MoveResource>(
-        &self,
-        address: AccountAddress,
-        version: Version,
-    ) -> Result<Option<T>> {
-        let access_path = AccessPath::resource_access_path(address, T::struct_tag())?;
-        let bytes_opt = self.get_state_value(&StateKey::access_path(access_path), version)?;
-        bytes_opt
-            .map(|bytes| bcs::from_bytes(&bytes))
-            .transpose()
-            .map_err(|err| anyhow!(format!("Failed to deserialize resource: {}", err)))
-    }
-
-    pub fn get_resource_poem<T: MoveResource, E: InternalError>(
-        &self,
-        address: AccountAddress,
-        version: Version,
-        latest_ledger_info: &LedgerInfo,
-    ) -> Result<Option<T>, E> {
-        self.get_resource(address, version)
-            .context("Failed to read account resource.")
-            .map_err(|err| {
-                E::internal_with_code(err, AptosErrorCode::InternalError, latest_ledger_info)
-            })
-    }
-
-    pub fn expect_resource_poem<T: MoveResource, E: InternalError + NotFoundError>(
-        &self,
-        address: AccountAddress,
-        version: Version,
-        latest_ledger_info: &LedgerInfo,
-    ) -> Result<T, E> {
-        self.get_resource_poem(address, version, latest_ledger_info)?
-            .ok_or_else(|| {
-                E::not_found_with_code(
-                    format!(
-                        "{} not found under address {}",
-                        T::struct_identifier(),
-                        address,
-                    ),
-                    AptosErrorCode::ResourceNotFound,
-                    latest_ledger_info,
-                )
-            })
     }
 
     pub fn get_state_values(
@@ -382,11 +318,11 @@ impl Context {
                     StateKeyInner::AccessPath(AccessPath { address: _, path }) => {
                         match Path::try_from(path.as_slice()) {
                             Ok(Path::Resource(struct_tag)) => {
-                                Some(Ok((struct_tag, v.bytes().to_vec())))
+                                Some(Ok((struct_tag, v.into_bytes())))
                             }
                             // TODO: Consider expanding to Path::Resource
                             Ok(Path::ResourceGroup(struct_tag)) => {
-                                Some(Ok((struct_tag, v.bytes().to_vec())))
+                                Some(Ok((struct_tag, v.into_bytes())))
                             }
                             Ok(Path::Code(_)) => None,
                             Err(e) => Some(Err(anyhow::Error::from(e))),
@@ -413,7 +349,7 @@ impl Context {
             .into_iter()
             .map(|(key, value)| {
                 let is_resource_group =
-                    |resolver: &dyn ModuleResolver, struct_tag: &StructTag| -> bool {
+                    |resolver: &dyn AptosMoveResolver, struct_tag: &StructTag| -> bool {
                         aptos_try!({
                             let md = aptos_framework::get_metadata(
                                 &resolver.get_module_metadata(&struct_tag.module_id()),
@@ -474,7 +410,7 @@ impl Context {
                 Ok((k, v)) => match k.inner() {
                     StateKeyInner::AccessPath(AccessPath { address: _, path }) => {
                         match Path::try_from(path.as_slice()) {
-                            Ok(Path::Code(module_id)) => Some(Ok((module_id, v.bytes().to_vec()))),
+                            Ok(Path::Code(module_id)) => Some(Ok((module_id, v.into_bytes()))),
                             Ok(Path::Resource(_)) | Ok(Path::ResourceGroup(_)) => None,
                             Err(e) => Some(Err(anyhow::Error::from(e))),
                         }
@@ -498,6 +434,26 @@ impl Context {
             ))
         });
         Ok((kvs, next_key))
+    }
+
+    // This function should be deprecated. DO NOT USE it.
+    // Instead, call either `get_modules_by_pagination` or `get_modules_by_pagination`.
+    pub fn get_account_state<E: InternalError>(
+        &self,
+        address: AccountAddress,
+        version: u64,
+        latest_ledger_info: &LedgerInfo,
+    ) -> Result<Option<AccountState>, E> {
+        AccountState::from_access_paths_and_values(
+            address,
+            &self.get_state_values(address, version).map_err(|err| {
+                E::internal_with_code(err, AptosErrorCode::InternalError, latest_ledger_info)
+            })?,
+        )
+        .context("Failed to read account state at requested version")
+        .map_err(|err| {
+            E::internal_with_code(err, AptosErrorCode::InternalError, latest_ledger_info)
+        })
     }
 
     pub fn get_block_timestamp<E: InternalError>(
@@ -712,7 +668,7 @@ impl Context {
 
         transactions_and_outputs
             .into_iter()
-            .zip(infos)
+            .zip(infos.into_iter())
             .enumerate()
             .map(|(i, ((txn, txn_output), info))| {
                 let version = start_version + i as u64;
@@ -734,13 +690,35 @@ impl Context {
         let start_seq_number = if let Some(start_seq_number) = start_seq_number {
             start_seq_number
         } else {
-            self.expect_resource_poem::<AccountResource, E>(
-                address,
-                ledger_info.version(),
-                ledger_info,
-            )?
-            .sequence_number()
-            .saturating_sub(limit as u64)
+            // Get the current account state, and get the sequence number to get the limit most
+            // recent transactions
+            let account_state = self
+                .get_account_state(address, ledger_info.version(), ledger_info)?
+                .ok_or_else(|| {
+                    E::not_found_with_code(
+                        "Account not found",
+                        AptosErrorCode::AccountNotFound,
+                        ledger_info,
+                    )
+                })?;
+            let resource = account_state
+                .get_account_resource()
+                .map_err(|err| {
+                    E::internal_with_code(
+                        format!("Failed to get account resource {}", err),
+                        AptosErrorCode::InternalError,
+                        ledger_info,
+                    )
+                })?
+                .ok_or_else(|| {
+                    E::not_found_with_code(
+                        "Account not found",
+                        AptosErrorCode::AccountNotFound,
+                        ledger_info,
+                    )
+                })?;
+
+            resource.sequence_number().saturating_sub(limit as u64)
         };
 
         let txns = self
@@ -937,7 +915,7 @@ impl Context {
     ) -> Result<GasEstimation, E> {
         let config = &self.node_config.api.gas_estimation;
         let min_gas_unit_price = self.min_gas_unit_price(ledger_info)?;
-        let block_config = self.block_executor_onchain_config(ledger_info)?;
+        let block_gas_limit = self.block_gas_limit(ledger_info)?;
         if !config.enabled {
             return Ok(self.default_gas_estimation(min_gas_unit_price));
         }
@@ -1026,17 +1004,9 @@ impl Context {
                 Ok(prices_and_used) => {
                     let is_full_block = if prices_and_used.len() >= config.full_block_txns {
                         true
-                    } else if let Some(full_block_gas_used) =
-                        block_config.block_gas_limit_type.block_gas_limit()
-                    {
-                        // be pessimistic for conflicts, as such information is not onchain
-                        let gas_used = prices_and_used.iter().map(|(_, used)| *used).sum::<u64>();
-                        let max_conflict_multiplier = block_config
-                            .block_gas_limit_type
-                            .conflict_penalty_window()
-                            .unwrap_or(1)
-                            as u64;
-                        gas_used * max_conflict_multiplier >= full_block_gas_used
+                    } else if let Some(full_block_gas_used) = block_gas_limit {
+                        prices_and_used.iter().map(|(_, used)| *used).sum::<u64>()
+                            >= full_block_gas_used
                     } else {
                         false
                     };
@@ -1183,17 +1153,17 @@ impl Context {
                 .map_err(|e| {
                     E::internal_with_code(e, AptosErrorCode::InternalError, ledger_info)
                 })?;
-            let resolver = state_view.as_move_resolver();
+            let storage_adapter = StorageAdapter::new(&state_view);
 
             let gas_schedule_params =
-                match GasScheduleV2::fetch_config(&resolver).and_then(|gas_schedule| {
+                match GasScheduleV2::fetch_config(&storage_adapter).and_then(|gas_schedule| {
                     let feature_version = gas_schedule.feature_version;
                     let gas_schedule = gas_schedule.to_btree_map();
                     AptosGasParameters::from_on_chain_gas_schedule(&gas_schedule, feature_version)
                         .ok()
                 }) {
                     Some(gas_schedule) => Ok(gas_schedule),
-                    None => GasSchedule::fetch_config(&resolver)
+                    None => GasSchedule::fetch_config(&storage_adapter)
                         .and_then(|gas_schedule| {
                             let gas_schedule = gas_schedule.to_btree_map();
                             AptosGasParameters::from_on_chain_gas_schedule(&gas_schedule, 0).ok()
@@ -1217,16 +1187,16 @@ impl Context {
         }
     }
 
-    pub fn block_executor_onchain_config<E: InternalError>(
+    pub fn block_gas_limit<E: InternalError>(
         &self,
         ledger_info: &LedgerInfo,
-    ) -> Result<BlockExecutorConfigFromOnchain, E> {
+    ) -> Result<Option<u64>, E> {
         // If it's the same epoch, use the cached results
         {
             let cache = self.gas_limit_cache.read().unwrap();
             if let Some(ref last_updated_epoch) = cache.last_updated_epoch {
                 if *last_updated_epoch == ledger_info.epoch.0 {
-                    return Ok(cache.block_executor_onchain_config.clone());
+                    return Ok(cache.block_gas_limit);
                 }
             }
         }
@@ -1237,7 +1207,7 @@ impl Context {
             // If a different thread updated the cache, we can exit early
             if let Some(ref last_updated_epoch) = cache.last_updated_epoch {
                 if *last_updated_epoch == ledger_info.epoch.0 {
-                    return Ok(cache.block_executor_onchain_config.clone());
+                    return Ok(cache.block_gas_limit);
                 }
             }
 
@@ -1248,16 +1218,15 @@ impl Context {
                 .map_err(|e| {
                     E::internal_with_code(e, AptosErrorCode::InternalError, ledger_info)
                 })?;
-            let resolver = state_view.as_move_resolver();
+            let storage_adapter = StorageAdapter::new(&state_view);
 
-            let block_executor_onchain_config = OnChainExecutionConfig::fetch_config(&resolver)
-                .unwrap_or_else(OnChainExecutionConfig::default_if_missing)
-                .block_executor_onchain_config();
+            let block_gas_limit = OnChainExecutionConfig::fetch_config(&storage_adapter)
+                .and_then(|config| config.block_gas_limit());
 
             // Update the cache
-            cache.block_executor_onchain_config = block_executor_onchain_config.clone();
+            cache.block_gas_limit = block_gas_limit;
             cache.last_updated_epoch = Some(ledger_info.epoch.0);
-            Ok(block_executor_onchain_config)
+            Ok(block_gas_limit)
         }
     }
 
@@ -1309,18 +1278,5 @@ pub struct GasEstimationCache {
 
 pub struct GasLimitCache {
     last_updated_epoch: Option<u64>,
-    block_executor_onchain_config: BlockExecutorConfigFromOnchain,
-}
-
-/// This function just calls tokio::task::spawn_blocking with the given closure and in
-/// the case of an error when joining the task converts it into a 500.
-pub async fn api_spawn_blocking<F, T, E>(func: F) -> Result<T, E>
-where
-    F: FnOnce() -> Result<T, E> + Send + 'static,
-    T: Send + 'static,
-    E: InternalError + Send + 'static,
-{
-    tokio::task::spawn_blocking(func)
-        .await
-        .map_err(|err| E::internal_with_code_no_info(err, AptosErrorCode::InternalError))?
+    block_gas_limit: Option<u64>,
 }

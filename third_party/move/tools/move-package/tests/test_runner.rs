@@ -3,14 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::bail;
-use move_command_line_common::{
-    env::read_env_var,
-    testing::{
-        add_update_baseline_fix, format_diff, read_env_update_baseline, ENABLE_V2, EXP_EXT,
-        EXP_EXT_V2,
-    },
+use move_command_line_common::testing::{
+    add_update_baseline_fix, format_diff, read_env_update_baseline, EXP_EXT,
 };
-use move_compiler::shared::known_attributes::KnownAttribute;
 use move_package::{
     compilation::{build_plan::BuildPlan, model_builder::ModelBuilder},
     package_hooks,
@@ -20,7 +15,7 @@ use move_package::{
         manifest_parser as MP,
         parsed_manifest::{CustomDepInfo, PackageDigest},
     },
-    BuildConfig, CompilerConfig, CompilerVersion, ModelConfig,
+    BuildConfig, CompilerConfig, ModelConfig,
 };
 use move_symbol_pool::Symbol;
 use std::{
@@ -33,16 +28,21 @@ use tempfile::tempdir;
 const COMPILE_EXT: &str = "compile";
 const MODEL_EXT: &str = "model";
 
-fn run_test_impl(path: &Path, v2_flag: bool) -> datatest_stable::Result<String> {
-    let mut compiler_config = CompilerConfig {
-        known_attributes: KnownAttribute::get_all_attribute_names().clone(),
-        ..Default::default()
-    };
-    if v2_flag {
-        compiler_config.compiler_version = Some(CompilerVersion::V2);
+pub fn run_test(path: &Path) -> datatest_stable::Result<()> {
+    package_hooks::register_package_hooks(Box::new(TestHooks()));
+    let update_baseline = read_env_update_baseline();
+    if path
+        .components()
+        .any(|component| component == Component::Normal(OsStr::new("deps_only")))
+    {
+        return Ok(());
     }
+    let exp_path = path.with_extension(EXP_EXT);
     let should_compile = path.with_extension(COMPILE_EXT).is_file();
     let should_model = path.with_extension(MODEL_EXT).is_file();
+
+    let exp_exists = exp_path.is_file();
+
     let contents = fs::read_to_string(path)?;
     let output = match MP::parse_move_manifest_string(contents)
         .and_then(MP::parse_source_manifest)
@@ -57,7 +57,6 @@ fn run_test_impl(path: &Path, v2_flag: bool) -> datatest_stable::Result<String> 
                     generate_abis: false,
                     install_dir: Some(tempdir().unwrap().path().to_path_buf()),
                     force_recompilation: false,
-                    compiler_config: compiler_config.clone(),
                     ..Default::default()
                 },
                 &mut Vec::new(), /* empty writer as no diags needed */
@@ -73,9 +72,9 @@ fn run_test_impl(path: &Path, v2_flag: bool) -> datatest_stable::Result<String> 
                 .into())
             },
             (true, _) => match BuildPlan::create(resolved_package)
-                .and_then(|bp| bp.compile_no_exit(&compiler_config.clone(), &mut Vec::new()))
+                .and_then(|bp| bp.compile(&CompilerConfig::default(), &mut Vec::new()))
             {
-                Ok((mut pkg, _)) => {
+                Ok(mut pkg) => {
                     pkg.compiled_package_info.source_digest =
                         Some(PackageDigest::from("ELIDED_FOR_TEST"));
                     pkg.compiled_package_info.build_flags.install_dir =
@@ -104,18 +103,7 @@ fn run_test_impl(path: &Path, v2_flag: bool) -> datatest_stable::Result<String> 
         },
         Err(error) => format!("{:#}\n", error),
     };
-    Ok(output)
-}
 
-fn check_or_update(
-    path: &Path,
-    output: String,
-    update_baseline: bool,
-    v2_flag: bool,
-) -> datatest_stable::Result<()> {
-    let exp_ext = if v2_flag { EXP_EXT_V2 } else { EXP_EXT };
-    let exp_path = path.with_extension(exp_ext);
-    let exp_exists = exp_path.is_file();
     if update_baseline {
         fs::write(&exp_path, &output)?;
         return Ok(());
@@ -140,28 +128,6 @@ fn check_or_update(
         .into());
     }
     Ok(())
-}
-
-pub fn run_test(path: &Path) -> datatest_stable::Result<()> {
-    package_hooks::register_package_hooks(Box::new(TestHooks()));
-    if path
-        .components()
-        .any(|component| component == Component::Normal(OsStr::new("deps_only")))
-    {
-        return Ok(());
-    }
-
-    let output_v1 = run_test_impl(path, false)?;
-    let update_baseline = read_env_update_baseline();
-    let res_v1 = check_or_update(path, output_v1.clone(), update_baseline, false);
-    if read_env_var(ENABLE_V2) == "1" {
-        // Run test against v2 when ENABLE_V2 is set
-        let output_v2 = run_test_impl(path, true)?;
-        if output_v1 != output_v2 {
-            // TODO: compare the result between V1 and V2.
-        }
-    }
-    res_v1
 }
 
 /// Some dummy hooks for testing the hook mechanism

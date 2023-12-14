@@ -92,19 +92,13 @@ pub enum MultiSigConfig {
     Publisher,
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum LoopType {
-    NoOp,
-    Arithmetic,
-    BcsToBytes { len: u64 },
-}
-
 //
 // List of entry points to expose
 //
 // More info in the Simple.move
 #[derive(Debug, Copy, Clone)]
 pub enum EntryPoints {
+    // 0 args
     /// Empty (NoOp) function
     Nop,
     /// Empty (NoOp) function, signed by 2 accounts
@@ -121,6 +115,11 @@ pub enum EntryPoints {
     Double,
     /// Half the size of `Resource`
     Half,
+    // 1 arg
+    /// run a for loop
+    Loopy {
+        loop_count: Option<u64>,
+    },
     /// Return value from constant array (RANDOM)
     GetFromConst {
         const_idx: Option<u64>,
@@ -129,11 +128,7 @@ pub enum EntryPoints {
     SetId,
     /// Set the `Resource.name`
     SetName,
-    /// run a for loop
-    Loop {
-        loop_count: Option<u64>,
-        loop_type: LoopType,
-    },
+    // 2 args
     // next 2 functions, second arg must be existing account address with data
     // Sets `Resource` to the max from two addresses
     Maximize,
@@ -162,14 +157,6 @@ pub enum EntryPoints {
     /// Increment destination resource - COUNTER_STEP
     StepDst,
 
-    CreateObjects {
-        num_objects: u64,
-        object_payload_size: u64,
-    },
-    CreateObjectsConflict {
-        num_objects: u64,
-        object_payload_size: u64,
-    },
     /// Initialize Token V1 NFT collection
     TokenV1InitializeCollection,
     /// Mint an NFT token. Should be called only after InitializeCollection is called
@@ -181,21 +168,6 @@ pub enum EntryPoints {
     TokenV1MintAndTransferFT,
 
     TokenV2AmbassadorMint,
-
-    InitializeVectorPicture {
-        length: u64,
-    },
-    VectorPicture {
-        length: u64,
-    },
-    VectorPictureRead {
-        length: u64,
-    },
-    InitializeSmartTablePicture,
-    SmartTablePicture {
-        length: u64,
-        num_points_per_txn: usize,
-    },
 }
 
 impl EntryPoints {
@@ -209,7 +181,7 @@ impl EntryPoints {
             | EntryPoints::ResetData
             | EntryPoints::Double
             | EntryPoints::Half
-            | EntryPoints::Loop { .. }
+            | EntryPoints::Loopy { .. }
             | EntryPoints::GetFromConst { .. }
             | EntryPoints::SetId
             | EntryPoints::SetName
@@ -221,9 +193,7 @@ impl EntryPoints {
             | EntryPoints::MakeOrChangeTable { .. }
             | EntryPoints::MakeOrChangeTableRandom { .. }
             | EntryPoints::StepDst => "simple",
-            EntryPoints::CreateObjects { .. }
-            | EntryPoints::CreateObjectsConflict { .. }
-            | EntryPoints::TokenV1InitializeCollection
+            EntryPoints::TokenV1InitializeCollection
             | EntryPoints::TokenV1MintAndStoreNFTParallel
             | EntryPoints::TokenV1MintAndStoreNFTSequential
             | EntryPoints::TokenV1MintAndTransferNFTParallel
@@ -231,11 +201,6 @@ impl EntryPoints {
             | EntryPoints::TokenV1MintAndStoreFT
             | EntryPoints::TokenV1MintAndTransferFT => "framework_usecases",
             EntryPoints::TokenV2AmbassadorMint => "ambassador_token",
-            EntryPoints::InitializeVectorPicture { .. }
-            | EntryPoints::VectorPicture { .. }
-            | EntryPoints::VectorPictureRead { .. }
-            | EntryPoints::InitializeSmartTablePicture
-            | EntryPoints::SmartTablePicture { .. } => "complex",
         }
     }
 
@@ -249,7 +214,7 @@ impl EntryPoints {
             | EntryPoints::ResetData
             | EntryPoints::Double
             | EntryPoints::Half
-            | EntryPoints::Loop { .. }
+            | EntryPoints::Loopy { .. }
             | EntryPoints::GetFromConst { .. }
             | EntryPoints::SetId
             | EntryPoints::SetName
@@ -261,9 +226,6 @@ impl EntryPoints {
             | EntryPoints::MakeOrChangeTable { .. }
             | EntryPoints::MakeOrChangeTableRandom { .. }
             | EntryPoints::StepDst => "simple",
-            EntryPoints::CreateObjects { .. } | EntryPoints::CreateObjectsConflict { .. } => {
-                "objects"
-            },
             EntryPoints::TokenV1InitializeCollection
             | EntryPoints::TokenV1MintAndStoreNFTParallel
             | EntryPoints::TokenV1MintAndStoreNFTSequential
@@ -272,12 +234,6 @@ impl EntryPoints {
             | EntryPoints::TokenV1MintAndStoreFT
             | EntryPoints::TokenV1MintAndTransferFT => "token_v1",
             EntryPoints::TokenV2AmbassadorMint => "ambassador",
-            EntryPoints::InitializeVectorPicture { .. }
-            | EntryPoints::VectorPicture { .. }
-            | EntryPoints::VectorPictureRead { .. } => "vector_picture",
-            EntryPoints::InitializeSmartTablePicture | EntryPoints::SmartTablePicture { .. } => {
-                "smart_table_picture"
-            },
         }
     }
 
@@ -306,23 +262,11 @@ impl EntryPoints {
             EntryPoints::Double => get_payload_void(module_id, ident_str!("double").to_owned()),
             EntryPoints::Half => get_payload_void(module_id, ident_str!("half").to_owned()),
             // 1 arg
-            EntryPoints::Loop {
-                loop_count,
-                loop_type,
-            } => {
-                let count = loop_count
-                    .unwrap_or_else(|| rng.expect("Must provide RNG").gen_range(0u64, 1000u64));
-                let mut args = vec![bcs::to_bytes(&count).unwrap()];
-                let method = match loop_type {
-                    LoopType::NoOp => "loop_nop",
-                    LoopType::Arithmetic => "loop_arithmetic",
-                    LoopType::BcsToBytes { len } => {
-                        args.push(bcs::to_bytes(&len).unwrap());
-                        "loop_bcs"
-                    },
-                };
-                get_payload(module_id, ident_str!(method).to_owned(), args)
-            },
+            EntryPoints::Loopy { loop_count } => loopy(
+                module_id,
+                loop_count
+                    .unwrap_or_else(|| rng.expect("Must provide RNG").gen_range(0u64, 1000u64)),
+            ),
             EntryPoints::GetFromConst { const_idx } => get_from_random_const(
                 module_id,
                 const_idx.unwrap_or_else(
@@ -382,25 +326,6 @@ impl EntryPoints {
                 )
             },
             EntryPoints::StepDst => step_dst(module_id, other.expect("Must provide other")),
-            EntryPoints::CreateObjects {
-                num_objects,
-                object_payload_size,
-            } => get_payload(module_id, ident_str!("create_objects").to_owned(), vec![
-                bcs::to_bytes(num_objects).unwrap(),
-                bcs::to_bytes(object_payload_size).unwrap(),
-            ]),
-            EntryPoints::CreateObjectsConflict {
-                num_objects,
-                object_payload_size,
-            } => get_payload(
-                module_id,
-                ident_str!("create_objects_conflict").to_owned(),
-                vec![
-                    bcs::to_bytes(num_objects).unwrap(),
-                    bcs::to_bytes(object_payload_size).unwrap(),
-                    bcs::to_bytes(other.expect("Must provide other")).unwrap(),
-                ],
-            ),
             EntryPoints::TokenV1InitializeCollection => get_payload_void(
                 module_id,
                 ident_str!("token_v1_initialize_collection").to_owned(),
@@ -440,60 +365,13 @@ impl EntryPoints {
                 let rng: &mut StdRng = rng.expect("Must provide RNG");
                 get_payload(
                     module_id,
-                    ident_str!("mint_numbered_ambassador_token_by_user").to_owned(),
+                    ident_str!("mint_ambassador_token_by_user").to_owned(),
                     vec![
                         bcs::to_bytes(&rand_string(rng, 100)).unwrap(), // description
-                        bcs::to_bytes("superstar #").unwrap(),          // name
+                        bcs::to_bytes(&rand_string(rng, 20)).unwrap(),  // name
                         bcs::to_bytes(&rand_string(rng, 50)).unwrap(),  // uri
                     ],
                 )
-            },
-            EntryPoints::InitializeVectorPicture { length } => {
-                get_payload(module_id, ident_str!("create").to_owned(), vec![
-                    bcs::to_bytes(&length).unwrap(), // length
-                ])
-            },
-            EntryPoints::VectorPicture { length } => {
-                let rng: &mut StdRng = rng.expect("Must provide RNG");
-                get_payload(module_id, ident_str!("update").to_owned(), vec![
-                    bcs::to_bytes(&other.expect("Must provide other")).unwrap(),
-                    bcs::to_bytes(&0u64).unwrap(), // palette_index
-                    bcs::to_bytes(&rng.gen_range(0u64, length)).unwrap(), // index
-                    bcs::to_bytes(&rng.gen_range(0u8, 255u8)).unwrap(), // color R
-                    bcs::to_bytes(&rng.gen_range(0u8, 255u8)).unwrap(), // color G
-                    bcs::to_bytes(&rng.gen_range(0u8, 255u8)).unwrap(), // color B
-                ])
-            },
-            EntryPoints::VectorPictureRead { length } => {
-                let rng: &mut StdRng = rng.expect("Must provide RNG");
-                get_payload(module_id, ident_str!("check").to_owned(), vec![
-                    bcs::to_bytes(&other.expect("Must provide other")).unwrap(),
-                    bcs::to_bytes(&0u64).unwrap(), // palette_index
-                    bcs::to_bytes(&rng.gen_range(0u64, length)).unwrap(), // index
-                ])
-            },
-            EntryPoints::InitializeSmartTablePicture => {
-                get_payload(module_id, ident_str!("create").to_owned(), vec![])
-            },
-            EntryPoints::SmartTablePicture {
-                length,
-                num_points_per_txn,
-            } => {
-                let rng: &mut StdRng = rng.expect("Must provide RNG");
-                u32::try_from(*length).unwrap();
-                let mut indices = (0..*num_points_per_txn)
-                    .map(|_| rng.gen_range(0u64, length))
-                    .collect::<Vec<_>>();
-                let mut colors = (0..*num_points_per_txn)
-                    .map(|_| rng.gen_range(0u8, 100u8))
-                    .collect::<Vec<_>>();
-                assert!(indices.len() == colors.len());
-                get_payload(module_id, ident_str!("update").to_owned(), vec![
-                    bcs::to_bytes(&other.expect("Must provide other")).unwrap(),
-                    bcs::to_bytes(&0u64).unwrap(),    // palette_index
-                    bcs::to_bytes(&indices).unwrap(), // indices
-                    bcs::to_bytes(&colors).unwrap(),  // colors
-                ])
             },
         }
     }
@@ -508,10 +386,6 @@ impl EntryPoints {
             | EntryPoints::TokenV1MintAndTransferFT => {
                 Some(EntryPoints::TokenV1InitializeCollection)
             },
-            EntryPoints::VectorPicture { length } | EntryPoints::VectorPictureRead { length } => {
-                Some(EntryPoints::InitializeVectorPicture { length: *length })
-            },
-            EntryPoints::SmartTablePicture { .. } => Some(EntryPoints::InitializeSmartTablePicture),
             _ => None,
         }
     }
@@ -526,6 +400,20 @@ impl EntryPoints {
     }
 }
 
+const ZERO_ARG_ENTRY_POINTS: &[EntryPoints; 6] = &[
+    EntryPoints::Nop,
+    EntryPoints::Step,
+    EntryPoints::GetCounter,
+    EntryPoints::ResetData,
+    EntryPoints::Double,
+    EntryPoints::Half,
+];
+const ONE_ARG_ENTRY_POINTS: &[EntryPoints; 4] = &[
+    EntryPoints::Loopy { loop_count: None },
+    EntryPoints::GetFromConst { const_idx: None },
+    EntryPoints::SetId,
+    EntryPoints::SetName,
+];
 const SIMPLE_ENTRY_POINTS: &[EntryPoints; 9] = &[
     EntryPoints::Nop,
     EntryPoints::Step,
@@ -533,10 +421,7 @@ const SIMPLE_ENTRY_POINTS: &[EntryPoints; 9] = &[
     EntryPoints::ResetData,
     EntryPoints::Double,
     EntryPoints::Half,
-    EntryPoints::Loop {
-        loop_count: None,
-        loop_type: LoopType::NoOp,
-    },
+    EntryPoints::Loopy { loop_count: None },
     EntryPoints::GetFromConst { const_idx: None },
     EntryPoints::SetId,
 ];
@@ -547,10 +432,7 @@ const GEN_ENTRY_POINTS: &[EntryPoints; 12] = &[
     EntryPoints::ResetData,
     EntryPoints::Double,
     EntryPoints::Half,
-    EntryPoints::Loop {
-        loop_count: None,
-        loop_type: LoopType::NoOp,
-    },
+    EntryPoints::Loopy { loop_count: None },
     EntryPoints::GetFromConst { const_idx: None },
     EntryPoints::SetId,
     EntryPoints::SetName,
@@ -568,6 +450,13 @@ pub fn rand_simple_function(rng: &mut StdRng, module_id: ModuleId) -> Transactio
         .create_payload(module_id, Some(rng), None)
 }
 
+pub fn zero_args_function(rng: &mut StdRng, module_id: ModuleId) -> TransactionPayload {
+    ZERO_ARG_ENTRY_POINTS
+        .choose(rng)
+        .unwrap()
+        .create_payload(module_id, Some(rng), None)
+}
+
 pub fn rand_gen_function(rng: &mut StdRng, module_id: ModuleId) -> TransactionPayload {
     GEN_ENTRY_POINTS
         .choose(rng)
@@ -578,6 +467,12 @@ pub fn rand_gen_function(rng: &mut StdRng, module_id: ModuleId) -> TransactionPa
 //
 // Entry points payload
 //
+
+fn loopy(module_id: ModuleId, count: u64) -> TransactionPayload {
+    get_payload(module_id, ident_str!("loopy").to_owned(), vec![
+        bcs::to_bytes(&count).unwrap(),
+    ])
+}
 
 fn get_from_random_const(module_id: ModuleId, idx: u64) -> TransactionPayload {
     get_payload(

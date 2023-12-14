@@ -1,5 +1,5 @@
 
-<a id="0x1_block"></a>
+<a name="0x1_block"></a>
 
 # Module `0x1::block`
 
@@ -19,7 +19,6 @@ This module defines a struct storing the metadata of the block and new block eve
 -  [Function `emit_genesis_block_event`](#0x1_block_emit_genesis_block_event)
 -  [Function `emit_writeset_block_event`](#0x1_block_emit_writeset_block_event)
 -  [Specification](#@Specification_1)
-    -  [Module-level Specification](#@Module-level_Specification_2)
     -  [Resource `BlockResource`](#@Specification_1_BlockResource)
     -  [Function `initialize`](#@Specification_1_initialize)
     -  [Function `update_epoch_interval_microsecs`](#@Specification_1_update_epoch_interval_microsecs)
@@ -46,7 +45,7 @@ This module defines a struct storing the metadata of the block and new block eve
 
 
 
-<a id="0x1_block_BlockResource"></a>
+<a name="0x1_block_BlockResource"></a>
 
 ## Resource `BlockResource`
 
@@ -92,7 +91,7 @@ Should be in-sync with BlockResource rust struct in new_block.rs
 
 </details>
 
-<a id="0x1_block_NewBlockEvent"></a>
+<a name="0x1_block_NewBlockEvent"></a>
 
 ## Struct `NewBlockEvent`
 
@@ -162,7 +161,7 @@ Should be in-sync with NewBlockEvent rust struct in new_block.rs
 
 </details>
 
-<a id="0x1_block_UpdateEpochIntervalEvent"></a>
+<a name="0x1_block_UpdateEpochIntervalEvent"></a>
 
 ## Struct `UpdateEpochIntervalEvent`
 
@@ -196,12 +195,12 @@ Event emitted when a proposal is created.
 
 </details>
 
-<a id="@Constants_0"></a>
+<a name="@Constants_0"></a>
 
 ## Constants
 
 
-<a id="0x1_block_MAX_U64"></a>
+<a name="0x1_block_MAX_U64"></a>
 
 
 
@@ -210,7 +209,7 @@ Event emitted when a proposal is created.
 
 
 
-<a id="0x1_block_EINVALID_PROPOSER"></a>
+<a name="0x1_block_EINVALID_PROPOSER"></a>
 
 An invalid proposer was provided. Expected the proposer to be the VM or an active validator.
 
@@ -220,7 +219,7 @@ An invalid proposer was provided. Expected the proposer to be the VM or an activ
 
 
 
-<a id="0x1_block_ENUM_NEW_BLOCK_EVENTS_DOES_NOT_MATCH_BLOCK_HEIGHT"></a>
+<a name="0x1_block_ENUM_NEW_BLOCK_EVENTS_DOES_NOT_MATCH_BLOCK_HEIGHT"></a>
 
 The number of new block events does not equal the current block height.
 
@@ -230,7 +229,7 @@ The number of new block events does not equal the current block height.
 
 
 
-<a id="0x1_block_EZERO_EPOCH_INTERVAL"></a>
+<a name="0x1_block_EZERO_EPOCH_INTERVAL"></a>
 
 Epoch interval cannot be 0.
 
@@ -240,7 +239,7 @@ Epoch interval cannot be 0.
 
 
 
-<a id="0x1_block_initialize"></a>
+<a name="0x1_block_initialize"></a>
 
 ## Function `initialize`
 
@@ -276,7 +275,7 @@ This can only be called during Genesis.
 
 </details>
 
-<a id="0x1_block_update_epoch_interval_microsecs"></a>
+<a name="0x1_block_update_epoch_interval_microsecs"></a>
 
 ## Function `update_epoch_interval_microsecs`
 
@@ -315,7 +314,7 @@ Can only be called as part of the Aptos governance proposal process established 
 
 </details>
 
-<a id="0x1_block_get_epoch_interval_secs"></a>
+<a name="0x1_block_get_epoch_interval_secs"></a>
 
 ## Function `get_epoch_interval_secs`
 
@@ -341,7 +340,7 @@ Return epoch interval in seconds.
 
 </details>
 
-<a id="0x1_block_block_prologue"></a>
+<a name="0x1_block_block_prologue"></a>
 
 ## Function `block_prologue`
 
@@ -421,7 +420,7 @@ The runtime always runs this before executing the transactions in a block.
 
 </details>
 
-<a id="0x1_block_get_current_block_height"></a>
+<a name="0x1_block_get_current_block_height"></a>
 
 ## Function `get_current_block_height`
 
@@ -447,7 +446,7 @@ Get the current block height
 
 </details>
 
-<a id="0x1_block_emit_new_block_event"></a>
+<a name="0x1_block_emit_new_block_event"></a>
 
 ## Function `emit_new_block_event`
 
@@ -477,7 +476,7 @@ Emit the event and update height and global timestamp
 
 </details>
 
-<a id="0x1_block_emit_genesis_block_event"></a>
+<a name="0x1_block_emit_genesis_block_event"></a>
 
 ## Function `emit_genesis_block_event`
 
@@ -518,7 +517,7 @@ reconfiguration event.
 
 </details>
 
-<a id="0x1_block_emit_writeset_block_event"></a>
+<a name="0x1_block_emit_writeset_block_event"></a>
 
 ## Function `emit_writeset_block_event`
 
@@ -560,14 +559,9 @@ new block event for WriteSetPayload.
 
 </details>
 
-<a id="@Specification_1"></a>
+<a name="@Specification_1"></a>
 
 ## Specification
-
-
-<a id="@Module-level_Specification_2"></a>
-
-### Module-level Specification
 
 
 
@@ -576,7 +570,7 @@ new block event for WriteSetPayload.
 
 
 
-<a id="@Specification_1_BlockResource"></a>
+<a name="@Specification_1_BlockResource"></a>
 
 ### Resource `BlockResource`
 
@@ -620,7 +614,7 @@ new block event for WriteSetPayload.
 
 
 
-<a id="@Specification_1_initialize"></a>
+<a name="@Specification_1_initialize"></a>
 
 ### Function `initialize`
 
@@ -647,7 +641,7 @@ The number of new events created does not exceed MAX_U64.
 
 
 
-<a id="0x1_block_Initialize"></a>
+<a name="0x1_block_Initialize"></a>
 
 
 <pre><code><b>schema</b> <a href="block.md#0x1_block_Initialize">Initialize</a> {
@@ -665,7 +659,7 @@ The number of new events created does not exceed MAX_U64.
 
 
 
-<a id="0x1_block_NewEventHandle"></a>
+<a name="0x1_block_NewEventHandle"></a>
 
 
 <pre><code><b>schema</b> <a href="block.md#0x1_block_NewEventHandle">NewEventHandle</a> {
@@ -679,7 +673,7 @@ The number of new events created does not exceed MAX_U64.
 
 
 
-<a id="@Specification_1_update_epoch_interval_microsecs"></a>
+<a name="@Specification_1_update_epoch_interval_microsecs"></a>
 
 ### Function `update_epoch_interval_microsecs`
 
@@ -699,7 +693,7 @@ The BlockResource existed under the @aptos_framework.
 
 
 
-<a id="0x1_block_UpdateEpochIntervalMicrosecs"></a>
+<a name="0x1_block_UpdateEpochIntervalMicrosecs"></a>
 
 
 <pre><code><b>schema</b> <a href="block.md#0x1_block_UpdateEpochIntervalMicrosecs">UpdateEpochIntervalMicrosecs</a> {
@@ -716,7 +710,7 @@ The BlockResource existed under the @aptos_framework.
 
 
 
-<a id="@Specification_1_get_epoch_interval_secs"></a>
+<a name="@Specification_1_get_epoch_interval_secs"></a>
 
 ### Function `get_epoch_interval_secs`
 
@@ -733,7 +727,7 @@ The BlockResource existed under the @aptos_framework.
 
 
 
-<a id="@Specification_1_block_prologue"></a>
+<a name="@Specification_1_block_prologue"></a>
 
 ### Function `block_prologue`
 
@@ -760,7 +754,7 @@ The BlockResource existed under the @aptos_framework.
 
 
 
-<a id="@Specification_1_get_current_block_height"></a>
+<a name="@Specification_1_get_current_block_height"></a>
 
 ### Function `get_current_block_height`
 
@@ -777,7 +771,7 @@ The BlockResource existed under the @aptos_framework.
 
 
 
-<a id="@Specification_1_emit_new_block_event"></a>
+<a name="@Specification_1_emit_new_block_event"></a>
 
 ### Function `emit_new_block_event`
 
@@ -800,7 +794,7 @@ The BlockResource existed under the @aptos_framework.
 
 
 
-<a id="@Specification_1_emit_genesis_block_event"></a>
+<a name="@Specification_1_emit_genesis_block_event"></a>
 
 ### Function `emit_genesis_block_event`
 
@@ -820,7 +814,7 @@ The BlockResource existed under the @aptos_framework.
 
 
 
-<a id="@Specification_1_emit_writeset_block_event"></a>
+<a name="@Specification_1_emit_writeset_block_event"></a>
 
 ### Function `emit_writeset_block_event`
 
@@ -841,7 +835,7 @@ The CurrentTimeMicroseconds existed under the @aptos_framework.
 
 
 
-<a id="0x1_block_EmitWritesetBlockEvent"></a>
+<a name="0x1_block_EmitWritesetBlockEvent"></a>
 
 
 <pre><code><b>schema</b> <a href="block.md#0x1_block_EmitWritesetBlockEvent">EmitWritesetBlockEvent</a> {

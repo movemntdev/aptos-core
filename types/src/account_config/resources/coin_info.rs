@@ -127,11 +127,11 @@ impl CoinInfoResource {
         let write_set = vec![
             (
                 StateKey::access_path(ap),
-                WriteOp::Modification(bcs::to_bytes(&self).unwrap().into()),
+                WriteOp::Modification(bcs::to_bytes(&self).unwrap()),
             ),
             (
                 value_state_key,
-                WriteOp::Modification(bcs::to_bytes(&0_u128).unwrap().into()),
+                WriteOp::Modification(bcs::to_bytes(&0_u128).unwrap()),
             ),
         ];
         Ok(WriteSetMut::new(write_set).freeze().unwrap())

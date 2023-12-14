@@ -1,14 +1,11 @@
 // Copyright © Aptos Foundation
 
-use crate::{
-    sharded_block_partitioner::ShardedBlockPartitioner, BlockPartitioner, PartitionerConfig,
-};
+use crate::{sharded_block_partitioner::ShardedBlockPartitioner, BlockPartitioner};
 use aptos_types::block_executor::partitioner::RoundId;
-use clap::Parser;
 
 /// The configuration for `aptos_block_partitioner::sharded_block_partitioner::ShardedBlockPartitioner`,
 /// which is also referred to as `V1` in executor-benchmark after `aptos_block_partitioner::v2` is added.
-#[derive(Clone, Copy, Debug, Parser)]
+#[derive(Clone, Copy, Debug)]
 pub struct PartitionerV1Config {
     pub num_shards: usize,
     pub max_partitioning_rounds: RoundId,
@@ -45,21 +42,19 @@ impl PartitionerV1Config {
         self.partition_last_round = partition_last_round;
         self
     }
-}
 
-impl Default for PartitionerV1Config {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl PartitionerConfig for PartitionerV1Config {
-    fn build(&self) -> Box<dyn BlockPartitioner> {
+    pub fn build(self) -> Box<dyn BlockPartitioner> {
         Box::new(ShardedBlockPartitioner::new(
             self.num_shards,
             self.max_partitioning_rounds,
             self.cross_shard_dep_avoid_threshold,
             self.partition_last_round,
         ))
+    }
+}
+
+impl Default for PartitionerV1Config {
+    fn default() -> Self {
+        Self::new()
     }
 }

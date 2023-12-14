@@ -4,13 +4,6 @@
 
 use clap::Parser;
 use codespan_reporting::diagnostic::Severity;
-use move_command_line_common::env::{read_bool_env_var, read_env_var};
-use move_compiler::command_line as cli;
-use once_cell::sync::Lazy;
-use std::{
-    cell::RefCell,
-    collections::{BTreeMap, BTreeSet},
-};
 
 /// Defines options for a run of the compiler.
 #[derive(Parser, Clone, Debug)]
@@ -31,19 +24,12 @@ pub struct Options {
     /// Output directory.
     #[clap(short, long, default_value = "")]
     pub output_dir: String,
-    /// Debug compiler by printing out internal information
-    #[clap(long = cli::DEBUG_FLAG, default_value=debug_compiler_env_var_str())]
-    pub debug: bool,
     /// Whether to dump intermediate bytecode for debugging.
     #[clap(long = "dump-bytecode")]
     pub dump_bytecode: bool,
     /// Do not complain about unknown attributes in Move code.
     #[clap(long, default_value = "false")]
     pub skip_attribute_checks: bool,
-    /// Known attributes for this dialect of move; if empty, assumes third-party Move.
-    /// Only used if skip_attribute_checks is false.
-    #[clap(skip)]
-    pub known_attributes: BTreeSet<String>,
     /// Whether we generate code for tests. This specifically guarantees stable output
     /// for baseline testing.
     #[clap(long)]
@@ -56,9 +42,6 @@ pub struct Options {
         num_args = 0..
     )]
     pub experiments: Vec<String>,
-    /// A transient cache for memoization of experiment checks.
-    #[clap(skip)]
-    pub experiment_cache: RefCell<BTreeMap<String, bool>>,
     /// Sources to compile (positional arg, therefore last)
     pub sources: Vec<String>,
 }
@@ -78,38 +61,6 @@ impl Options {
 
     /// Returns true if an experiment is on.
     pub fn experiment_on(&self, name: &str) -> bool {
-        let on_opt = self.experiment_cache.borrow().get(name).cloned();
-        if let Some(on) = on_opt {
-            on
-        } else {
-            let on = self.experiments.iter().any(|s| s == name)
-                || compiler_exp_var().iter().any(|s| s == name);
-            self.experiment_cache
-                .borrow_mut()
-                .insert(name.to_string(), on);
-            on
-        }
-    }
-}
-
-fn debug_compiler_env_var() -> bool {
-    static DEBUG_COMPILER: Lazy<bool> =
-        Lazy::new(|| read_bool_env_var(cli::MOVE_COMPILER_DEBUG_ENV_VAR));
-    *DEBUG_COMPILER
-}
-
-fn compiler_exp_var() -> Vec<String> {
-    static EXP_VAR: Lazy<Vec<String>> = Lazy::new(|| {
-        let s = read_env_var("MOVE_COMPILER_EXP");
-        s.split(',').map(|s| s.to_string()).collect()
-    });
-    (*EXP_VAR).clone()
-}
-
-fn debug_compiler_env_var_str() -> &'static str {
-    if debug_compiler_env_var() {
-        "true"
-    } else {
-        "false"
+        self.experiments.iter().any(|s| s == name)
     }
 }

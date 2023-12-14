@@ -1,5 +1,5 @@
 
-<a id="0x3_token_coin_swap"></a>
+<a name="0x3_token_coin_swap"></a>
 
 # Module `0x3::token_coin_swap`
 
@@ -23,7 +23,6 @@ Deprecated module
 -  [Function `withdraw_token_from_escrow`](#0x3_token_coin_swap_withdraw_token_from_escrow)
 -  [Function `cancel_token_listing`](#0x3_token_coin_swap_cancel_token_listing)
 -  [Specification](#@Specification_1)
-    -  [Module-level Specification](#@Module-level_Specification_2)
 
 
 <pre><code><b>use</b> <a href="../../aptos-framework/../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error">0x1::error</a>;
@@ -36,7 +35,7 @@ Deprecated module
 
 
 
-<a id="0x3_token_coin_swap_TokenCoinSwap"></a>
+<a name="0x3_token_coin_swap_TokenCoinSwap"></a>
 
 ## Struct `TokenCoinSwap`
 
@@ -70,7 +69,7 @@ TokenCoinSwap records a swap ask for swapping token_amount with CoinType with a 
 
 </details>
 
-<a id="0x3_token_coin_swap_TokenListings"></a>
+<a name="0x3_token_coin_swap_TokenListings"></a>
 
 ## Resource `TokenListings`
 
@@ -110,7 +109,7 @@ The listing of all tokens for swapping stored at token owner's account
 
 </details>
 
-<a id="0x3_token_coin_swap_TokenEscrow"></a>
+<a name="0x3_token_coin_swap_TokenEscrow"></a>
 
 ## Struct `TokenEscrow`
 
@@ -144,7 +143,7 @@ TokenEscrow holds the tokens that cannot be withdrawn or transferred
 
 </details>
 
-<a id="0x3_token_coin_swap_TokenStoreEscrow"></a>
+<a name="0x3_token_coin_swap_TokenStoreEscrow"></a>
 
 ## Resource `TokenStoreEscrow`
 
@@ -172,7 +171,7 @@ TokenStoreEscrow holds a map of token id to their tokenEscrow
 
 </details>
 
-<a id="0x3_token_coin_swap_TokenListingEvent"></a>
+<a name="0x3_token_coin_swap_TokenListingEvent"></a>
 
 ## Struct `TokenListingEvent`
 
@@ -223,7 +222,7 @@ TokenStoreEscrow holds a map of token id to their tokenEscrow
 
 </details>
 
-<a id="0x3_token_coin_swap_TokenSwapEvent"></a>
+<a name="0x3_token_coin_swap_TokenSwapEvent"></a>
 
 ## Struct `TokenSwapEvent`
 
@@ -274,12 +273,12 @@ TokenStoreEscrow holds a map of token id to their tokenEscrow
 
 </details>
 
-<a id="@Constants_0"></a>
+<a name="@Constants_0"></a>
 
 ## Constants
 
 
-<a id="0x3_token_coin_swap_EDEPRECATED_MODULE"></a>
+<a name="0x3_token_coin_swap_EDEPRECATED_MODULE"></a>
 
 Deprecated module
 
@@ -289,7 +288,7 @@ Deprecated module
 
 
 
-<a id="0x3_token_coin_swap_ENOT_ENOUGH_COIN"></a>
+<a name="0x3_token_coin_swap_ENOT_ENOUGH_COIN"></a>
 
 Not enough coin to buy token
 
@@ -299,7 +298,7 @@ Not enough coin to buy token
 
 
 
-<a id="0x3_token_coin_swap_ETOKEN_ALREADY_LISTED"></a>
+<a name="0x3_token_coin_swap_ETOKEN_ALREADY_LISTED"></a>
 
 Token already listed
 
@@ -309,7 +308,7 @@ Token already listed
 
 
 
-<a id="0x3_token_coin_swap_ETOKEN_AMOUNT_NOT_MATCH"></a>
+<a name="0x3_token_coin_swap_ETOKEN_AMOUNT_NOT_MATCH"></a>
 
 Token buy amount doesn't match listing amount
 
@@ -319,7 +318,7 @@ Token buy amount doesn't match listing amount
 
 
 
-<a id="0x3_token_coin_swap_ETOKEN_CANNOT_MOVE_OUT_OF_ESCROW_BEFORE_LOCKUP_TIME"></a>
+<a name="0x3_token_coin_swap_ETOKEN_CANNOT_MOVE_OUT_OF_ESCROW_BEFORE_LOCKUP_TIME"></a>
 
 Token cannot be moved out of escrow before the lockup time
 
@@ -329,7 +328,7 @@ Token cannot be moved out of escrow before the lockup time
 
 
 
-<a id="0x3_token_coin_swap_ETOKEN_LISTING_NOT_EXIST"></a>
+<a name="0x3_token_coin_swap_ETOKEN_LISTING_NOT_EXIST"></a>
 
 Token listing no longer exists
 
@@ -339,7 +338,7 @@ Token listing no longer exists
 
 
 
-<a id="0x3_token_coin_swap_ETOKEN_MIN_PRICE_NOT_MATCH"></a>
+<a name="0x3_token_coin_swap_ETOKEN_MIN_PRICE_NOT_MATCH"></a>
 
 Token buy price doesn't match listing price
 
@@ -349,7 +348,7 @@ Token buy price doesn't match listing price
 
 
 
-<a id="0x3_token_coin_swap_ETOKEN_NOT_IN_ESCROW"></a>
+<a name="0x3_token_coin_swap_ETOKEN_NOT_IN_ESCROW"></a>
 
 Token is not in escrow
 
@@ -359,7 +358,7 @@ Token is not in escrow
 
 
 
-<a id="0x3_token_coin_swap_does_listing_exist"></a>
+<a name="0x3_token_coin_swap_does_listing_exist"></a>
 
 ## Function `does_listing_exist`
 
@@ -386,7 +385,7 @@ Token is not in escrow
 
 </details>
 
-<a id="0x3_token_coin_swap_exchange_coin_for_token"></a>
+<a name="0x3_token_coin_swap_exchange_coin_for_token"></a>
 
 ## Function `exchange_coin_for_token`
 
@@ -420,7 +419,7 @@ Coin owner withdraw coin to swap with tokens listed for swapping at the token ow
 
 </details>
 
-<a id="0x3_token_coin_swap_list_token_for_swap"></a>
+<a name="0x3_token_coin_swap_list_token_for_swap"></a>
 
 ## Function `list_token_for_swap`
 
@@ -454,7 +453,7 @@ Token owner lists their token for swapping
 
 </details>
 
-<a id="0x3_token_coin_swap_initialize_token_listing"></a>
+<a name="0x3_token_coin_swap_initialize_token_listing"></a>
 
 ## Function `initialize_token_listing`
 
@@ -479,7 +478,7 @@ Initalize the token listing for a token owner
 
 </details>
 
-<a id="0x3_token_coin_swap_initialize_token_store_escrow"></a>
+<a name="0x3_token_coin_swap_initialize_token_store_escrow"></a>
 
 ## Function `initialize_token_store_escrow`
 
@@ -504,7 +503,7 @@ Intialize the token escrow
 
 </details>
 
-<a id="0x3_token_coin_swap_deposit_token_to_escrow"></a>
+<a name="0x3_token_coin_swap_deposit_token_to_escrow"></a>
 
 ## Function `deposit_token_to_escrow`
 
@@ -534,7 +533,7 @@ Put the token into escrow that cannot be transferred or withdrawed by the owner.
 
 </details>
 
-<a id="0x3_token_coin_swap_withdraw_token_from_escrow_internal"></a>
+<a name="0x3_token_coin_swap_withdraw_token_from_escrow_internal"></a>
 
 ## Function `withdraw_token_from_escrow_internal`
 
@@ -563,7 +562,7 @@ Private function for withdraw tokens from an escrow stored in token owner addres
 
 </details>
 
-<a id="0x3_token_coin_swap_withdraw_token_from_escrow"></a>
+<a name="0x3_token_coin_swap_withdraw_token_from_escrow"></a>
 
 ## Function `withdraw_token_from_escrow`
 
@@ -592,7 +591,7 @@ Withdraw tokens from the token escrow. It needs a signer to authorize
 
 </details>
 
-<a id="0x3_token_coin_swap_cancel_token_listing"></a>
+<a name="0x3_token_coin_swap_cancel_token_listing"></a>
 
 ## Function `cancel_token_listing`
 
@@ -621,14 +620,9 @@ Cancel token listing for a fixed amount
 
 </details>
 
-<a id="@Specification_1"></a>
+<a name="@Specification_1"></a>
 
 ## Specification
-
-
-<a id="@Module-level_Specification_2"></a>
-
-### Module-level Specification
 
 
 

@@ -55,7 +55,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 1 },
+      "gridPos": { "h": 7, "w": 17, "x": 0, "y": 1 },
       "id": 255,
       "options": {
         "displayMode": "lcd",
@@ -66,7 +66,7 @@
         "showUnfilled": true,
         "valueMode": "color"
       },
-      "pluginVersion": "10.2.0-60477",
+      "pluginVersion": "10.2.0-59542pre",
       "repeatDirection": "h",
       "targets": [
         {
@@ -115,7 +115,7 @@
         "showUnfilled": true,
         "valueMode": "color"
       },
-      "pluginVersion": "10.2.0-60477",
+      "pluginVersion": "10.2.0-59542pre",
       "repeatDirection": "h",
       "targets": [
         {
@@ -150,7 +150,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -258,7 +257,7 @@
         "showUnfilled": true,
         "valueMode": "color"
       },
-      "pluginVersion": "10.2.0-60477",
+      "pluginVersion": "10.2.0-59542pre",
       "repeatDirection": "h",
       "targets": [
         {
@@ -294,7 +293,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -402,7 +400,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "10.2.0-60477",
+      "pluginVersion": "10.2.0-59542pre",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -458,7 +456,7 @@
         "showUnfilled": true,
         "valueMode": "color"
       },
-      "pluginVersion": "10.2.0-60477",
+      "pluginVersion": "10.2.0-59542pre",
       "repeatDirection": "h",
       "targets": [
         {
@@ -494,7 +492,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -611,7 +608,7 @@
       "nullPointMode": "null",
       "options": { "alertThreshold": true },
       "percentage": false,
-      "pluginVersion": "10.2.0-60477",
+      "pluginVersion": "10.2.0-59542pre",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -654,7 +651,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -2226,7 +2222,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -2283,7 +2278,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -2340,7 +2334,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -2391,6 +2384,7 @@
   "refresh": "10s",
   "revision": 1,
   "schemaVersion": 38,
+  "style": "dark",
   "tags": ["aptos-core"],
   "templating": {
     "list": [
@@ -2539,7 +2533,7 @@
         "multi": true,
         "name": "role",
         "options": [
-          { "selected": false, "text": "All", "value": "$__all" },
+          { "selected": true, "text": "All", "value": "$__all" },
           { "selected": false, "text": "fullnode", "value": "fullnode" },
           { "selected": false, "text": "validator_fullnode", "value": "validator_fullnode" }
         ],
@@ -2577,6 +2571,6 @@
   "timezone": "",
   "title": "storage-backup-and-restore",
   "uid": "9oXpx4n4z",
-  "version": 39,
+  "version": 38,
   "weekStart": ""
 }

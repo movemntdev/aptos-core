@@ -4,36 +4,18 @@
 pub mod metrics;
 pub mod worker;
 
-use anyhow::{Context, Result};
+use anyhow::{Ok, Result};
 use aptos_indexer_grpc_server_framework::RunnableConfig;
-use aptos_indexer_grpc_utils::{config::IndexerGrpcFileStoreConfig, types::RedisUrl};
+use aptos_indexer_grpc_utils::config::IndexerGrpcFileStoreConfig;
 use serde::{Deserialize, Serialize};
-use url::Url;
 use worker::Worker;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct IndexerGrpcCacheWorkerConfig {
-    pub fullnode_grpc_address: Url,
+    pub fullnode_grpc_address: String,
     pub file_store_config: IndexerGrpcFileStoreConfig,
-    pub redis_main_instance_address: RedisUrl,
-    pub enable_verbose_logging: Option<bool>,
-}
-
-impl IndexerGrpcCacheWorkerConfig {
-    pub fn new(
-        fullnode_grpc_address: Url,
-        file_store_config: IndexerGrpcFileStoreConfig,
-        redis_main_instance_address: RedisUrl,
-        enable_verbose_logging: Option<bool>,
-    ) -> Self {
-        Self {
-            fullnode_grpc_address,
-            file_store_config,
-            redis_main_instance_address,
-            enable_verbose_logging,
-        }
-    }
+    pub redis_main_instance_address: String,
 }
 
 #[async_trait::async_trait]
@@ -43,15 +25,13 @@ impl RunnableConfig for IndexerGrpcCacheWorkerConfig {
             self.fullnode_grpc_address.clone(),
             self.redis_main_instance_address.clone(),
             self.file_store_config.clone(),
-            self.enable_verbose_logging.unwrap_or(false),
         )
-        .await
-        .context("Failed to create cache worker")?;
-        worker.run().await?;
+        .await;
+        worker.run().await;
         Ok(())
     }
 
     fn get_server_name(&self) -> String {
-        "idxcachewrkr".to_string()
+        "idxcache".to_string()
     }
 }

@@ -1,5 +1,5 @@
 
-<a id="0x1_version"></a>
+<a name="0x1_version"></a>
 
 # Module `0x1::version`
 
@@ -13,7 +13,6 @@ Maintains the version number for the blockchain.
 -  [Function `set_version`](#0x1_version_set_version)
 -  [Function `initialize_for_test`](#0x1_version_initialize_for_test)
 -  [Specification](#@Specification_1)
-    -  [Module-level Specification](#@Module-level_Specification_2)
     -  [Function `initialize`](#@Specification_1_initialize)
     -  [Function `set_version`](#@Specification_1_set_version)
     -  [Function `initialize_for_test`](#@Specification_1_initialize_for_test)
@@ -27,7 +26,7 @@ Maintains the version number for the blockchain.
 
 
 
-<a id="0x1_version_Version"></a>
+<a name="0x1_version_Version"></a>
 
 ## Resource `Version`
 
@@ -54,7 +53,7 @@ Maintains the version number for the blockchain.
 
 </details>
 
-<a id="0x1_version_SetVersionCapability"></a>
+<a name="0x1_version_SetVersionCapability"></a>
 
 ## Resource `SetVersionCapability`
 
@@ -81,12 +80,12 @@ Maintains the version number for the blockchain.
 
 </details>
 
-<a id="@Constants_0"></a>
+<a name="@Constants_0"></a>
 
 ## Constants
 
 
-<a id="0x1_version_EINVALID_MAJOR_VERSION_NUMBER"></a>
+<a name="0x1_version_EINVALID_MAJOR_VERSION_NUMBER"></a>
 
 Specified major version number must be greater than current version number.
 
@@ -96,7 +95,7 @@ Specified major version number must be greater than current version number.
 
 
 
-<a id="0x1_version_ENOT_AUTHORIZED"></a>
+<a name="0x1_version_ENOT_AUTHORIZED"></a>
 
 Account is not authorized to make this change.
 
@@ -106,7 +105,7 @@ Account is not authorized to make this change.
 
 
 
-<a id="0x1_version_initialize"></a>
+<a name="0x1_version_initialize"></a>
 
 ## Function `initialize`
 
@@ -137,7 +136,7 @@ Publishes the Version config.
 
 </details>
 
-<a id="0x1_version_set_version"></a>
+<a name="0x1_version_set_version"></a>
 
 ## Function `set_version`
 
@@ -172,7 +171,7 @@ This can be called by on chain governance.
 
 </details>
 
-<a id="0x1_version_initialize_for_test"></a>
+<a name="0x1_version_initialize_for_test"></a>
 
 ## Function `initialize_for_test`
 
@@ -199,14 +198,9 @@ to update the version.
 
 </details>
 
-<a id="@Specification_1"></a>
+<a name="@Specification_1"></a>
 
 ## Specification
-
-
-<a id="@Module-level_Specification_2"></a>
-
-### Module-level Specification
 
 
 
@@ -216,7 +210,7 @@ to update the version.
 
 
 
-<a id="@Specification_1_initialize"></a>
+<a name="@Specification_1_initialize"></a>
 
 ### Function `initialize`
 
@@ -231,15 +225,11 @@ Abort if resource already exists in <code>@aptos_framwork</code> when initializi
 <pre><code><b>aborts_if</b> <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework) != @aptos_framework;
 <b>aborts_if</b> <b>exists</b>&lt;<a href="version.md#0x1_version_Version">Version</a>&gt;(@aptos_framework);
 <b>aborts_if</b> <b>exists</b>&lt;<a href="version.md#0x1_version_SetVersionCapability">SetVersionCapability</a>&gt;(@aptos_framework);
-<b>ensures</b> <b>exists</b>&lt;<a href="version.md#0x1_version_Version">Version</a>&gt;(@aptos_framework);
-<b>ensures</b> <b>exists</b>&lt;<a href="version.md#0x1_version_SetVersionCapability">SetVersionCapability</a>&gt;(@aptos_framework);
-<b>ensures</b> <b>global</b>&lt;<a href="version.md#0x1_version_Version">Version</a>&gt;(@aptos_framework) == <a href="version.md#0x1_version_Version">Version</a> { major: initial_version };
-<b>ensures</b> <b>global</b>&lt;<a href="version.md#0x1_version_SetVersionCapability">SetVersionCapability</a>&gt;(@aptos_framework) == <a href="version.md#0x1_version_SetVersionCapability">SetVersionCapability</a> {};
 </code></pre>
 
 
 
-<a id="@Specification_1_set_version"></a>
+<a name="@Specification_1_set_version"></a>
 
 ### Function `set_version`
 
@@ -261,12 +251,11 @@ Abort if resource already exists in <code>@aptos_framwork</code> when initializi
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="version.md#0x1_version_Version">Version</a>&gt;(@aptos_framework);
 <b>let</b> old_major = <b>global</b>&lt;<a href="version.md#0x1_version_Version">Version</a>&gt;(@aptos_framework).major;
 <b>aborts_if</b> !(old_major &lt; major);
-<b>ensures</b> <b>global</b>&lt;<a href="version.md#0x1_version_Version">Version</a>&gt;(@aptos_framework).major == major;
 </code></pre>
 
 
 
-<a id="@Specification_1_initialize_for_test"></a>
+<a name="@Specification_1_initialize_for_test"></a>
 
 ### Function `initialize_for_test`
 

@@ -1,5 +1,5 @@
 
-<a id="0x1_aptos_coin"></a>
+<a name="0x1_aptos_coin"></a>
 
 # Module `0x1::aptos_coin`
 
@@ -21,7 +21,6 @@ modified from https://github.com/move-language/move/tree/main/language/documenta
 -  [Function `claim_mint_capability`](#0x1_aptos_coin_claim_mint_capability)
 -  [Function `find_delegation`](#0x1_aptos_coin_find_delegation)
 -  [Specification](#@Specification_1)
-    -  [Module-level Specification](#@Module-level_Specification_2)
     -  [Function `initialize`](#@Specification_1_initialize)
     -  [Function `destroy_mint_cap`](#@Specification_1_destroy_mint_cap)
     -  [Function `configure_accounts_for_test`](#@Specification_1_configure_accounts_for_test)
@@ -42,7 +41,7 @@ modified from https://github.com/move-language/move/tree/main/language/documenta
 
 
 
-<a id="0x1_aptos_coin_AptosCoin"></a>
+<a name="0x1_aptos_coin_AptosCoin"></a>
 
 ## Resource `AptosCoin`
 
@@ -69,7 +68,7 @@ modified from https://github.com/move-language/move/tree/main/language/documenta
 
 </details>
 
-<a id="0x1_aptos_coin_MintCapStore"></a>
+<a name="0x1_aptos_coin_MintCapStore"></a>
 
 ## Resource `MintCapStore`
 
@@ -96,7 +95,7 @@ modified from https://github.com/move-language/move/tree/main/language/documenta
 
 </details>
 
-<a id="0x1_aptos_coin_DelegatedMintCapability"></a>
+<a name="0x1_aptos_coin_DelegatedMintCapability"></a>
 
 ## Struct `DelegatedMintCapability`
 
@@ -124,7 +123,7 @@ Delegation token created by delegator and can be claimed by the delegatee as Min
 
 </details>
 
-<a id="0x1_aptos_coin_Delegations"></a>
+<a name="0x1_aptos_coin_Delegations"></a>
 
 ## Resource `Delegations`
 
@@ -152,12 +151,12 @@ The container stores the current pending delegations.
 
 </details>
 
-<a id="@Constants_0"></a>
+<a name="@Constants_0"></a>
 
 ## Constants
 
 
-<a id="0x1_aptos_coin_EALREADY_DELEGATED"></a>
+<a name="0x1_aptos_coin_EALREADY_DELEGATED"></a>
 
 Mint capability has already been delegated to this specified address
 
@@ -167,7 +166,7 @@ Mint capability has already been delegated to this specified address
 
 
 
-<a id="0x1_aptos_coin_EDELEGATION_NOT_FOUND"></a>
+<a name="0x1_aptos_coin_EDELEGATION_NOT_FOUND"></a>
 
 Cannot find delegation of mint capability to this account
 
@@ -177,7 +176,7 @@ Cannot find delegation of mint capability to this account
 
 
 
-<a id="0x1_aptos_coin_ENO_CAPABILITIES"></a>
+<a name="0x1_aptos_coin_ENO_CAPABILITIES"></a>
 
 Account does not have mint capability
 
@@ -187,7 +186,7 @@ Account does not have mint capability
 
 
 
-<a id="0x1_aptos_coin_initialize"></a>
+<a name="0x1_aptos_coin_initialize"></a>
 
 ## Function `initialize`
 
@@ -227,7 +226,7 @@ Can only called during genesis to initialize the Aptos coin.
 
 </details>
 
-<a id="0x1_aptos_coin_has_mint_capability"></a>
+<a name="0x1_aptos_coin_has_mint_capability"></a>
 
 ## Function `has_mint_capability`
 
@@ -251,7 +250,7 @@ Can only called during genesis to initialize the Aptos coin.
 
 </details>
 
-<a id="0x1_aptos_coin_destroy_mint_cap"></a>
+<a name="0x1_aptos_coin_destroy_mint_cap"></a>
 
 ## Function `destroy_mint_cap`
 
@@ -279,7 +278,7 @@ and accounts have been initialized during genesis.
 
 </details>
 
-<a id="0x1_aptos_coin_configure_accounts_for_test"></a>
+<a name="0x1_aptos_coin_configure_accounts_for_test"></a>
 
 ## Function `configure_accounts_for_test`
 
@@ -320,7 +319,7 @@ accounts.
 
 </details>
 
-<a id="0x1_aptos_coin_mint"></a>
+<a name="0x1_aptos_coin_mint"></a>
 
 ## Function `mint`
 
@@ -359,7 +358,7 @@ Create new coins and deposit them into dst_addr's account.
 
 </details>
 
-<a id="0x1_aptos_coin_delegate_mint_capability"></a>
+<a name="0x1_aptos_coin_delegate_mint_capability"></a>
 
 ## Function `delegate_mint_capability`
 
@@ -391,7 +390,7 @@ Create delegated token for the address so the account could claim MintCapability
 
 </details>
 
-<a id="0x1_aptos_coin_claim_mint_capability"></a>
+<a name="0x1_aptos_coin_claim_mint_capability"></a>
 
 ## Function `claim_mint_capability`
 
@@ -425,7 +424,7 @@ Claim the delegated mint capability and destroy the delegated token.
 
 </details>
 
-<a id="0x1_aptos_coin_find_delegation"></a>
+<a name="0x1_aptos_coin_find_delegation"></a>
 
 ## Function `find_delegation`
 
@@ -461,14 +460,9 @@ Claim the delegated mint capability and destroy the delegated token.
 
 </details>
 
-<a id="@Specification_1"></a>
+<a name="@Specification_1"></a>
 
 ## Specification
-
-
-<a id="@Module-level_Specification_2"></a>
-
-### Module-level Specification
 
 
 
@@ -478,7 +472,7 @@ Claim the delegated mint capability and destroy the delegated token.
 
 
 
-<a id="@Specification_1_initialize"></a>
+<a name="@Specification_1_initialize"></a>
 
 ### Function `initialize`
 
@@ -489,22 +483,15 @@ Claim the delegated mint capability and destroy the delegated token.
 
 
 
-<pre><code><b>let</b> addr = <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework);
-<b>aborts_if</b> addr != @aptos_framework;
-<b>aborts_if</b> !<a href="../../aptos-stdlib/../move-stdlib/doc/string.md#0x1_string_spec_internal_check_utf8">string::spec_internal_check_utf8</a>(b"Aptos Coin");
-<b>aborts_if</b> !<a href="../../aptos-stdlib/../move-stdlib/doc/string.md#0x1_string_spec_internal_check_utf8">string::spec_internal_check_utf8</a>(b"APT");
-<b>aborts_if</b> <b>exists</b>&lt;<a href="aptos_coin.md#0x1_aptos_coin_MintCapStore">MintCapStore</a>&gt;(addr);
-<b>aborts_if</b> <b>exists</b>&lt;<a href="coin.md#0x1_coin_CoinInfo">coin::CoinInfo</a>&lt;<a href="aptos_coin.md#0x1_aptos_coin_AptosCoin">AptosCoin</a>&gt;&gt;(addr);
-<b>aborts_if</b> !<b>exists</b>&lt;<a href="aggregator_factory.md#0x1_aggregator_factory_AggregatorFactory">aggregator_factory::AggregatorFactory</a>&gt;(addr);
+<pre><code><b>pragma</b> aborts_if_is_partial;
+<b>let</b> addr = <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework);
 <b>ensures</b> <b>exists</b>&lt;<a href="aptos_coin.md#0x1_aptos_coin_MintCapStore">MintCapStore</a>&gt;(addr);
 <b>ensures</b> <b>exists</b>&lt;<a href="coin.md#0x1_coin_CoinInfo">coin::CoinInfo</a>&lt;<a href="aptos_coin.md#0x1_aptos_coin_AptosCoin">AptosCoin</a>&gt;&gt;(addr);
-<b>ensures</b> result_1 == BurnCapability&lt;<a href="aptos_coin.md#0x1_aptos_coin_AptosCoin">AptosCoin</a>&gt; {};
-<b>ensures</b> result_2 == MintCapability&lt;<a href="aptos_coin.md#0x1_aptos_coin_AptosCoin">AptosCoin</a>&gt; {};
 </code></pre>
 
 
 
-<a id="@Specification_1_destroy_mint_cap"></a>
+<a name="@Specification_1_destroy_mint_cap"></a>
 
 ### Function `destroy_mint_cap`
 
@@ -522,7 +509,7 @@ Claim the delegated mint capability and destroy the delegated token.
 
 
 
-<a id="@Specification_1_configure_accounts_for_test"></a>
+<a name="@Specification_1_configure_accounts_for_test"></a>
 
 ### Function `configure_accounts_for_test`
 
@@ -538,7 +525,7 @@ Claim the delegated mint capability and destroy the delegated token.
 
 
 
-<a id="@Specification_1_mint"></a>
+<a name="@Specification_1_mint"></a>
 
 ### Function `mint`
 
@@ -554,7 +541,7 @@ Claim the delegated mint capability and destroy the delegated token.
 
 
 
-<a id="@Specification_1_delegate_mint_capability"></a>
+<a name="@Specification_1_delegate_mint_capability"></a>
 
 ### Function `delegate_mint_capability`
 
@@ -570,7 +557,7 @@ Claim the delegated mint capability and destroy the delegated token.
 
 
 
-<a id="@Specification_1_claim_mint_capability"></a>
+<a name="@Specification_1_claim_mint_capability"></a>
 
 ### Function `claim_mint_capability`
 
@@ -586,7 +573,7 @@ Claim the delegated mint capability and destroy the delegated token.
 
 
 
-<a id="@Specification_1_find_delegation"></a>
+<a name="@Specification_1_find_delegation"></a>
 
 ### Function `find_delegation`
 
@@ -603,7 +590,7 @@ Claim the delegated mint capability and destroy the delegated token.
 
 
 
-<a id="0x1_aptos_coin_ExistsAptosCoin"></a>
+<a name="0x1_aptos_coin_ExistsAptosCoin"></a>
 
 
 <pre><code><b>schema</b> <a href="aptos_coin.md#0x1_aptos_coin_ExistsAptosCoin">ExistsAptosCoin</a> {

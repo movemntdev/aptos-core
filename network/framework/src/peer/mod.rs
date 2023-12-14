@@ -18,13 +18,13 @@
 use crate::{
     counters::{
         self, network_application_inbound_traffic, network_application_outbound_traffic,
-        FAILED_LABEL, RECEIVED_LABEL, SENT_LABEL,
+        RECEIVED_LABEL, SENT_LABEL,
     },
     logging::NetworkSchema,
     peer_manager::{PeerManagerError, TransportNotification},
     protocols::{
         direct_send::Message,
-        rpc::{error::RpcError, InboundRpcRequest, InboundRpcs, OutboundRpcRequest, OutboundRpcs},
+        rpc::{InboundRpcRequest, InboundRpcs, OutboundRpcRequest, OutboundRpcs},
         stream::{InboundStreamBuffer, OutboundStream, StreamMessage},
         wire::messaging::v1::{
             DirectSendMsg, ErrorCode, MultiplexMessage, MultiplexMessageSink,
@@ -270,36 +270,12 @@ where
                 // Drive the queue of pending inbound rpcs. When one is fulfilled
                 // by an upstream protocol, send the response to the remote peer.
                 maybe_response = self.inbound_rpcs.next_completed_response() => {
-                    // Extract the relevant metadata from the message
-                    let message_metadata = match &maybe_response {
-                        Ok((response, protocol_id)) => Some((response.request_id, *protocol_id)),
-                        _ => None,
-                    };
-
-                    // Send the response to the remote peer
-                    if let Err(error) = self.inbound_rpcs.send_outbound_response(&mut write_reqs_tx, maybe_response).await {
-                        // It's quite common for applications to drop an RPC request.
-                        // If this happens, we want to avoid logging a warning/error
-                        // (as it makes the logs noisy). Otherwise, we log normally.
-                        let network_schema = NetworkSchema::new(&self.network_context)
-                            .connection_metadata(&self.connection_metadata);
-                        let error_string = format!("{} Error in handling inbound rpc request (metadata: {:?}), error: {}", self.network_context,  message_metadata, error);
-                        match error {
-                            RpcError::UnexpectedResponseChannelCancel => {
-                                debug!(
-                                    network_schema,
-                                    error = %error,
-                                    "{}", error_string
-                                );
-                            },
-                            error => {
-                                warn!(
-                                    network_schema,
-                                    error = %error,
-                                    "{}", error_string
-                                );
-                            }
-                        }
+                    if let Err(err) = self.inbound_rpcs.send_outbound_response(&mut write_reqs_tx, maybe_response).await {
+                        warn!(
+                            NetworkSchema::new(&self.network_context).connection_metadata(&self.connection_metadata),
+                            error = %err,
+                            "{} Error in handling inbound rpc request, error: {}", self.network_context, err,
+                        );
                     }
                 },
                 // Poll the queue of pending outbound rpc tasks for the next
@@ -547,7 +523,10 @@ where
             peer_id.short_str(),
             protocol_id
         );
-        self.update_inbound_direct_send_metrics(message.protocol_id, data.len() as u64);
+        let data_len = data.len() as u64;
+        counters::direct_send_messages(&self.network_context, RECEIVED_LABEL).inc();
+        counters::direct_send_bytes(&self.network_context, RECEIVED_LABEL).inc_by(data_len);
+        network_application_inbound_traffic(self.network_context, message.protocol_id, data_len);
 
         let notif = PeerNotification::RecvMessage(Message {
             protocol_id,
@@ -565,16 +544,6 @@ where
         }
     }
 
-    /// Updates the inbound direct send metrics (e.g., messages and bytes received)
-    fn update_inbound_direct_send_metrics(&self, protocol_id: ProtocolId, data_len: u64) {
-        // Update the metrics for the received direct send message
-        counters::direct_send_messages(&self.network_context, RECEIVED_LABEL).inc();
-        counters::direct_send_bytes(&self.network_context, RECEIVED_LABEL).inc_by(data_len);
-
-        // Update the general network traffic metrics
-        network_application_inbound_traffic(self.network_context, protocol_id, data_len);
-    }
-
     async fn handle_outbound_request(
         &mut self,
         request: PeerRequest,
@@ -589,9 +558,13 @@ where
             // To send an outbound DirectSendMsg, we just bump some counters and
             // push it onto our outbound writer queue.
             PeerRequest::SendDirectSend(message) => {
-                // Create the direct send message
                 let message_len = message.mdata.len();
                 let protocol_id = message.protocol_id;
+                network_application_outbound_traffic(
+                    self.network_context,
+                    protocol_id,
+                    message_len as u64,
+                );
                 let message = NetworkMessage::DirectSendMsg(DirectSendMsg {
                     protocol_id,
                     priority: Priority::default(),
@@ -600,10 +573,11 @@ where
 
                 match write_reqs_tx.send(message).await {
                     Ok(_) => {
-                        self.update_outbound_direct_send_metrics(protocol_id, message_len as u64);
+                        counters::direct_send_messages(&self.network_context, SENT_LABEL).inc();
+                        counters::direct_send_bytes(&self.network_context, SENT_LABEL)
+                            .inc_by(message_len as u64);
                     },
                     Err(e) => {
-                        counters::direct_send_messages(&self.network_context, FAILED_LABEL).inc();
                         warn!(
                             NetworkSchema::new(&self.network_context)
                                 .connection_metadata(&self.connection_metadata),
@@ -618,6 +592,11 @@ where
             },
             PeerRequest::SendRpc(request) => {
                 let protocol_id = request.protocol_id;
+                network_application_outbound_traffic(
+                    self.network_context,
+                    protocol_id,
+                    request.data.len() as u64,
+                );
                 if let Err(e) = self
                     .outbound_rpcs
                     .handle_outbound_request(request, write_reqs_tx)
@@ -635,16 +614,6 @@ where
                 }
             },
         }
-    }
-
-    /// Updates the outbound direct send metrics (e.g., messages and bytes sent)
-    fn update_outbound_direct_send_metrics(&mut self, protocol_id: ProtocolId, data_len: u64) {
-        // Update the metrics for the sent direct send message
-        counters::direct_send_messages(&self.network_context, SENT_LABEL).inc();
-        counters::direct_send_bytes(&self.network_context, SENT_LABEL).inc_by(data_len);
-
-        // Update the general network traffic metrics
-        network_application_outbound_traffic(self.network_context, protocol_id, data_len);
     }
 
     fn shutdown(&mut self, reason: DisconnectReason) {

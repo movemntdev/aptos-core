@@ -1,12 +1,10 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{
-    quorum_store::{
-        quorum_store_db::{QuorumStoreDB, QuorumStoreStorage},
-        types::{Batch, PersistedValue},
-    },
-    test_utils::create_vec_signed_transactions,
+use crate::quorum_store::{
+    quorum_store_db::{QuorumStoreDB, QuorumStoreStorage},
+    tests::utils::create_vec_signed_transactions,
+    types::{Batch, PersistedValue},
 };
 use aptos_consensus_types::proof_of_store::BatchId;
 use aptos_temppath::TempPath;

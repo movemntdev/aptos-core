@@ -4,10 +4,10 @@
 
 use poem_openapi::Tags;
 
-mod accept_type;
+pub mod accept_type;
 mod accounts;
 mod basic;
-mod bcs_payload;
+pub mod bcs_payload;
 mod blocks;
 mod check_size;
 pub mod context;
@@ -18,13 +18,13 @@ mod index;
 mod log;
 pub mod metrics;
 mod page;
-mod response;
+pub mod response;
 mod runtime;
 mod set_failpoints;
 mod state;
 #[cfg(test)]
 pub mod tests;
-mod transactions;
+pub mod transactions;
 mod view_function;
 
 /// API categories for the OpenAPI spec
@@ -58,4 +58,4 @@ pub enum ApiTags {
 // needed outside of the API, e.g. for fh-stream.
 pub use context::Context;
 pub use response::BasicError;
-pub use runtime::{attach_poem_to_runtime, bootstrap, get_api_service};
+pub use runtime::{attach_poem_to_runtime, bootstrap, get_api_service,get_raw_api_service,RawApi};

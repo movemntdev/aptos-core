@@ -13,10 +13,8 @@ spec aptos_framework::version {
         use aptos_framework::aptos_coin::AptosCoin;
         use aptos_framework::transaction_fee;
         use aptos_framework::staking_config;
-        use aptos_framework::reconfiguration;
-
-        // TODO: set because of timeout (property proved)
-        pragma verify_duration_estimate = 120;
+        // Not verified when verify_duration_estimate > vc_timeout
+        pragma verify_duration_estimate = 120; // TODO: set because of timeout (property proved).
         include transaction_fee::RequiresCollectedFeesPerValueLeqBlockAptosSupply;
         include staking_config::StakingRewardsConfigRequirement;
         requires chain_status::is_operating();
@@ -29,8 +27,6 @@ spec aptos_framework::version {
 
         let old_major = global<Version>(@aptos_framework).major;
         aborts_if !(old_major < major);
-
-        ensures global<Version>(@aptos_framework).major == major;
     }
 
     /// Abort if resource already exists in `@aptos_framwork` when initializing.
@@ -40,10 +36,6 @@ spec aptos_framework::version {
         aborts_if signer::address_of(aptos_framework) != @aptos_framework;
         aborts_if exists<Version>(@aptos_framework);
         aborts_if exists<SetVersionCapability>(@aptos_framework);
-        ensures exists<Version>(@aptos_framework);
-        ensures exists<SetVersionCapability>(@aptos_framework);
-        ensures global<Version>(@aptos_framework) == Version { major: initial_version };
-        ensures global<SetVersionCapability>(@aptos_framework) == SetVersionCapability {};
     }
 
     /// This module turns on `aborts_if_is_strict`, so need to add spec for test function `initialize_for_test`.

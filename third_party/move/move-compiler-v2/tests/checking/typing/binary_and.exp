@@ -8,7 +8,7 @@ module 0x8675309::M {
         And(false, true);
         And(true, false);
         And(true, true);
-        And(Copy(x), Move(x));
+        And(x, x);
         And(select M::R.f(r), select M::R.f(r));
         And(And(true, false), And(true, false));
         {
@@ -16,5 +16,4 @@ module 0x8675309::M {
           Tuple()
         }
     }
-    spec fun $t0(x: bool,r: M::R);
 } // end 0x8675309::M

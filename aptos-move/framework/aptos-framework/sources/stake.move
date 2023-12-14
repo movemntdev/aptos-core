@@ -441,7 +441,6 @@ module aptos_framework::stake {
         // Remove each validator from the validator set.
         while ({
             spec {
-                invariant i <= len;
                 invariant spec_validators_are_initialized(active_validators);
                 invariant spec_validator_indices_are_valid(active_validators);
                 invariant spec_validators_are_initialized(pending_inactive);
@@ -552,7 +551,7 @@ module aptos_framework::stake {
         move_from<OwnerCapability>(owner_address)
     }
 
-    /// Deposit `owner_cap` into `account`. This requires `account` to not already have ownership of another
+    /// Deposit `owner_cap` into `account`. This requires `account` to not already have owernship of another
     /// staking pool.
     public fun deposit_owner_cap(owner: &signer, owner_cap: OwnerCapability) {
         assert!(!exists<OwnerCapability>(signer::address_of(owner)), error::not_found(EOWNER_CAP_ALREADY_EXISTS));
@@ -991,10 +990,6 @@ module aptos_framework::stake {
         let validator_perf = borrow_global_mut<ValidatorPerformance>(@aptos_framework);
         let validator_len = vector::length(&validator_perf.validators);
 
-        spec {
-            update ghost_valid_perf = validator_perf;
-            update ghost_proposer_idx = proposer_index;
-        };
         // proposer_index is an option because it can be missing (for NilBlocks)
         if (option::is_some(&proposer_index)) {
             let cur_proposer_index = option::extract(&mut proposer_index);
@@ -1014,9 +1009,6 @@ module aptos_framework::stake {
         while ({
             spec {
                 invariant len(validator_perf.validators) == validator_len;
-                invariant (option::spec_is_some(ghost_proposer_idx) && option::spec_borrow(ghost_proposer_idx) < validator_len) ==>
-                    (validator_perf.validators[option::spec_borrow(ghost_proposer_idx)].successful_proposals ==
-                        ghost_valid_perf.validators[option::spec_borrow(ghost_proposer_idx)].successful_proposals + 1);
             };
             f < f_len
         }) {
@@ -1357,6 +1349,11 @@ module aptos_framework::stake {
 
     fun assert_owner_cap_exists(owner: address) {
         assert!(exists<OwnerCapability>(owner), error::not_found(EOWNER_CAP_NOT_FOUND));
+    }
+
+    // Will be deleted after transaction_fee has its own MintCap for storage refunds.
+    public(friend) fun copy_aptos_coin_mint_cap_for_storage_refund(): MintCapability<AptosCoin> acquires AptosCoinCapabilities {
+        borrow_global<AptosCoinCapabilities>(@aptos_framework).mint_cap
     }
 
     #[test_only]

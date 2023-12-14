@@ -4,7 +4,8 @@
 use aptos_gas_algebra::{AbstractValueSize, Fee, FeePerGasUnit, InternalGas, NumArgs, NumBytes};
 use aptos_gas_meter::AptosGasMeter;
 use aptos_types::{
-    account_config::CORE_CODE_ADDRESS, state_store::state_key::StateKey, write_set::WriteOpSize,
+    account_config::CORE_CODE_ADDRESS, contract_event::ContractEvent,
+    state_store::state_key::StateKey, write_set::WriteOp,
 };
 use move_binary_format::{
     errors::{PartialVMError, PartialVMResult, VMResult},
@@ -461,12 +462,24 @@ where
 
     delegate! {
         fn algebra(&self) -> &Self::Algebra;
+
+        fn storage_fee_for_state_slot(&self, op: &WriteOp) -> Fee;
+
+        fn storage_fee_refund_for_state_slot(&self, op: &WriteOp) -> Fee;
+
+        fn storage_fee_for_state_bytes(&self, key: &StateKey, op: &WriteOp) -> Fee;
+
+        fn storage_fee_per_event(&self, event: &ContractEvent) -> Fee;
+
+        fn storage_discount_for_events(&self, total_cost: Fee) -> Fee;
+
+        fn storage_fee_for_transaction_storage(&self, txn_size: NumBytes) -> Fee;
     }
 
     delegate_mut! {
         fn algebra_mut(&mut self) -> &mut Self::Algebra;
 
-        fn charge_io_gas_for_write(&mut self, key: &StateKey, op: &WriteOpSize) -> VMResult<()>;
+        fn charge_io_gas_for_write(&mut self, key: &StateKey, op: &WriteOp) -> VMResult<()>;
 
         fn charge_storage_fee(
             &mut self,

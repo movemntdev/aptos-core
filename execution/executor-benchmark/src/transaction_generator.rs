@@ -2,16 +2,13 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{
-    account_generator::{AccountCache, AccountGenerator},
-    metrics::{NUM_TXNS, TIMER},
-    transaction_executor::BENCHMARKS_BLOCK_EXECUTOR_ONCHAIN_CONFIG,
-};
+use crate::account_generator::{AccountCache, AccountGenerator};
 use aptos_crypto::{ed25519::Ed25519PrivateKey, HashValue};
 use aptos_logger::info;
 use aptos_sdk::{transaction_builder::TransactionFactory, types::LocalAccount};
 use aptos_state_view::account_with_state_view::AsAccountWithStateView;
 use aptos_storage_interface::{state_view::LatestDbStateCheckpointView, DbReader, DbReaderWriter};
+use aptos_transaction_generator_lib::TransactionGeneratorCreator;
 use aptos_types::{
     account_address::AccountAddress, account_config::aptos_test_root_address,
     account_view::AccountView, chain_id::ChainId, transaction::Transaction,
@@ -30,14 +27,13 @@ use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use std::collections::HashSet;
 use std::{
-    cell::RefCell,
     collections::{BTreeMap, HashMap},
     fs::File,
     io::{Read, Write},
+    iter::once,
     path::Path,
-    sync::{mpsc, Arc, Mutex},
+    sync::{mpsc, Arc},
 };
-use thread_local::ThreadLocal;
 
 const META_FILENAME: &str = "metadata.toml";
 pub const MAX_ACCOUNTS_INVOLVED_IN_P2P: usize = 1_000_000;
@@ -213,6 +209,8 @@ impl TransactionGenerator {
         TransactionFactory::new(ChainId::test())
             .with_transaction_expiration_time(300)
             .with_gas_unit_price(100)
+            // TODO(Gas): double check if this is correct
+            .with_max_gas_amount(100_000)
     }
 
     // Write metadata
@@ -292,43 +290,33 @@ impl TransactionGenerator {
         &mut self,
         block_size: usize,
         num_blocks: usize,
-        transaction_generators: Vec<Box<dyn aptos_transaction_generator_lib::TransactionGenerator>>,
+        mut transaction_generator_creator: Box<dyn TransactionGeneratorCreator>,
         transactions_per_sender: usize,
     ) {
-        let transaction_generators = Mutex::new(transaction_generators);
         assert!(self.block_sender.is_some());
         let num_senders_per_block =
             (block_size + transactions_per_sender - 1) / transactions_per_sender;
         let account_pool_size = self.main_signer_accounts.as_ref().unwrap().accounts.len();
-        let transaction_generator = ThreadLocal::with_capacity(self.num_workers);
+        let mut transaction_generator =
+            transaction_generator_creator.create_transaction_generator();
         for _ in 0..num_blocks {
-            let sender_indices = rand::seq::index::sample(
+            let transactions: Vec<_> = rand::seq::index::sample(
                 &mut thread_rng(),
                 account_pool_size,
                 num_senders_per_block,
             )
             .into_iter()
-            .flat_map(|sender_idx| vec![sender_idx; transactions_per_sender])
+            .flat_map(|idx| {
+                let sender = &self.main_signer_accounts.as_mut().unwrap().accounts[idx];
+                transaction_generator.generate_transactions(sender, transactions_per_sender)
+            })
+            .map(Transaction::UserTransaction)
+            .chain(once(Transaction::StateCheckpoint(HashValue::random())))
             .collect();
-            self.generate_and_send_block(
-                self.main_signer_accounts.as_ref().unwrap(),
-                sender_indices,
-                |sender_idx, _| {
-                    let sender = &self.main_signer_accounts.as_ref().unwrap().accounts[sender_idx];
-                    let mut transaction_generator = transaction_generator
-                        .get_or(|| {
-                            RefCell::new(transaction_generators.lock().unwrap().pop().unwrap())
-                        })
-                        .borrow_mut();
-                    Transaction::UserTransaction(
-                        transaction_generator
-                            .generate_transactions(sender, 1)
-                            .pop()
-                            .unwrap(),
-                    )
-                },
-                |sender_idx| *sender_idx,
-            );
+
+            if let Some(sender) = &self.block_sender {
+                sender.send(transactions).unwrap();
+            }
         }
     }
 
@@ -370,10 +358,7 @@ impl TransactionGenerator {
                     );
                     Transaction::UserTransaction(txn)
                 })
-                .chain(
-                    (!BENCHMARKS_BLOCK_EXECUTOR_ONCHAIN_CONFIG.has_any_block_gas_limit())
-                        .then_some(Transaction::StateCheckpoint(HashValue::random())),
-                )
+                .chain(once(Transaction::StateCheckpoint(HashValue::random())))
                 .collect();
             bar.inc(transactions.len() as u64 - 1);
             if let Some(sender) = &self.block_sender {
@@ -639,7 +624,6 @@ impl TransactionGenerator {
         F: Fn(T, &AccountCache) -> Transaction + Send + Sync,
         S: Fn(&T) -> usize,
     {
-        let _timer = TIMER.with_label_values(&["generate_block"]).start_timer();
         let block_size = inputs.len();
         let mut jobs = Vec::new();
         jobs.resize_with(self.num_workers, BTreeMap::new);
@@ -669,13 +653,7 @@ impl TransactionGenerator {
             transactions.push(transactions_by_index.get(&i).unwrap().clone());
         }
 
-        if !BENCHMARKS_BLOCK_EXECUTOR_ONCHAIN_CONFIG.has_any_block_gas_limit() {
-            transactions.push(Transaction::StateCheckpoint(HashValue::random()));
-        }
-
-        NUM_TXNS
-            .with_label_values(&["generation_done"])
-            .inc_by(transactions.len() as u64);
+        transactions.push(Transaction::StateCheckpoint(HashValue::random()));
 
         if let Some(sender) = &self.block_sender {
             sender.send(transactions).unwrap();

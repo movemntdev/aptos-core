@@ -108,13 +108,17 @@ impl FaucetCliArgs {
             match response {
                 Ok(response) => println!(
                     "SUCCESS: Account: {}, txn hashes: {:?}",
-                    account,
+                    account.to_hex_literal(),
                     response
                         .into_iter()
-                        .map(|r| r.committed_hash().to_string())
+                        .map(|r| r.committed_hash().to_hex_literal())
                         .collect::<Vec<_>>()
                 ),
-                Err(err) => println!("FAILURE: Account: {} Response: {:#}", account, err),
+                Err(err) => println!(
+                    "FAILURE: Account: {} Response: {:#}",
+                    account.to_hex_literal(),
+                    err
+                ),
             }
         }
 
@@ -125,7 +129,9 @@ impl FaucetCliArgs {
 /// Allow 0x to be in front of addresses.
 fn process_account_address(str: &str) -> AccountAddress {
     let str = str.trim();
-    if let Ok(address) = AccountAddress::from_str(str) {
+    if let Ok(address) = AccountAddress::from_hex_literal(str) {
+        address
+    } else if let Ok(address) = AccountAddress::from_str(str) {
         address
     } else {
         panic!("Account address is in an invalid format {}", str)

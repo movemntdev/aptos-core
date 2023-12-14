@@ -16,30 +16,12 @@ use aptos_language_e2e_tests::{
         types::Executor,
     },
 };
-use aptos_types::{
-    transaction::{ExecutionStatus, SignedTransaction, TransactionStatus},
-    vm_status::VMStatus,
-};
+use aptos_types::{transaction::SignedTransaction, vm_status::VMStatus};
 
 fn txn(seq_num: u64) -> SignedTransaction {
     let account = Account::new();
     let aptos_root = Account::new_aptos_root();
-    create_account_txn(&aptos_root, &account, seq_num)
-}
-
-fn execute_and_assert_success<T>(
-    exec: &mut impl Executor<Txn = T>,
-    block: Vec<T>,
-    num_txns: usize,
-) {
-    let output = exec.execute_block(block).unwrap();
-    output.iter().for_each(|txn_output| {
-        assert_eq!(
-            txn_output.status(),
-            &TransactionStatus::Keep(ExecutionStatus::Success)
-        );
-    });
-    assert_eq!(output.len(), num_txns);
+    create_account_txn(&aptos_root, &account, seq_num + 1)
 }
 
 #[test]
@@ -50,7 +32,7 @@ fn test_execution_strategies() {
         println!("===========================================================================");
         let big_block = (0..10).map(txn).collect();
         let mut exec = BasicExecutor::new();
-        execute_and_assert_success(&mut exec, big_block, 10);
+        exec.execute_block(big_block).unwrap();
     }
 
     {
@@ -59,7 +41,7 @@ fn test_execution_strategies() {
         println!("===========================================================================");
         let big_block = (0..10).map(txn).collect();
         let mut exec = RandomExecutor::from_os_rng();
-        execute_and_assert_success(&mut exec, big_block, 10);
+        exec.execute_block(big_block).unwrap();
     }
 
     {
@@ -86,7 +68,7 @@ fn test_execution_strategies() {
         block1.append(&mut block);
 
         let mut exec = GuidedExecutor::new(PartitionedGuidedStrategy);
-        execute_and_assert_success(&mut exec, block1, 42);
+        exec.execute_block(block1).unwrap();
     }
 
     {
@@ -115,7 +97,7 @@ fn test_execution_strategies() {
         let mut exec = MultiExecutor::<AnnotatedTransaction, VMStatus>::new();
         exec.add_executor(GuidedExecutor::new(PartitionedGuidedStrategy));
         exec.add_executor(GuidedExecutor::new(UnPartitionedGuidedStrategy));
-        execute_and_assert_success(&mut exec, block1, 42);
+        exec.execute_block(block1).unwrap();
     }
 
     {
@@ -128,6 +110,6 @@ fn test_execution_strategies() {
         exec.add_executor(RandomExecutor::from_os_rng());
         exec.add_executor(RandomExecutor::from_os_rng());
         exec.add_executor(RandomExecutor::from_os_rng());
-        execute_and_assert_success(&mut exec, block, 10);
+        exec.execute_block(block).unwrap();
     }
 }

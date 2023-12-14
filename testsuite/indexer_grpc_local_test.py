@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 
 import unittest
-
 from indexer_grpc_local import *
-from test_framework.shell import FakeCommand, RunResult, SpyShell
+from test_framework.shell import FakeCommand, SpyShell, RunResult
 
 
 class TestIndexerGrpcLocal(unittest.TestCase):
@@ -21,24 +20,23 @@ class TestIndexerGrpcLocal(unittest.TestCase):
         shell = SpyShell(
             [
                 FakeCommand(
-                    f"docker compose -f {docker_compose_file} up --detach",
+                    f"docker-compose -f {docker_compose_file} up --detach",
                     RunResult(0, b""),
                 ),
                 FakeCommand(
-                    f"docker compose -f {docker_compose_file} down",
+                    f"docker-compose -f {docker_compose_file} down",
                     RunResult(0, b""),
                 ),
                 FakeCommand(
-                    f"docker compose -f {docker_compose_file} up --detach {extra_args_str}",
+                    f"docker-compose -f {docker_compose_file} up --detach {extra_args_str}",
                     RunResult(0, b""),
                 ),
             ]
         )
-        context = SystemContext(shell, SimpleHttpClient(), False)
-        run_docker_compose(context, docker_compose_file, DockerComposeAction.UP)
-        run_docker_compose(context, docker_compose_file, DockerComposeAction.DOWN)
+        run_docker_compose(shell, docker_compose_file, DockerComposeAction.UP)
+        run_docker_compose(shell, docker_compose_file, DockerComposeAction.DOWN)
         run_docker_compose(
-            context,
+            shell,
             docker_compose_file,
             DockerComposeAction.UP,
             extra_args=extra_args,

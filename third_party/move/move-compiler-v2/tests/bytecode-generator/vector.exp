@@ -1,9 +1,6 @@
 // ---- Model Dump
 module 0x42::vector {
-    private fun create(): vector<u64> {
-        Vector<u64>(1, 2, 3)
-    }
-    spec fun $create(): vector<u64> {
+    private fun create() {
         Vector<u64>(1, 2, 3)
     }
 } // end 0x42::vector

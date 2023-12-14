@@ -2,9 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
+import tomllib
 from typing import List
-
-import tomli
 
 from .account import Account
 from .account_address import AccountAddress
@@ -58,7 +57,7 @@ class PackagePublisher:
         large_package_address: AccountAddress = MODULE_ADDRESS,
     ) -> List[str]:
         with open(os.path.join(package_dir, "Move.toml"), "rb") as f:
-            data = tomli.load(f)
+            data = tomllib.load(f)
         package = data["package"]["name"]
 
         package_build_dir = os.path.join(package_dir, "build", package)

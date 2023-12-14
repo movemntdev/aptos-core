@@ -8,7 +8,7 @@ use aptos_crypto::{
     HashValue,
 };
 use aptos_crypto_derive::CryptoHasher;
-use aptos_types::{ledger_info::LedgerInfoWithSignatures, transaction::SignedTransaction, PeerId};
+use aptos_types::{transaction::SignedTransaction, PeerId};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -53,10 +53,6 @@ impl PersistedValue {
 
     pub fn batch_info(&self) -> &BatchInfo {
         &self.info
-    }
-
-    pub fn payload(&self) -> &Option<Vec<SignedTransaction>> {
-        &self.maybe_payload
     }
 }
 
@@ -126,22 +122,6 @@ impl BatchPayload {
         *self
             .num_bytes
             .get_or_init(|| bcs::serialized_size(&self).expect("unable to serialize batch payload"))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use aptos_config::config;
-
-    #[test]
-    fn test_batch_payload_padding() {
-        use super::*;
-        let empty_batch_payload = BatchPayload::new(PeerId::random(), vec![]);
-        // We overestimate the ULEB128 encoding of the number of transactions as 128 bytes.
-        assert_eq!(
-            empty_batch_payload.num_bytes() + 127,
-            config::BATCH_PADDING_BYTES
-        );
     }
 }
 
@@ -289,12 +269,6 @@ impl From<Batch> for PersistedValue {
         } = value;
         PersistedValue::new(batch_info, Some(payload.into_transactions()))
     }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub enum BatchResponse {
-    Batch(Batch),
-    NotFound(LedgerInfoWithSignatures),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -2,8 +2,6 @@
 // Copyright (c) The Move Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-#![allow(clippy::manual_try_fold)]
-
 use crate::{
     abstract_state::{AbstractState, BorrowState, CallGraph, InstantiableModule},
     config::{

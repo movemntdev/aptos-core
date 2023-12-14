@@ -2,8 +2,6 @@
 // Copyright (c) The Move Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-#![allow(clippy::arc_with_non_send_sync)]
-
 use crate::{
     loaded_data::runtime_types::Type,
     views::{ValueView, ValueVisitor},
@@ -39,7 +37,7 @@ use std::{
 
 /// Runtime representation of a Move value.
 #[derive(Debug)]
-pub(crate) enum ValueImpl {
+enum ValueImpl {
     Invalid,
 
     U8(u8),
@@ -67,7 +65,7 @@ pub(crate) enum ValueImpl {
 /// Except when not owned by the VM stack, a container always lives inside an Rc<RefCell<>>,
 /// making it possible to be shared by references.
 #[derive(Debug, Clone)]
-pub(crate) enum Container {
+enum Container {
     Locals(Rc<RefCell<Vec<ValueImpl>>>),
     Vec(Rc<RefCell<Vec<ValueImpl>>>),
     Struct(Rc<RefCell<Vec<ValueImpl>>>),
@@ -85,7 +83,7 @@ pub(crate) enum Container {
 /// or in global storage. In the latter case, it also keeps a status flag indicating whether
 /// the container has been possibly modified.
 #[derive(Debug)]
-pub(crate) enum ContainerRef {
+enum ContainerRef {
     Local(Container),
     Global {
         status: Rc<RefCell<GlobalDataStatus>>,
@@ -97,14 +95,14 @@ pub(crate) enum ContainerRef {
 /// Clean - the data was only read.
 /// Dirty - the data was possibly modified.
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum GlobalDataStatus {
+enum GlobalDataStatus {
     Clean,
     Dirty,
 }
 
 /// A Move reference pointing to an element in a container.
 #[derive(Debug)]
-pub(crate) struct IndexedRef {
+struct IndexedRef {
     idx: usize,
     container_ref: ContainerRef,
 }
@@ -135,7 +133,7 @@ enum ReferenceImpl {
 /// A Move value -- a wrapper around `ValueImpl` which can be created only through valid
 /// means.
 #[derive(Debug)]
-pub struct Value(pub(crate) ValueImpl);
+pub struct Value(ValueImpl);
 
 /// An integer value in Move.
 #[derive(Debug)]
@@ -1468,10 +1466,7 @@ impl IntegerValue {
                 return Err(PartialVMError::new(StatusCode::INTERNAL_TYPE_ERROR).with_message(msg));
             },
         };
-        res.ok_or_else(|| {
-            PartialVMError::new(StatusCode::ARITHMETIC_ERROR)
-                .with_message("Addition overflow".to_string())
-        })
+        res.ok_or_else(|| PartialVMError::new(StatusCode::ARITHMETIC_ERROR))
     }
 
     pub fn sub_checked(self, other: Self) -> PartialVMResult<Self> {
@@ -1488,10 +1483,7 @@ impl IntegerValue {
                 return Err(PartialVMError::new(StatusCode::INTERNAL_TYPE_ERROR).with_message(msg));
             },
         };
-        res.ok_or_else(|| {
-            PartialVMError::new(StatusCode::ARITHMETIC_ERROR)
-                .with_message("Subtraction overflow".to_string())
-        })
+        res.ok_or_else(|| PartialVMError::new(StatusCode::ARITHMETIC_ERROR))
     }
 
     pub fn mul_checked(self, other: Self) -> PartialVMResult<Self> {
@@ -1508,10 +1500,7 @@ impl IntegerValue {
                 return Err(PartialVMError::new(StatusCode::INTERNAL_TYPE_ERROR).with_message(msg));
             },
         };
-        res.ok_or_else(|| {
-            PartialVMError::new(StatusCode::ARITHMETIC_ERROR)
-                .with_message("Multiplication overflow".to_string())
-        })
+        res.ok_or_else(|| PartialVMError::new(StatusCode::ARITHMETIC_ERROR))
     }
 
     pub fn div_checked(self, other: Self) -> PartialVMResult<Self> {
@@ -1530,7 +1519,7 @@ impl IntegerValue {
         };
         res.ok_or_else(|| {
             PartialVMError::new(StatusCode::ARITHMETIC_ERROR)
-                .with_message("Division by zero".to_string())
+                .with_message("Division by zero error".to_string())
         })
     }
 
@@ -1548,10 +1537,7 @@ impl IntegerValue {
                 return Err(PartialVMError::new(StatusCode::INTERNAL_TYPE_ERROR).with_message(msg));
             },
         };
-        res.ok_or_else(|| {
-            PartialVMError::new(StatusCode::ARITHMETIC_ERROR)
-                .with_message("Integer remainder by zero".to_string())
-        })
+        res.ok_or_else(|| PartialVMError::new(StatusCode::ARITHMETIC_ERROR))
     }
 
     pub fn bit_or(self, other: Self) -> PartialVMResult<Self> {
@@ -1606,16 +1592,37 @@ impl IntegerValue {
         use IntegerValue::*;
 
         Ok(match self {
-            U8(x) if n_bits < 8 => IntegerValue::U8(x << n_bits),
-            U16(x) if n_bits < 16 => IntegerValue::U16(x << n_bits),
-            U32(x) if n_bits < 32 => IntegerValue::U32(x << n_bits),
-            U64(x) if n_bits < 64 => IntegerValue::U64(x << n_bits),
-            U128(x) if n_bits < 128 => IntegerValue::U128(x << n_bits),
-            U256(x) => IntegerValue::U256(x << n_bits),
-            _ => {
-                return Err(PartialVMError::new(StatusCode::ARITHMETIC_ERROR)
-                    .with_message("Shift Left overflow".to_string()));
+            U8(x) => {
+                if n_bits >= 8 {
+                    return Err(PartialVMError::new(StatusCode::ARITHMETIC_ERROR));
+                }
+                IntegerValue::U8(x << n_bits)
             },
+            U16(x) => {
+                if n_bits >= 16 {
+                    return Err(PartialVMError::new(StatusCode::ARITHMETIC_ERROR));
+                }
+                IntegerValue::U16(x << n_bits)
+            },
+            U32(x) => {
+                if n_bits >= 32 {
+                    return Err(PartialVMError::new(StatusCode::ARITHMETIC_ERROR));
+                }
+                IntegerValue::U32(x << n_bits)
+            },
+            U64(x) => {
+                if n_bits >= 64 {
+                    return Err(PartialVMError::new(StatusCode::ARITHMETIC_ERROR));
+                }
+                IntegerValue::U64(x << n_bits)
+            },
+            U128(x) => {
+                if n_bits >= 128 {
+                    return Err(PartialVMError::new(StatusCode::ARITHMETIC_ERROR));
+                }
+                IntegerValue::U128(x << n_bits)
+            },
+            U256(x) => IntegerValue::U256(x << n_bits),
         })
     }
 
@@ -1623,16 +1630,37 @@ impl IntegerValue {
         use IntegerValue::*;
 
         Ok(match self {
-            U8(x) if n_bits < 8 => IntegerValue::U8(x >> n_bits),
-            U16(x) if n_bits < 16 => IntegerValue::U16(x >> n_bits),
-            U32(x) if n_bits < 32 => IntegerValue::U32(x >> n_bits),
-            U64(x) if n_bits < 64 => IntegerValue::U64(x >> n_bits),
-            U128(x) if n_bits < 128 => IntegerValue::U128(x >> n_bits),
-            U256(x) => IntegerValue::U256(x >> n_bits),
-            _ => {
-                return Err(PartialVMError::new(StatusCode::ARITHMETIC_ERROR)
-                    .with_message("Shift Right overflow".to_string()));
+            U8(x) => {
+                if n_bits >= 8 {
+                    return Err(PartialVMError::new(StatusCode::ARITHMETIC_ERROR));
+                }
+                IntegerValue::U8(x >> n_bits)
             },
+            U16(x) => {
+                if n_bits >= 16 {
+                    return Err(PartialVMError::new(StatusCode::ARITHMETIC_ERROR));
+                }
+                IntegerValue::U16(x >> n_bits)
+            },
+            U32(x) => {
+                if n_bits >= 32 {
+                    return Err(PartialVMError::new(StatusCode::ARITHMETIC_ERROR));
+                }
+                IntegerValue::U32(x >> n_bits)
+            },
+            U64(x) => {
+                if n_bits >= 64 {
+                    return Err(PartialVMError::new(StatusCode::ARITHMETIC_ERROR));
+                }
+                IntegerValue::U64(x >> n_bits)
+            },
+            U128(x) => {
+                if n_bits >= 128 {
+                    return Err(PartialVMError::new(StatusCode::ARITHMETIC_ERROR));
+                }
+                IntegerValue::U128(x >> n_bits)
+            },
+            U256(x) => IntegerValue::U256(x >> n_bits),
         })
     }
 
@@ -1941,9 +1969,9 @@ fn check_elem_layout(ty: &Type, v: &Container) -> PartialVMResult<()> {
 
         (Type::Vector(_), Container::Vec(_)) => Ok(()),
 
-        (Type::Struct { .. }, Container::Vec(_))
+        (Type::Struct(_), Container::Vec(_))
         | (Type::Signer, Container::Vec(_))
-        | (Type::StructInstantiation { .. }, Container::Vec(_)) => Ok(()),
+        | (Type::StructInstantiation(_, _), Container::Vec(_)) => Ok(()),
 
         (Type::Reference(_), _) | (Type::MutableReference(_), _) | (Type::TyParam(_), _) => Err(
             PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
@@ -1960,8 +1988,8 @@ fn check_elem_layout(ty: &Type, v: &Container) -> PartialVMResult<()> {
         | (Type::Address, _)
         | (Type::Signer, _)
         | (Type::Vector(_), _)
-        | (Type::Struct { .. }, _)
-        | (Type::StructInstantiation { .. }, _) => Err(PartialVMError::new(
+        | (Type::Struct(_), _)
+        | (Type::StructInstantiation(_, _), _) => Err(PartialVMError::new(
             StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
         )
         .with_message(format!(
@@ -2171,14 +2199,11 @@ impl Vector {
                     .collect::<PartialVMResult<Vec<_>>>()?,
             ),
 
-            Type::Signer
-            | Type::Vector(_)
-            | Type::Struct { .. }
-            | Type::StructInstantiation {
-                idx: _, ty_args: _, ..
-            } => Value(ValueImpl::Container(Container::Vec(Rc::new(RefCell::new(
-                elements.into_iter().map(|v| v.0).collect(),
-            ))))),
+            Type::Signer | Type::Vector(_) | Type::Struct(_) | Type::StructInstantiation(_, _) => {
+                Value(ValueImpl::Container(Container::Vec(Rc::new(RefCell::new(
+                    elements.into_iter().map(|v| v.0).collect(),
+                )))))
+            },
 
             Type::Reference(_) | Type::MutableReference(_) | Type::TyParam(_) => {
                 return Err(
@@ -2757,7 +2782,7 @@ pub mod debug {
     }
 
     fn print_address<B: Write>(buf: &mut B, x: &AccountAddress) -> PartialVMResult<()> {
-        debug_write!(buf, "{}", x.to_hex())
+        debug_write!(buf, "{}", x)
     }
 
     fn print_value_impl<B: Write>(buf: &mut B, val: &ValueImpl) -> PartialVMResult<()> {
@@ -2909,7 +2934,6 @@ pub mod debug {
  *   is to involve an explicit representation of the type layout.
  *
  **************************************************************************************/
-use crate::value_transformation::OnTagTransformation;
 use serde::{
     de::Error as DeError,
     ser::{Error as SerError, SerializeSeq, SerializeTuple},
@@ -2918,19 +2942,11 @@ use serde::{
 
 impl Value {
     pub fn simple_deserialize(blob: &[u8], layout: &MoveTypeLayout) -> Option<Value> {
-        bcs::from_bytes_seed(
-            SeedWrapper {
-                transformation: None,
-                layout,
-            },
-            blob,
-        )
-        .ok()
+        bcs::from_bytes_seed(SeedWrapper { layout }, blob).ok()
     }
 
     pub fn simple_serialize(&self, layout: &MoveTypeLayout) -> Option<Vec<u8>> {
         bcs::to_bytes(&AnnotatedValue {
-            transformation: None,
             layout,
             val: &self.0,
         })
@@ -2940,19 +2956,11 @@ impl Value {
 
 impl Struct {
     pub fn simple_deserialize(blob: &[u8], layout: &MoveStructLayout) -> Option<Struct> {
-        bcs::from_bytes_seed(
-            SeedWrapper {
-                transformation: None,
-                layout,
-            },
-            blob,
-        )
-        .ok()
+        bcs::from_bytes_seed(SeedWrapper { layout }, blob).ok()
     }
 
     pub fn simple_serialize(&self, layout: &MoveStructLayout) -> Option<Vec<u8>> {
         bcs::to_bytes(&AnnotatedValue {
-            transformation: None,
             layout,
             val: &self.fields,
         })
@@ -2960,14 +2968,9 @@ impl Struct {
     }
 }
 
-pub(crate) struct AnnotatedValue<'t, 'l, 'v, L, V> {
-    // Optional transformation so that values can be changed during
-    // serialization.
-    pub(crate) transformation: Option<&'t dyn OnTagTransformation>,
-    // Layout for guiding serialization.
-    pub(crate) layout: &'l L,
-    // Value to serialize.
-    pub(crate) val: &'v V,
+struct AnnotatedValue<'a, 'b, T1, T2> {
+    layout: &'a T1,
+    val: &'b T2,
 }
 
 fn invariant_violation<S: serde::Serializer>(message: String) -> S::Error {
@@ -2976,54 +2979,54 @@ fn invariant_violation<S: serde::Serializer>(message: String) -> S::Error {
     )
 }
 
-impl<'t, 'l, 'v> serde::Serialize for AnnotatedValue<'t, 'l, 'v, MoveTypeLayout, ValueImpl> {
+impl<'a, 'b> serde::Serialize for AnnotatedValue<'a, 'b, MoveTypeLayout, ValueImpl> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        use MoveTypeLayout as L;
-
         match (self.layout, self.val) {
-            (L::U8, ValueImpl::U8(x)) => serializer.serialize_u8(*x),
-            (L::U16, ValueImpl::U16(x)) => serializer.serialize_u16(*x),
-            (L::U32, ValueImpl::U32(x)) => serializer.serialize_u32(*x),
-            (L::U64, ValueImpl::U64(x)) => serializer.serialize_u64(*x),
-            (L::U128, ValueImpl::U128(x)) => serializer.serialize_u128(*x),
-            (L::U256, ValueImpl::U256(x)) => x.serialize(serializer),
-            (L::Bool, ValueImpl::Bool(x)) => serializer.serialize_bool(*x),
-            (L::Address, ValueImpl::Address(x)) => x.serialize(serializer),
+            (MoveTypeLayout::U8, ValueImpl::U8(x)) => serializer.serialize_u8(*x),
+            (MoveTypeLayout::U16, ValueImpl::U16(x)) => serializer.serialize_u16(*x),
+            (MoveTypeLayout::U32, ValueImpl::U32(x)) => serializer.serialize_u32(*x),
+            (MoveTypeLayout::U64, ValueImpl::U64(x)) => serializer.serialize_u64(*x),
+            (MoveTypeLayout::U128, ValueImpl::U128(x)) => serializer.serialize_u128(*x),
+            (MoveTypeLayout::U256, ValueImpl::U256(x)) => x.serialize(serializer),
+            (MoveTypeLayout::Bool, ValueImpl::Bool(x)) => serializer.serialize_bool(*x),
+            (MoveTypeLayout::Address, ValueImpl::Address(x)) => x.serialize(serializer),
 
-            (L::Struct(struct_layout), ValueImpl::Container(Container::Struct(r))) => {
+            (MoveTypeLayout::Struct(struct_layout), ValueImpl::Container(Container::Struct(r))) => {
                 (AnnotatedValue {
-                    transformation: self.transformation,
                     layout: struct_layout,
                     val: &*r.borrow(),
                 })
                 .serialize(serializer)
             },
-            (L::Vector(layout), ValueImpl::Container(c)) => {
-                let layout = layout.as_ref();
+            (MoveTypeLayout::Vector(layout), ValueImpl::Container(c)) => {
+                let layout = &**layout;
                 match (layout, c) {
-                    (L::U8, Container::VecU8(r)) => r.borrow().serialize(serializer),
-                    (L::U16, Container::VecU16(r)) => r.borrow().serialize(serializer),
-                    (L::U32, Container::VecU32(r)) => r.borrow().serialize(serializer),
-                    (L::U64, Container::VecU64(r)) => r.borrow().serialize(serializer),
-                    (L::U128, Container::VecU128(r)) => r.borrow().serialize(serializer),
-                    (L::U256, Container::VecU256(r)) => r.borrow().serialize(serializer),
-                    (L::Bool, Container::VecBool(r)) => r.borrow().serialize(serializer),
-                    (L::Address, Container::VecAddress(r)) => r.borrow().serialize(serializer),
+                    (MoveTypeLayout::U8, Container::VecU8(r)) => r.borrow().serialize(serializer),
+                    (MoveTypeLayout::U16, Container::VecU16(r)) => r.borrow().serialize(serializer),
+                    (MoveTypeLayout::U32, Container::VecU32(r)) => r.borrow().serialize(serializer),
+                    (MoveTypeLayout::U64, Container::VecU64(r)) => r.borrow().serialize(serializer),
+                    (MoveTypeLayout::U128, Container::VecU128(r)) => {
+                        r.borrow().serialize(serializer)
+                    },
+                    (MoveTypeLayout::U256, Container::VecU256(r)) => {
+                        r.borrow().serialize(serializer)
+                    },
+                    (MoveTypeLayout::Bool, Container::VecBool(r)) => {
+                        r.borrow().serialize(serializer)
+                    },
+                    (MoveTypeLayout::Address, Container::VecAddress(r)) => {
+                        r.borrow().serialize(serializer)
+                    },
+
                     (_, Container::Vec(r)) => {
                         let v = r.borrow();
                         let mut t = serializer.serialize_seq(Some(v.len()))?;
                         for val in v.iter() {
-                            t.serialize_element(&AnnotatedValue {
-                                transformation: self.transformation,
-                                layout,
-                                val,
-                            })?;
+                            t.serialize_element(&AnnotatedValue { layout, val })?;
                         }
                         t.end()
                     },
 
-                    // Note: this includes cases where vector types are tagged. Instead,
-                    // one should tag only the outer vector layout.
                     (layout, container) => Err(invariant_violation::<S>(format!(
                         "cannot serialize container {:?} as {:?}",
                         container, layout
@@ -3031,7 +3034,7 @@ impl<'t, 'l, 'v> serde::Serialize for AnnotatedValue<'t, 'l, 'v, MoveTypeLayout,
                 }
             },
 
-            (L::Signer, ValueImpl::Container(Container::Struct(r))) => {
+            (MoveTypeLayout::Signer, ValueImpl::Container(Container::Struct(r))) => {
                 let v = r.borrow();
                 if v.len() != 1 {
                     return Err(invariant_violation::<S>(format!(
@@ -3040,51 +3043,21 @@ impl<'t, 'l, 'v> serde::Serialize for AnnotatedValue<'t, 'l, 'v, MoveTypeLayout,
                     )));
                 }
                 (AnnotatedValue {
-                    transformation: self.transformation,
-                    layout: &L::Address,
+                    layout: &MoveTypeLayout::Address,
                     val: &v[0],
                 })
                 .serialize(serializer)
             },
 
-            (L::Tagged(tag, layout), value_impl) => match self.transformation {
-                Some(transformation) if transformation.matches(tag) => {
-                    // If values are supposed to be transformed, first clone
-                    // ValueImpl to construct a Value.
-                    // TODO[agg_v2](optimize)(?): Clone is cheap for current use cases, revisit if needed.
-                    let value_to_transform =
-                        Value(value_impl.copy_value().map_err(serde::ser::Error::custom)?);
-                    let transformed_value = transformation
-                        .pre_serialization_transform(tag, layout.as_ref(), value_to_transform)
-                        .map_err(serde::ser::Error::custom)?;
-
-                    AnnotatedValue {
-                        transformation: self.transformation,
-                        layout: layout.as_ref(),
-                        val: &transformed_value.0,
-                    }
-                    .serialize(serializer)
-                },
-                _ => {
-                    // No need to apply transformation, simply continue with serialization.
-                    AnnotatedValue {
-                        transformation: self.transformation,
-                        layout: layout.as_ref(),
-                        val: value_impl,
-                    }
-                    .serialize(serializer)
-                },
-            },
-
-            (layout, value) => Err(invariant_violation::<S>(format!(
+            (ty, val) => Err(invariant_violation::<S>(format!(
                 "cannot serialize value {:?} as {:?}",
-                value, layout
+                val, ty
             ))),
         }
     }
 }
 
-impl<'t, 'l, 'v> serde::Serialize for AnnotatedValue<'t, 'l, 'v, MoveStructLayout, Vec<ValueImpl>> {
+impl<'a, 'b> serde::Serialize for AnnotatedValue<'a, 'b, MoveStructLayout, Vec<ValueImpl>> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let values = &self.val;
         let fields = self.layout.fields();
@@ -3097,7 +3070,6 @@ impl<'t, 'l, 'v> serde::Serialize for AnnotatedValue<'t, 'l, 'v, MoveStructLayou
         let mut t = serializer.serialize_tuple(values.len())?;
         for (field_layout, val) in fields.iter().zip(values.iter()) {
             t.serialize_element(&AnnotatedValue {
-                transformation: self.transformation,
                 layout: field_layout,
                 val,
             })?;
@@ -3107,14 +3079,11 @@ impl<'t, 'l, 'v> serde::Serialize for AnnotatedValue<'t, 'l, 'v, MoveStructLayou
 }
 
 #[derive(Clone)]
-pub(crate) struct SeedWrapper<'t, L> {
-    // Transformation to apply during deserialization.
-    pub(crate) transformation: Option<&'t dyn OnTagTransformation>,
-    // Layout to guide deserialization.
-    pub(crate) layout: L,
+struct SeedWrapper<L> {
+    layout: L,
 }
 
-impl<'d, 't> serde::de::DeserializeSeed<'d> for SeedWrapper<'t, &MoveTypeLayout> {
+impl<'d> serde::de::DeserializeSeed<'d> for SeedWrapper<&MoveTypeLayout> {
     type Value = Value;
 
     fn deserialize<D: serde::de::Deserializer<'d>>(
@@ -3136,50 +3105,50 @@ impl<'d, 't> serde::de::DeserializeSeed<'d> for SeedWrapper<'t, &MoveTypeLayout>
 
             L::Struct(struct_layout) => Ok(Value::struct_(
                 SeedWrapper {
-                    transformation: self.transformation,
                     layout: struct_layout,
                 }
                 .deserialize(deserializer)?,
             )),
 
-            L::Vector(layout) => Ok(match layout.as_ref() {
-                L::U8 => Value::vector_u8(Vec::deserialize(deserializer)?),
-                L::U16 => Value::vector_u16(Vec::deserialize(deserializer)?),
-                L::U32 => Value::vector_u32(Vec::deserialize(deserializer)?),
-                L::U64 => Value::vector_u64(Vec::deserialize(deserializer)?),
-                L::U128 => Value::vector_u128(Vec::deserialize(deserializer)?),
-                L::U256 => Value::vector_u256(Vec::deserialize(deserializer)?),
-                L::Bool => Value::vector_bool(Vec::deserialize(deserializer)?),
-                L::Address => Value::vector_address(Vec::deserialize(deserializer)?),
-                layout => {
-                    let v = deserializer.deserialize_seq(VectorElementVisitor(SeedWrapper {
-                        transformation: self.transformation,
-                        layout,
-                    }))?;
-                    let container = Container::Vec(Rc::new(RefCell::new(v)));
-                    Value(ValueImpl::Container(container))
-                },
-            }),
-
-            L::Tagged(tag, layout) => {
-                let value = SeedWrapper {
-                    transformation: self.transformation,
-                    layout: layout.as_ref(),
-                }
-                .deserialize(deserializer)?;
-
-                Ok(match self.transformation {
-                    Some(transformation) if transformation.matches(tag) => transformation
-                        .post_deserialization_transform(tag, layout.as_ref(), value)
-                        .map_err(serde::de::Error::custom)?,
-                    _ => value,
-                })
+            L::Vector(layout) => {
+                let container = match &**layout {
+                    L::U8 => {
+                        Container::VecU8(Rc::new(RefCell::new(Vec::deserialize(deserializer)?)))
+                    },
+                    L::U16 => {
+                        Container::VecU16(Rc::new(RefCell::new(Vec::deserialize(deserializer)?)))
+                    },
+                    L::U32 => {
+                        Container::VecU32(Rc::new(RefCell::new(Vec::deserialize(deserializer)?)))
+                    },
+                    L::U64 => {
+                        Container::VecU64(Rc::new(RefCell::new(Vec::deserialize(deserializer)?)))
+                    },
+                    L::U128 => {
+                        Container::VecU128(Rc::new(RefCell::new(Vec::deserialize(deserializer)?)))
+                    },
+                    L::U256 => {
+                        Container::VecU256(Rc::new(RefCell::new(Vec::deserialize(deserializer)?)))
+                    },
+                    L::Bool => {
+                        Container::VecBool(Rc::new(RefCell::new(Vec::deserialize(deserializer)?)))
+                    },
+                    L::Address => Container::VecAddress(Rc::new(RefCell::new(Vec::deserialize(
+                        deserializer,
+                    )?))),
+                    layout => {
+                        let v = deserializer
+                            .deserialize_seq(VectorElementVisitor(SeedWrapper { layout }))?;
+                        Container::Vec(Rc::new(RefCell::new(v)))
+                    },
+                };
+                Ok(Value(ValueImpl::Container(container)))
             },
         }
     }
 }
 
-impl<'d> serde::de::DeserializeSeed<'d> for SeedWrapper<'_, &MoveStructLayout> {
+impl<'d> serde::de::DeserializeSeed<'d> for SeedWrapper<&MoveStructLayout> {
     type Value = Struct;
 
     fn deserialize<D: serde::de::Deserializer<'d>>(
@@ -3187,17 +3156,15 @@ impl<'d> serde::de::DeserializeSeed<'d> for SeedWrapper<'_, &MoveStructLayout> {
         deserializer: D,
     ) -> Result<Self::Value, D::Error> {
         let field_layouts = self.layout.fields();
-        let fields = deserializer.deserialize_tuple(
-            field_layouts.len(),
-            StructFieldVisitor(self.transformation, field_layouts),
-        )?;
+        let fields = deserializer
+            .deserialize_tuple(field_layouts.len(), StructFieldVisitor(field_layouts))?;
         Ok(Struct::pack(fields))
     }
 }
 
-struct VectorElementVisitor<'t, 'l>(SeedWrapper<'t, &'l MoveTypeLayout>);
+struct VectorElementVisitor<'a>(SeedWrapper<&'a MoveTypeLayout>);
 
-impl<'d, 't, 'l> serde::de::Visitor<'d> for VectorElementVisitor<'t, 'l> {
+impl<'d, 'a> serde::de::Visitor<'d> for VectorElementVisitor<'a> {
     type Value = Vec<ValueImpl>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -3216,9 +3183,9 @@ impl<'d, 't, 'l> serde::de::Visitor<'d> for VectorElementVisitor<'t, 'l> {
     }
 }
 
-struct StructFieldVisitor<'t, 'l>(Option<&'t dyn OnTagTransformation>, &'l [MoveTypeLayout]);
+struct StructFieldVisitor<'a>(&'a [MoveTypeLayout]);
 
-impl<'d, 't, 'l> serde::de::Visitor<'d> for StructFieldVisitor<'t, 'l> {
+impl<'d, 'a> serde::de::Visitor<'d> for StructFieldVisitor<'a> {
     type Value = Vec<Value>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -3230,9 +3197,8 @@ impl<'d, 't, 'l> serde::de::Visitor<'d> for StructFieldVisitor<'t, 'l> {
         A: serde::de::SeqAccess<'d>,
     {
         let mut val = Vec::new();
-        for (i, field_layout) in self.1.iter().enumerate() {
+        for (i, field_layout) in self.0.iter().enumerate() {
             if let Some(elem) = seq.next_element_seed(SeedWrapper {
-                transformation: self.0,
                 layout: field_layout,
             })? {
                 val.push(elem)
@@ -3649,10 +3615,6 @@ pub mod prop {
                 .collect::<Vec<_>>()
                 .prop_map(move |vals| Value::struct_(Struct::pack(vals)))
                 .boxed(),
-
-            L::Tagged(tag, layout) => match tag {
-                LayoutTag::IdentifierMapping(_) => value_strategy_with_layout(layout.as_ref()),
-            },
         }
     }
 
@@ -3688,16 +3650,11 @@ pub mod prop {
     }
 }
 
-use move_core_types::value::{LayoutTag, MoveStruct, MoveValue};
+use move_core_types::value::{MoveStruct, MoveValue};
 
 impl ValueImpl {
     pub fn as_move_value(&self, layout: &MoveTypeLayout) -> MoveValue {
         use MoveTypeLayout as L;
-
-        // Make sure to strip all tags from the type layout.
-        if let L::Tagged(LayoutTag::IdentifierMapping(_), layout) = layout {
-            return self.as_move_value(layout.as_ref());
-        }
 
         match (layout, &self) {
             (L::U8, ValueImpl::U8(x)) => MoveValue::U8(*x),

@@ -4,9 +4,9 @@
 pub mod metrics;
 pub mod processor;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use aptos_indexer_grpc_server_framework::RunnableConfig;
-use aptos_indexer_grpc_utils::{config::IndexerGrpcFileStoreConfig, types::RedisUrl};
+use aptos_indexer_grpc_utils::config::IndexerGrpcFileStoreConfig;
 use processor::Processor;
 use serde::{Deserialize, Serialize};
 
@@ -14,22 +14,7 @@ use serde::{Deserialize, Serialize};
 #[serde(deny_unknown_fields)]
 pub struct IndexerGrpcFileStoreWorkerConfig {
     pub file_store_config: IndexerGrpcFileStoreConfig,
-    pub redis_main_instance_address: RedisUrl,
-    pub enable_verbose_logging: Option<bool>,
-}
-
-impl IndexerGrpcFileStoreWorkerConfig {
-    pub fn new(
-        file_store_config: IndexerGrpcFileStoreConfig,
-        redis_main_instance_address: RedisUrl,
-        enable_verbose_logging: Option<bool>,
-    ) -> Self {
-        Self {
-            file_store_config,
-            redis_main_instance_address,
-            enable_verbose_logging,
-        }
-    }
+    pub redis_main_instance_address: String,
 }
 
 #[async_trait::async_trait]
@@ -38,18 +23,12 @@ impl RunnableConfig for IndexerGrpcFileStoreWorkerConfig {
         let mut processor = Processor::new(
             self.redis_main_instance_address.clone(),
             self.file_store_config.clone(),
-            self.enable_verbose_logging.unwrap_or(false),
-        )
-        .await
-        .context("Failed to create processor for file store worker")?;
-        processor
-            .run()
-            .await
-            .expect("File store processor exited unexpectedly");
-        Err(anyhow::anyhow!("File store processor exited unexpectedly"))
+        );
+        processor.run().await;
+        Ok(())
     }
 
     fn get_server_name(&self) -> String {
-        "idxfilestore".to_string()
+        "idxfile".to_string()
     }
 }

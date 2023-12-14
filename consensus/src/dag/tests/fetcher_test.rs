@@ -4,7 +4,7 @@ use super::dag_test::MockStorage;
 use crate::dag::{
     dag_fetcher::FetchRequestHandler,
     dag_store::Dag,
-    tests::helpers::{new_certified_node, MockPayloadManager, TEST_DAG_WINDOW},
+    tests::helpers::new_certified_node,
     types::{DagSnapshotBitmask, FetchResponse, RemoteFetchRequest},
     RpcHandler,
 };
@@ -13,21 +13,15 @@ use aptos_types::{epoch_state::EpochState, validator_verifier::random_validator_
 use claims::assert_ok_eq;
 use std::sync::Arc;
 
-#[tokio::test]
-async fn test_dag_fetcher_receiver() {
+#[test]
+fn test_dag_fetcher_receiver() {
     let (signers, validator_verifier) = random_validator_verifier(4, None, false);
     let epoch_state = Arc::new(EpochState {
         epoch: 1,
         verifier: validator_verifier,
     });
     let storage = Arc::new(MockStorage::new());
-    let dag = Arc::new(RwLock::new(Dag::new(
-        epoch_state.clone(),
-        storage,
-        Arc::new(MockPayloadManager {}),
-        0,
-        TEST_DAG_WINDOW,
-    )));
+    let dag = Arc::new(RwLock::new(Dag::new(epoch_state.clone(), storage, 1)));
 
     let mut fetcher = FetchRequestHandler::new(dag.clone(), epoch_state);
 
@@ -56,7 +50,7 @@ async fn test_dag_fetcher_receiver() {
         DagSnapshotBitmask::new(1, vec![vec![true, false]]),
     );
     assert_ok_eq!(
-        fetcher.process(request).await,
+        fetcher.process(request),
         FetchResponse::new(1, vec![first_round_nodes[1].clone()])
     );
 }

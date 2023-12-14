@@ -20,7 +20,7 @@ pub mod native_functions;
 mod runtime;
 pub mod session;
 #[macro_use]
-pub mod tracing;
+mod tracing;
 pub mod config;
 
 // Only include debugging functionality in debug builds

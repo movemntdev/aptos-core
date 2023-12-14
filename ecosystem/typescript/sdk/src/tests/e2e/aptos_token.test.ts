@@ -1,5 +1,5 @@
 import { AptosAccount } from "../../account";
-import { UserTransaction, WriteResource, WriteSetChange_WriteResource } from "../../generated";
+import { UserTransaction } from "../../generated";
 import { AptosToken } from "../../plugins";
 import { Provider } from "../../providers";
 import { PROVIDER_LOCAL_NETWORK_CONFIG, getFaucetClient, longTestTimeout } from "../unit/test_helper.test";
@@ -14,7 +14,6 @@ const bob = new AptosAccount();
 const collectionName = "AliceCollection";
 const tokenName = "Alice Token";
 let tokenAddress = "";
-let collectionAddress = "";
 
 describe("token objects", () => {
   beforeAll(async () => {
@@ -26,14 +25,10 @@ describe("token objects", () => {
   test(
     "create collection",
     async () => {
-      const txn = await provider.waitForTransactionWithResult(
+      await provider.waitForTransaction(
         await aptosToken.createCollection(alice, "Alice's simple collection", collectionName, "https://aptos.dev", 5),
         { checkSuccess: true },
       );
-      const objectCore = (txn as UserTransaction).changes.find(
-        (change) => (change as WriteResource).data.type === "0x1::object::ObjectCore",
-      );
-      collectionAddress = (objectCore as WriteSetChange_WriteResource).address;
     },
     longTestTimeout,
   );
@@ -243,14 +238,6 @@ describe("token objects", () => {
     "burn token",
     async () => {
       await provider.waitForTransaction(await aptosToken.burnToken(alice, tokenAddress), { checkSuccess: true });
-    },
-    longTestTimeout,
-  );
-
-  test(
-    "burn object",
-    async () => {
-      await provider.waitForTransaction(await aptosToken.burnObject(alice, collectionAddress), { checkSuccess: true });
     },
     longTestTimeout,
   );

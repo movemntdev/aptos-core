@@ -1,24 +1,18 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use super::DAGRpcResult;
+use super::{dag_network::RpcWithFallback, types::NodeMetadata, RpcHandler};
 use crate::dag::{
-    dag_network::{RpcResultWithResponder, TDAGNetworkSender},
+    dag_network::TDAGNetworkSender,
     dag_store::Dag,
-    errors::FetchRequestHandleError,
-    observability::logging::{LogEvent, LogSchema},
-    types::{CertifiedNode, FetchResponse, Node, NodeMetadata, RemoteFetchRequest},
-    RpcHandler, RpcWithFallback,
+    types::{CertifiedNode, FetchResponse, Node, RemoteFetchRequest},
 };
-use anyhow::{anyhow, ensure};
-use aptos_bitvec::BitVec;
-use aptos_config::config::DagFetcherConfig;
+use anyhow::ensure;
 use aptos_consensus_types::common::Author;
 use aptos_infallible::RwLock;
-use aptos_logger::{debug, error, info};
+use aptos_logger::error;
 use aptos_time_service::TimeService;
 use aptos_types::epoch_state::EpochState;
-use async_trait::async_trait;
 use futures::{stream::FuturesUnordered, Stream, StreamExt};
 use std::{
     collections::HashMap,
@@ -27,6 +21,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
+use thiserror::Error as ThisError;
 use tokio::sync::{
     mpsc::{Receiver, Sender},
     oneshot,
@@ -129,20 +124,20 @@ impl LocalFetchRequest {
     }
 }
 
-pub struct DagFetcherService {
-    inner: DagFetcher,
+pub struct DagFetcher {
+    epoch_state: Arc<EpochState>,
+    network: Arc<dyn TDAGNetworkSender>,
     dag: Arc<RwLock<Dag>>,
     request_rx: Receiver<LocalFetchRequest>,
-    ordered_authors: Vec<Author>,
+    time_service: TimeService,
 }
 
-impl DagFetcherService {
+impl DagFetcher {
     pub fn new(
         epoch_state: Arc<EpochState>,
         network: Arc<dyn TDAGNetworkSender>,
         dag: Arc<RwLock<Dag>>,
         time_service: TimeService,
-        config: DagFetcherConfig,
     ) -> (
         Self,
         FetchRequester,
@@ -152,13 +147,13 @@ impl DagFetcherService {
         let (request_tx, request_rx) = tokio::sync::mpsc::channel(16);
         let (node_tx, node_rx) = tokio::sync::mpsc::channel(100);
         let (certified_node_tx, certified_node_rx) = tokio::sync::mpsc::channel(100);
-        let ordered_authors = epoch_state.verifier.get_ordered_account_addresses();
         (
             Self {
-                inner: DagFetcher::new(epoch_state, network, time_service, config),
+                epoch_state,
+                network,
                 dag,
                 request_rx,
-                ordered_authors,
+                time_service,
             },
             FetchRequester {
                 request_tx,
@@ -172,150 +167,75 @@ impl DagFetcherService {
 
     pub async fn start(mut self) {
         while let Some(local_request) = self.request_rx.recv().await {
-            match self
-                .fetch(
-                    local_request.node(),
-                    local_request.responders(&self.ordered_authors),
+            let responders = local_request
+                .responders(&self.epoch_state.verifier.get_ordered_account_addresses());
+            let remote_request = {
+                let dag_reader = self.dag.read();
+
+                let missing_parents: Vec<NodeMetadata> = dag_reader
+                    .filter_missing(local_request.node().parents_metadata())
+                    .cloned()
+                    .collect();
+
+                if missing_parents.is_empty() {
+                    local_request.notify();
+                    continue;
+                }
+
+                let target = local_request.node();
+                RemoteFetchRequest::new(
+                    target.metadata().epoch(),
+                    missing_parents,
+                    dag_reader.bitmask(local_request.node().round()),
                 )
-                .await
-            {
-                Ok(_) => local_request.notify(),
-                Err(err) => error!("unable to complete fetch successfully: {}", err),
-            }
-        }
-    }
+            };
 
-    pub(super) async fn fetch(
-        &mut self,
-        node: &Node,
-        responders: Vec<Author>,
-    ) -> anyhow::Result<()> {
-        let remote_request = {
-            let dag_reader = self.dag.read();
-            ensure!(
-                node.round() > dag_reader.lowest_incomplete_round(),
-                "Already synced beyond requested round {}, lowest incomplete round {}",
-                node.round(),
-                dag_reader.lowest_incomplete_round()
+            let mut rpc = RpcWithFallback::new(
+                responders,
+                remote_request.clone().into(),
+                Duration::from_millis(500),
+                Duration::from_secs(1),
+                self.network.clone(),
+                self.time_service.clone(),
             );
+            while let Some(response) = rpc.next().await {
+                if let Ok(response) =
+                    response
+                        .and_then(FetchResponse::try_from)
+                        .and_then(|response| {
+                            response.verify(&remote_request, &self.epoch_state.verifier)
+                        })
+                {
+                    let certified_nodes = response.certified_nodes();
+                    // TODO: support chunk response or fallback to state sync
+                    {
+                        let mut dag_writer = self.dag.write();
+                        for node in certified_nodes {
+                            if let Err(e) = dag_writer.add_node(node) {
+                                error!("Failed to add node {}", e);
+                            }
+                        }
+                    }
 
-            let missing_parents: Vec<NodeMetadata> = dag_reader
-                .filter_missing(node.parents_metadata())
-                .cloned()
-                .collect();
-
-            if missing_parents.is_empty() {
-                return Ok(());
+                    if self
+                        .dag
+                        .read()
+                        .all_exists(local_request.node().parents_metadata())
+                    {
+                        local_request.notify();
+                        break;
+                    }
+                }
             }
-
-            RemoteFetchRequest::new(
-                node.metadata().epoch(),
-                missing_parents,
-                dag_reader.bitmask(node.round().saturating_sub(1)),
-            )
-        };
-        self.inner
-            .fetch(remote_request, responders, self.dag.clone())
-            .await
-    }
-}
-
-#[async_trait]
-pub trait TDagFetcher: Send {
-    async fn fetch(
-        &self,
-        remote_request: RemoteFetchRequest,
-        responders: Vec<Author>,
-        dag: Arc<RwLock<Dag>>,
-    ) -> anyhow::Result<()>;
-}
-
-pub(crate) struct DagFetcher {
-    network: Arc<dyn TDAGNetworkSender>,
-    time_service: TimeService,
-    epoch_state: Arc<EpochState>,
-    config: DagFetcherConfig,
-}
-
-impl DagFetcher {
-    pub(crate) fn new(
-        epoch_state: Arc<EpochState>,
-        network: Arc<dyn TDAGNetworkSender>,
-        time_service: TimeService,
-        config: DagFetcherConfig,
-    ) -> Self {
-        Self {
-            network,
-            time_service,
-            epoch_state,
-            config,
+            // TODO retry
         }
     }
 }
 
-#[async_trait]
-impl TDagFetcher for DagFetcher {
-    async fn fetch(
-        &self,
-        remote_request: RemoteFetchRequest,
-        responders: Vec<Author>,
-        dag: Arc<RwLock<Dag>>,
-    ) -> anyhow::Result<()> {
-        debug!(
-            LogSchema::new(LogEvent::FetchNodes),
-            start_round = remote_request.start_round(),
-            target_round = remote_request.target_round(),
-            lens = remote_request.exists_bitmask().len(),
-            missing_nodes = remote_request.exists_bitmask().num_missing(),
-        );
-        let mut rpc = RpcWithFallback::new(
-            responders,
-            remote_request.clone().into(),
-            Duration::from_millis(self.config.retry_interval_ms),
-            Duration::from_millis(self.config.rpc_timeout_ms),
-            self.network.clone(),
-            self.time_service.clone(),
-            self.config.min_concurrent_responders,
-            self.config.max_concurrent_responders,
-        );
-
-        while let Some(RpcResultWithResponder { responder, result }) = rpc.next().await {
-            match result {
-                Ok(DAGRpcResult(Ok(response))) => {
-                    match FetchResponse::try_from(response).and_then(|response| {
-                        response.verify(&remote_request, &self.epoch_state.verifier)
-                    }) {
-                        Ok(fetch_response) => {
-                            let certified_nodes = fetch_response.certified_nodes();
-                            // TODO: support chunk response or fallback to state sync
-                            {
-                                let mut dag_writer = dag.write();
-                                for node in certified_nodes.into_iter().rev() {
-                                    if let Err(e) = dag_writer.add_node(node) {
-                                        error!(error = ?e, "failed to add node");
-                                    }
-                                }
-                            }
-
-                            if dag.read().all_exists(remote_request.targets()) {
-                                return Ok(());
-                            }
-                        },
-                        Err(err) => {
-                            info!(error = ?err, "failure parsing/verifying fetch response from {}", responder);
-                        },
-                    };
-                },
-                Ok(DAGRpcResult(Err(dag_rpc_error))) => {
-                    info!(error = ?dag_rpc_error, responder = responder, "fetch failure: target {} returned error", responder);
-                },
-                Err(err) => {
-                    info!(error = ?err, responder = responder, "rpc failed to {}", responder);
-                },
-            }
-        }
-        Err(anyhow!("Fetch with fallback failed"))
-    }
+#[derive(Debug, ThisError)]
+pub enum FetchRequestHandleError {
+    #[error("parents are missing")]
+    ParentsMissing,
 }
 
 pub struct FetchRequestHandler {
@@ -332,12 +252,11 @@ impl FetchRequestHandler {
     }
 }
 
-#[async_trait]
 impl RpcHandler for FetchRequestHandler {
     type Request = RemoteFetchRequest;
     type Response = FetchResponse;
 
-    async fn process(&mut self, message: Self::Request) -> anyhow::Result<Self::Response> {
+    fn process(&mut self, message: Self::Request) -> anyhow::Result<Self::Response> {
         let dag_reader = self.dag.read();
 
         // `Certified Node`: In the good case, there should exist at least one honest validator that
@@ -345,26 +264,9 @@ impl RpcHandler for FetchRequestHandler {
         // request.
         // `Node`: In the good case, the sender of the Node should have the parents in its local DAG
         // to satisfy this request.
-        debug!(
-            LogSchema::new(LogEvent::ReceiveFetchNodes).round(dag_reader.highest_round()),
-            start_round = message.start_round(),
-            target_round = message.target_round(),
-        );
         ensure!(
-            dag_reader.lowest_round() <= message.start_round(),
-            FetchRequestHandleError::GarbageCollected(
-                message.start_round(),
-                dag_reader.lowest_round()
-            ),
-        );
-
-        let missing_targets: BitVec = message
-            .targets()
-            .map(|node| !dag_reader.exists(node))
-            .collect();
-        ensure!(
-            missing_targets.all_zeros(),
-            FetchRequestHandleError::TargetsMissing(missing_targets)
+            dag_reader.all_exists(message.targets().iter()),
+            FetchRequestHandleError::ParentsMissing
         );
 
         let certified_nodes: Vec<_> = dag_reader

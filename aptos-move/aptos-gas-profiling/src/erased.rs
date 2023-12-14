@@ -9,16 +9,13 @@ use crate::{
     render::Render,
     FrameName, TransactionGasLog,
 };
-use aptos_gas_algebra::{Fee, GasScalingFactor, InternalGas};
-use std::ops::{Add, AddAssign};
+use aptos_gas_algebra::{Fee, GasQuantity, GasScalingFactor, InternalGas, InternalGasUnit, Octa};
 
-/// Represents a node in a general tree structure where each node is tagged with
-/// some text & a numerical value.
-#[derive(Clone)]
-pub struct Node<N> {
+/// Represents a node in a general tree structure with some text & cost attached to each node.
+pub struct Node<U> {
     pub text: String,
-    pub val: N,
-    pub children: Vec<Node<N>>,
+    pub cost: GasQuantity<U>,
+    pub children: Vec<Node<U>>,
 }
 
 /// A type-erased gas log for execution and IO costs.
@@ -26,20 +23,14 @@ pub struct Node<N> {
 pub struct TypeErasedExecutionAndIoCosts {
     pub gas_scaling_factor: GasScalingFactor,
     pub total: InternalGas,
-    pub tree: Node<InternalGas>,
-}
-
-#[derive(Clone, Copy)]
-pub struct StoragePair {
-    pub cost: Fee,
-    pub refund: Fee,
+    pub tree: Node<InternalGasUnit>,
 }
 
 /// A type-erased gas log for storage fees.
 #[derive(Clone)]
 pub struct TypeErasedStorageFees {
     pub total: Fee,
-    pub tree: Node<StoragePair>,
+    pub tree: Node<Octa>,
 }
 
 /// A gas log with some of the type information erased.
@@ -53,83 +44,49 @@ pub struct TypeErasedGasLog {
     pub storage: TypeErasedStorageFees,
 }
 
-impl StoragePair {
-    pub fn zero() -> Self {
+impl<U> Clone for Node<U> {
+    fn clone(&self) -> Self {
         Self {
-            cost: 0.into(),
-            refund: 0.into(),
-        }
-    }
-
-    pub fn new(cost: Fee, refund: Fee) -> Self {
-        Self { cost, refund }
-    }
-}
-
-impl Add<Self> for StoragePair {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self {
-            cost: self.cost + rhs.cost,
-            refund: self.refund + rhs.refund,
+            text: self.text.clone(),
+            cost: self.cost,
+            children: self.children.clone(),
         }
     }
 }
 
-impl AddAssign<Self> for StoragePair {
-    fn add_assign(&mut self, rhs: Self) {
-        self.cost += rhs.cost;
-        self.refund += rhs.refund;
-    }
-}
-
-impl<A, B> From<(A, B)> for StoragePair
-where
-    A: Into<Fee>,
-    B: Into<Fee>,
-{
-    fn from((cost, refund): (A, B)) -> Self {
-        Self {
-            cost: cost.into(),
-            refund: refund.into(),
-        }
-    }
-}
-
-impl<N> Node<N> {
-    pub fn new(name: impl Into<String>, data: impl Into<N>) -> Self {
+impl<U> Node<U> {
+    pub fn new(name: impl Into<String>, cost: impl Into<GasQuantity<U>>) -> Self {
         Self {
             text: name.into(),
-            val: data.into(),
+            cost: cost.into(),
             children: vec![],
         }
     }
 
     pub fn new_with_children(
         name: impl Into<String>,
-        data: impl Into<N>,
+        cost: impl Into<GasQuantity<U>>,
         children: impl IntoIterator<Item = Self>,
     ) -> Self {
         Self {
             text: name.into(),
-            val: data.into(),
+            cost: cost.into(),
             children: children.into_iter().collect(),
         }
     }
 
-    pub fn preorder_traversel(&self, mut f: impl FnMut(usize, &str, &N)) {
+    pub fn preorder_traversel(&self, mut f: impl FnMut(usize, &str, GasQuantity<U>)) {
         let mut stack = vec![(self, 0)];
 
         while let Some((node, depth)) = stack.pop() {
-            f(depth, &node.text, &node.val);
+            f(depth, &node.text, node.cost);
             stack.extend(node.children.iter().map(|child| (child, depth + 1)).rev());
         }
     }
 }
 
 impl ExecutionGasEvent {
-    fn to_erased(&self) -> Node<InternalGas> {
+    fn to_erased(&self) -> Node<InternalGasUnit> {
         use ExecutionGasEvent::*;
 
         match self {
@@ -156,7 +113,7 @@ impl ExecutionGasEvent {
 }
 
 impl CallFrame {
-    fn to_erased(&self) -> Node<InternalGas> {
+    fn to_erased(&self) -> Node<InternalGasUnit> {
         let name = match &self.name {
             FrameName::Script => "script".to_string(),
             FrameName::Function {
@@ -182,7 +139,7 @@ impl CallFrame {
 }
 
 impl WriteTransient {
-    fn to_erased(&self) -> Node<InternalGas> {
+    fn to_erased(&self) -> Node<InternalGasUnit> {
         Node::new(
             format!("{}<{}>", Render(&self.op_type), Render(&self.key)),
             self.cost,
@@ -216,17 +173,17 @@ impl ExecutionAndIOCosts {
 }
 
 impl WriteStorage {
-    fn to_erased(&self) -> Node<StoragePair> {
+    fn to_erased(&self) -> Node<Octa> {
         Node::new(
             format!("{}<{}>", Render(&self.op_type), Render(&self.key)),
-            (self.cost, self.refund),
+            self.cost,
         )
     }
 }
 
 impl EventStorage {
-    fn to_erased(&self) -> Node<StoragePair> {
-        Node::new(format!("{}", self.ty), (self.cost, Fee::zero()))
+    fn to_erased(&self) -> Node<Octa> {
+        Node::new(format!("{}", self.ty), self.cost)
     }
 }
 
@@ -236,21 +193,21 @@ impl StorageFees {
     pub fn to_erased(&self) -> TypeErasedStorageFees {
         let mut nodes = vec![];
 
-        nodes.push(Node::new("transaction", (self.txn_storage, Fee::zero())));
+        nodes.push(Node::new("transaction", self.txn_storage));
         nodes.push(Node::new_with_children(
             "writes",
-            (Fee::zero(), Fee::zero()),
+            0,
             self.write_set_storage.iter().map(|write| write.to_erased()),
         ));
         nodes.push(Node::new_with_children(
             "events",
-            (Fee::zero(), Fee::zero()),
+            0,
             self.events.iter().map(|event| event.to_erased()),
         ));
 
         TypeErasedStorageFees {
             total: self.total,
-            tree: Node::new_with_children("storage fees (APT)", (Fee::zero(), Fee::zero()), nodes),
+            tree: Node::new_with_children("storage fees (APT)", 0, nodes),
         }
     }
 }
@@ -265,14 +222,11 @@ impl TransactionGasLog {
     }
 }
 
-impl<N> Node<N>
-where
-    N: AddAssign<N> + Copy,
-{
+impl<U> Node<U> {
     pub fn include_child_costs(&mut self) {
         for child in &mut self.children {
             child.include_child_costs();
-            self.val += child.val;
+            self.cost += child.cost;
         }
     }
 }

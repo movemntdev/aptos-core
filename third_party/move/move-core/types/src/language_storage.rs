@@ -210,7 +210,6 @@ impl ResourceKey {
 /// Represents the initial key into global storage where we first index by the address, and then
 /// the struct tag
 #[derive(Serialize, Deserialize, Debug, PartialEq, Hash, Eq, Clone, PartialOrd, Ord)]
-#[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
 pub struct ModuleId {
@@ -248,7 +247,7 @@ impl Display for ModuleId {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         // Can't change, because it can be part of TransactionExecutionFailedEvent
         // which is emitted on chain.
-        write!(f, "{}::{}", self.address.to_hex(), self.name)
+        write!(f, "{}::{}", self.address, self.name)
     }
 }
 

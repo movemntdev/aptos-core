@@ -240,7 +240,11 @@ impl LoopAnalysisProcessor {
                                     .map(|&idx| {
                                         func_env
                                             .symbol_pool()
-                                            .string(func_env.get_local_name(*idx))
+                                            .string(
+                                                func_env
+                                                    .get_local_name(*idx)
+                                                    .expect("compiled module available"),
+                                            )
                                             .to_string()
                                     })
                                     .collect();

@@ -12,6 +12,7 @@ spec aptos_framework::event {
 
     spec emit {
         pragma opaque;
+        aborts_if !features::spec_module_event_enabled();
     }
 
     /// Native function use opaque.
@@ -35,4 +36,5 @@ spec aptos_framework::event {
     spec destroy_handle {
         aborts_if false;
     }
+
 }

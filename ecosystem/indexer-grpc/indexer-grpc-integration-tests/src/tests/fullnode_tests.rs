@@ -11,25 +11,19 @@ use aptos_indexer_grpc_utils::{
     config::{IndexerGrpcFileStoreConfig, LocalFileStore},
     constants::BLOB_STORAGE_SIZE,
     file_store_operator::{FileStoreOperator, LocalFileStoreOperator},
-    types::RedisUrl,
 };
 use aptos_transaction_emitter_lib::{emit_transactions, ClusterArgs, CoinSourceArgs, EmitArgs};
 use aptos_transaction_generator_lib::args::TransactionTypeArg;
 use aptos_types::chain_id::ChainId;
-use once_cell::sync::Lazy;
 use regex::Regex;
-use std::{fs::File, io::Write, path::PathBuf, str::FromStr};
+use std::{fs::File, io::Write, path::PathBuf};
 use tempfile::TempDir;
 use tokio::task::JoinHandle;
 use tracing::info;
-use url::Url;
 
-static TESTNET_REST_API_URL: Lazy<Url> =
-    Lazy::new(|| Url::from_str("http://127.0.0.1:8080").unwrap());
-static TESTNET_FULLNODE_GRPC_URL: Lazy<Url> =
-    Lazy::new(|| Url::from_str("http://127.0.0.1:50051").unwrap());
-static REDIS_PRIMARY_URL: Lazy<RedisUrl> =
-    Lazy::new(|| RedisUrl::from_str("redis://127.0.0.1:6379").unwrap());
+static TESTNET_REST_API_URL: &str = "http://localhost:8080";
+static TESTNET_FULLNODE_GRPC_URL: &str = "localhost:50051";
+static REDIS_PRIMARY_URL: &str = "localhost:6379";
 
 static MINT_KEY_FILE_NAME: &str = "mint.key";
 
@@ -57,7 +51,7 @@ async fn reset_redis() -> Result<()> {
             .output()?;
     }
 
-    let conn = redis::Client::open(REDIS_PRIMARY_URL.0.clone())
+    let conn = redis::Client::open(format!("redis://{}", REDIS_PRIMARY_URL))
         .expect("Create redis client failed.")
         .get_async_connection()
         .await
@@ -115,7 +109,9 @@ async fn emit_transactions_for_test() -> Result<()> {
     let duration = 10;
     let target_tps = BLOB_STORAGE_SIZE / duration;
     let cluster_args = ClusterArgs {
-        targets: Some(vec![(*TESTNET_REST_API_URL).clone()]),
+        targets: Some(vec![url::Url::parse(TESTNET_REST_API_URL)
+            .context("Cannot parse default fullnode url")
+            .unwrap()]),
         targets_file: None,
         reuse_accounts: false,
         chain_id: ChainId::test(),
@@ -210,8 +206,7 @@ async fn setup_test() {
 // We will then simulate chaos by using (1) docker exec (2) docker-compose scale <service>=<num_replicas>
 #[tokio::test]
 pub async fn verify_docker_compose_setup() {
-    let url = format!("{}v1", *TESTNET_REST_API_URL);
-    reqwest::get(&url)
+    reqwest::get(&format!("{}/v1", TESTNET_REST_API_URL))
         .await
         .unwrap()
         .error_for_status()
@@ -227,11 +222,11 @@ async fn test_cold_start_cache_worker_progress() {
 
     let tmp_dir = TempDir::new().expect("Could not create temp dir"); // start with a new file store each time
     let cache_worker_config = IndexerGrpcCacheWorkerConfig {
-        fullnode_grpc_address: (*TESTNET_FULLNODE_GRPC_URL).clone(),
+        fullnode_grpc_address: TESTNET_FULLNODE_GRPC_URL.to_string(),
         file_store_config: IndexerGrpcFileStoreConfig::LocalFileStore(LocalFileStore {
             local_file_store_path: tmp_dir.path().to_path_buf(),
         }),
-        redis_main_instance_address: (*REDIS_PRIMARY_URL).clone(),
+        redis_main_instance_address: REDIS_PRIMARY_URL.to_string(),
     };
 
     let (_cache_worker_port, _cache_worker_handle) =
@@ -239,7 +234,7 @@ async fn test_cold_start_cache_worker_progress() {
             .await
             .expect("Failed to start CacheWorker");
 
-    let conn = redis::Client::open((*REDIS_PRIMARY_URL).0.clone())
+    let conn = redis::Client::open(format!("redis://{}", REDIS_PRIMARY_URL.to_string()))
         .expect("Create redis client failed.")
         .get_async_connection()
         .await
@@ -293,15 +288,15 @@ async fn test_cold_start_file_store_worker_progress() {
     let tmp_dir = TempDir::new().expect("Could not create temp dir"); // start with a new file store each time
 
     let cache_worker_config = IndexerGrpcCacheWorkerConfig {
-        fullnode_grpc_address: (*TESTNET_FULLNODE_GRPC_URL).clone(),
+        fullnode_grpc_address: TESTNET_FULLNODE_GRPC_URL.to_string(),
         file_store_config: IndexerGrpcFileStoreConfig::LocalFileStore(LocalFileStore {
             local_file_store_path: tmp_dir.path().to_path_buf(),
         }),
-        redis_main_instance_address: (*REDIS_PRIMARY_URL).clone(),
+        redis_main_instance_address: REDIS_PRIMARY_URL.to_string(),
     };
 
     let file_store_worker_config = IndexerGrpcFileStoreWorkerConfig {
-        redis_main_instance_address: (*REDIS_PRIMARY_URL).clone(),
+        redis_main_instance_address: REDIS_PRIMARY_URL.to_string(),
         file_store_config: IndexerGrpcFileStoreConfig::LocalFileStore(LocalFileStore {
             local_file_store_path: tmp_dir.path().to_path_buf(),
         }),

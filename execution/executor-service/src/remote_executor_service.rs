@@ -3,19 +3,19 @@
 
 use crate::{
     remote_cordinator_client::RemoteCoordinatorClient,
-    remote_cross_shard_client::RemoteCrossShardClient, remote_state_view::RemoteStateViewClient,
+    remote_cross_shard_client::RemoteCrossShardClient,
 };
 use aptos_secure_net::network_controller::NetworkController;
+use aptos_state_view::in_memory_state_view::InMemoryStateView;
 use aptos_types::block_executor::partitioner::ShardId;
 use aptos_vm::sharded_block_executor::sharded_executor_service::ShardedExecutorService;
-use std::{net::SocketAddr, sync::Arc, thread};
+use std::{net::SocketAddr, sync::Arc};
 
 /// A service that provides support for remote execution. Essentially, it reads a request from
 /// the remote executor client and executes the block locally and returns the result.
 pub struct ExecutorService {
-    shard_id: ShardId,
     controller: NetworkController,
-    executor_service: Arc<ShardedExecutorService<RemoteStateViewClient>>,
+    executor_service: Arc<ShardedExecutorService<InMemoryStateView>>,
 }
 
 impl ExecutorService {
@@ -48,7 +48,6 @@ impl ExecutorService {
         ));
 
         Self {
-            shard_id,
             controller,
             executor_service,
         }
@@ -56,17 +55,6 @@ impl ExecutorService {
 
     pub fn start(&mut self) {
         self.controller.start();
-        let thread_name = format!("ExecutorService-{}", self.shard_id);
-        let builder = thread::Builder::new().name(thread_name);
-        let executor_service_clone = self.executor_service.clone();
-        builder
-            .spawn(move || {
-                executor_service_clone.start();
-            })
-            .expect("Failed to spawn thread");
-    }
-
-    pub fn shutdown(&mut self) {
-        self.controller.shutdown();
+        self.executor_service.start();
     }
 }

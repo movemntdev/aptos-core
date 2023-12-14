@@ -16,11 +16,9 @@ use aptos_mempool::MempoolClientSender;
 use aptos_storage_interface::DbReader;
 use aptos_types::chain_id::ChainId;
 use poem::{
-    handler,
     http::{header, Method},
     listener::{Listener, RustlsCertificate, RustlsConfig, TcpListener},
     middleware::Cors,
-    web::Html,
     EndpointExt, Route, Server,
 };
 use poem_openapi::{ContactObject, LicenseObject, OpenApiService};
@@ -41,31 +39,8 @@ pub fn bootstrap(
 
     let context = Context::new(chain_id, db, mp_sender, config.clone());
 
-    attach_poem_to_runtime(runtime.handle(), context.clone(), config, false)
+    attach_poem_to_runtime(runtime.handle(), context, config, false)
         .context("Failed to attach poem to runtime")?;
-
-    if let Some(period_ms) = config.api.periodic_gas_estimation_ms {
-        runtime.spawn(async move {
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(period_ms));
-            loop {
-                interval.tick().await;
-                let context_cloned = context.clone();
-                tokio::task::spawn_blocking(move || {
-                    if let Ok(latest_ledger_info) =
-                        context_cloned.get_latest_ledger_info::<crate::response::BasicError>()
-                    {
-                        if let Ok(gas_estimation) = context_cloned
-                            .estimate_gas_price::<crate::response::BasicError>(&latest_ledger_info)
-                        {
-                            TransactionsApi::log_gas_estimation(&gas_estimation);
-                        }
-                    }
-                })
-                .await
-                .unwrap_or(());
-            }
-        });
-    }
 
     Ok(runtime)
 }
@@ -75,6 +50,51 @@ pub fn bootstrap(
 // TODO: https://github.com/poem-web/poem/issues/321
 // TODO: https://github.com/poem-web/poem/issues/332
 // TODO: https://github.com/poem-web/poem/issues/333
+
+
+pub type RawApi = (
+    TransactionsApi,
+    ViewFunctionApi,
+    IndexApi,
+    AccountsApi,
+    StateApi,
+    BlocksApi,
+    EventsApi,
+// BasicApi,
+);
+
+pub fn get_raw_api_service(
+    context: Arc<Context>,
+) -> RawApi {
+    let a = (
+        TransactionsApi {
+            context: context.clone(),
+        },
+        ViewFunctionApi {
+            context: context.clone()
+        },
+        IndexApi {
+            context: context.clone(),
+        },
+        AccountsApi {
+            context: context.clone(),
+        },
+        StateApi {
+            context: context.clone(),
+        },
+        BlocksApi {
+            context: context.clone(),
+        },
+        EventsApi {
+            context: context.clone(),
+        },
+        // BasicApi {
+        //     context: context.clone(),
+        // },
+    );
+    a
+}
+
 
 /// Generate the top level API service
 pub fn get_api_service(
@@ -171,11 +191,11 @@ pub fn attach_poem_to_runtime(
             let rustls_certificate = RustlsCertificate::new().cert(cert).key(key);
             let rustls_config = RustlsConfig::new().fallback(rustls_certificate);
             TcpListener::bind(address).rustls(rustls_config).boxed()
-        },
+        }
         _ => {
             info!("Not using TLS for API");
             TcpListener::bind(address).boxed()
-        },
+        }
     };
 
     let acceptor = tokio::task::block_in_place(move || {
@@ -203,7 +223,6 @@ pub fn attach_poem_to_runtime(
 
         // Build routes for the API
         let route = Route::new()
-            .at("/", root_handler)
             .nest(
                 "/v1",
                 Route::new()
@@ -231,24 +250,6 @@ pub fn attach_poem_to_runtime(
     info!("API server is running at {}", actual_address);
 
     Ok(actual_address)
-}
-
-#[handler]
-async fn root_handler() -> Html<&'static str> {
-    let response = "<html>
-<head>
-    <title>Aptos Node API</title>
-</head>
-<body>
-    <p>
-        Welcome! The latest node API can be found at <a href=\"/v1\">/v1<a/>.
-    </p>
-    <p>
-        Learn more about the v1 node API here: <a href=\"/v1/spec\">/v1/spec<a/>.
-    </p>
-</body>
-</html>";
-    Html(response)
 }
 
 /// Returns the maximum number of runtime workers to be given to the
@@ -347,8 +348,8 @@ mod tests {
     }
 
     fn with_retry<F>(f: F) -> anyhow::Result<reqwest::blocking::Response>
-    where
-        F: Fn() -> anyhow::Result<reqwest::blocking::Response>,
+        where
+            F: Fn() -> anyhow::Result<reqwest::blocking::Response>,
     {
         let mut remaining_attempts = 60;
         loop {
@@ -357,7 +358,7 @@ mod tests {
                 Err(_) if remaining_attempts > 0 => {
                     remaining_attempts -= 1;
                     std::thread::sleep(Duration::from_millis(100));
-                },
+                }
                 Err(error) => return Err(error),
             }
         }

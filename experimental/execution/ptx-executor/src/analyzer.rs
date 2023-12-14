@@ -8,7 +8,7 @@
 use crate::{metrics::TIMER, sorter::PtxSorterClient};
 use aptos_logger::trace;
 use aptos_metrics_core::TimerHelper;
-use aptos_types::transaction::signature_verified_transaction::SignatureVerifiedTransaction;
+use aptos_types::transaction::Transaction;
 use rayon::Scope;
 use std::sync::mpsc::{channel, Sender};
 
@@ -43,7 +43,7 @@ pub(crate) struct PtxAnalyzerClient {
 }
 
 impl PtxAnalyzerClient {
-    pub fn analyze_transaction(&self, txn: SignatureVerifiedTransaction) {
+    pub fn analyze_transaction(&self, txn: Transaction) {
         self.send_to_worker(Command::AnalyzeTransaction(txn));
     }
 
@@ -57,6 +57,6 @@ impl PtxAnalyzerClient {
 }
 
 enum Command {
-    AnalyzeTransaction(SignatureVerifiedTransaction),
+    AnalyzeTransaction(Transaction),
     Finish,
 }

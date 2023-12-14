@@ -34,9 +34,9 @@ impl Default for BaseConfig {
 
 impl ConfigSanitizer for BaseConfig {
     fn sanitize(
-        node_config: &NodeConfig,
+        node_config: &mut NodeConfig,
         _node_type: NodeType,
-        _chain_id: Option<ChainId>,
+        _chain_id: ChainId,
     ) -> Result<(), Error> {
         let sanitizer_name = Self::get_sanitizer_name();
         let base_config = &node_config.base;
@@ -179,7 +179,7 @@ mod test {
     #[test]
     fn test_sanitize_valid_base_config() {
         // Create a node config with a waypoint
-        let node_config = NodeConfig {
+        let mut node_config = NodeConfig {
             base: BaseConfig {
                 waypoint: WaypointConfig::FromConfig(Waypoint::default()),
                 ..Default::default()
@@ -188,13 +188,13 @@ mod test {
         };
 
         // Sanitize the config and verify that it passes
-        BaseConfig::sanitize(&node_config, NodeType::Validator, Some(ChainId::mainnet())).unwrap();
+        BaseConfig::sanitize(&mut node_config, NodeType::Validator, ChainId::mainnet()).unwrap();
     }
 
     #[test]
     fn test_sanitize_missing_waypoint() {
         // Create a node config with a missing waypoint
-        let node_config = NodeConfig {
+        let mut node_config = NodeConfig {
             base: BaseConfig {
                 waypoint: WaypointConfig::None,
                 ..Default::default()
@@ -203,9 +203,8 @@ mod test {
         };
 
         // Sanitize the config and verify that it fails because of the missing waypoint
-        let error =
-            BaseConfig::sanitize(&node_config, NodeType::Validator, Some(ChainId::mainnet()))
-                .unwrap_err();
+        let error = BaseConfig::sanitize(&mut node_config, NodeType::Validator, ChainId::mainnet())
+            .unwrap_err();
         assert!(matches!(error, Error::ConfigSanitizerFailed(_, _)));
     }
 

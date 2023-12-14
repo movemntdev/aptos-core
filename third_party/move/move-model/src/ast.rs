@@ -16,10 +16,7 @@ use crate::{
 };
 use internment::LocalIntern;
 use itertools::Itertools;
-use move_binary_format::{
-    file_format,
-    file_format::{CodeOffset, Visibility},
-};
+use move_binary_format::file_format::{CodeOffset, Visibility};
 use move_core_types::account_address::AccountAddress;
 use num::BigInt;
 use std::{
@@ -76,22 +73,10 @@ pub enum Attribute {
     Assign(NodeId, Symbol, AttributeValue),
 }
 
-impl Attribute {
-    pub fn name(&self) -> Symbol {
-        match self {
-            Attribute::Assign(_, s, _) | Attribute::Apply(_, s, _) => *s,
-        }
-    }
-
-    pub fn has(attrs: &[Attribute], pred: impl Fn(&Attribute) -> bool) -> bool {
-        attrs.iter().any(pred)
-    }
-}
-
 // =================================================================================================
 /// # Conditions
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ConditionKind {
     LetPost(Symbol),
     LetPre(Symbol),
@@ -253,7 +238,7 @@ impl std::fmt::Display for QuantKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct Condition {
     pub loc: Loc,
     pub kind: ConditionKind,
@@ -276,7 +261,7 @@ impl Condition {
 pub type PropertyBag = BTreeMap<Symbol, PropertyValue>;
 
 /// The value of a property.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub enum PropertyValue {
     Value(Value),
     Symbol(Symbol),
@@ -284,18 +269,17 @@ pub enum PropertyValue {
 }
 
 /// Specification and properties associated with a language item.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Default)]
 pub struct Spec {
-    /// The location of this specification, if available.
+    // The location of this specification, if available.
     pub loc: Option<Loc>,
-    /// The set of conditions associated with this item.
+    // The set of conditions associated with this item.
     pub conditions: Vec<Condition>,
-    /// Any pragma properties associated with this item.
+    // Any pragma properties associated with this item.
     pub properties: PropertyBag,
-    /// If this is a function, specs associated with individual code points. Note: only used
-    /// with v1 compile chain.
+    // If this is a function, specs associated with individual code points.
     pub on_impl: BTreeMap<CodeOffset, Spec>,
-    /// The map to store ghost variable update statements inlined in the function body.
+    // The map to store ghost variable update statements inlined in the function body
     pub update_map: BTreeMap<NodeId, Condition>,
 }
 
@@ -368,67 +352,6 @@ pub struct GlobalInvariant {
 }
 
 // =================================================================================================
-/// # Use Declarations
-
-/// Represents a `use` declaration in the source.
-#[derive(Debug, Clone)]
-pub struct UseDecl {
-    /// Location covered by this declaration.
-    pub loc: Loc,
-    /// The name of the module.
-    pub module_name: ModuleName,
-    /// The resolved module id, if it is known.
-    pub module_id: Option<ModuleId>,
-    /// An optional alias assigned to the module.
-    pub alias: Option<Symbol>,
-    /// A list of member uses, with optional aliasing.
-    pub members: Vec<(Loc, Symbol, Option<Symbol>)>,
-}
-
-// =================================================================================================
-/// # Friend Declarations
-
-/// Represents a `friend` declaration in the source.
-#[derive(Debug, Clone)]
-pub struct FriendDecl {
-    /// Location covered by this declaration.
-    pub loc: Loc,
-    /// The name of the friend module.
-    pub module_name: ModuleName,
-    /// The resolved module id, if it is known.
-    pub module_id: Option<ModuleId>,
-}
-
-// =================================================================================================
-/// # Access Specifiers
-
-/// Access specifier
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct AccessSpecifier {
-    pub loc: Loc,
-    pub kind: file_format::AccessKind,
-    pub negated: bool,
-    pub resource: (Loc, ResourceSpecifier),
-    pub address: (Loc, AddressSpecifier),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ResourceSpecifier {
-    Any,
-    DeclaredAtAddress(Address),
-    DeclaredInModule(ModuleId),
-    Resource(QualifiedInstId<StructId>),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum AddressSpecifier {
-    Any,
-    Address(Address),
-    Parameter(Symbol),
-    Call(QualifiedInstId<FunId>, Symbol),
-}
-
-// =================================================================================================
 /// # Expressions
 
 /// A type alias for temporaries. Those are locals used in bytecode.
@@ -457,8 +380,6 @@ pub enum ExpData {
     LocalVar(NodeId, Symbol),
     /// Represents a reference to a temporary used in bytecode, if this expression is associated
     /// with bytecode.
-    /// When compiling from Move source code, represents a parameter to a function: TempIndex
-    /// indicates the index into the list of function parameters.
     Temporary(NodeId, TempIndex),
     /// Represents a call to an operation. The `Operation` enum covers all builtin functions
     /// (including operators, constants, ...) as well as user functions.
@@ -497,14 +418,10 @@ pub enum ExpData {
     /// Represents a loop continuation for the enclosing loop. The bool indicates whether the
     /// loop is continued (true) or broken (false).
     LoopCont(NodeId, bool),
-    /// Assignment to a pattern. Can be a tuple pattern and a tuple expression.  Note that Assign
-    /// does *not* introduce new variables; they apparently be introduced by a Block or Lambda, or
-    /// as a function formal parameter.
+    /// Assignment to a pattern. Can be a tuple pattern and a tuple expression.
     Assign(NodeId, Pattern, Exp),
     /// Mutation of a lhs reference, as in `*lhs = rhs`.
     Mutate(NodeId, Exp, Exp),
-    /// Represents a specification block, type is ().
-    SpecBlock(NodeId, Spec),
 }
 
 /// An internalized expression. We do use a wrapper around the underlying internement implementation
@@ -597,8 +514,7 @@ impl ExpData {
             | LoopCont(node_id, ..)
             | Return(node_id, ..)
             | Mutate(node_id, ..)
-            | Assign(node_id, ..)
-            | SpecBlock(node_id, ..) => *node_id,
+            | Assign(node_id, ..) => *node_id,
         }
     }
 
@@ -619,40 +535,9 @@ impl ExpData {
 
     /// Returns the free local variables, inclusive their types, used in this expression.
     /// Result is ordered by occurrence.
-    pub fn free_vars_with_types(&self, env: &GlobalEnv) -> Vec<(Symbol, Type)> {
+    pub fn free_vars(&self, env: &GlobalEnv) -> Vec<(Symbol, Type)> {
         let mut vars = vec![];
-        let var_collector = |id: &NodeId, sym: &Symbol| {
-            if !vars.iter().any(|(s, _)| s == sym) {
-                vars.push((*sym, env.get_node_type(*id)));
-            }
-        };
-        self.visit_free_local_vars(var_collector);
-        vars
-    }
-
-    /// Returns the bound local variables with node id in this expression
-    pub fn bound_local_vars_with_node_id(&self) -> BTreeMap<Symbol, NodeId> {
-        let mut vars = BTreeMap::new();
-        let mut visitor = |up: bool, e: &ExpData| {
-            use ExpData::*;
-            if up {
-                if let LocalVar(id, sym) = e {
-                    if !vars.iter().any(|(s, _)| s == sym) {
-                        vars.insert(*sym, *id);
-                    }
-                }
-            }
-        };
-        self.visit_pre_post(&mut visitor);
-        vars
-    }
-
-    /// Visits free local variables with node id in this expression.
-    fn visit_free_local_vars<F>(&self, mut node_symbol_visitor: F)
-    where
-        F: FnMut(&NodeId, &Symbol),
-    {
-        let mut shadowed: BTreeMap<Symbol, usize> = BTreeMap::new();
+        let mut shadowed = vec![]; // Should be multiset but don't have this
         let mut visitor = |up: bool, e: &ExpData| {
             use ExpData::*;
             let decls = match e {
@@ -666,46 +551,40 @@ impl ExpData {
                 _ => vec![],
             };
             if !up {
-                // Visit the Assigned pat on the way down, before visiting the RHS expression
-                if let Assign(_, pat, _) = e {
-                    for (id, sym) in pat.vars().iter() {
-                        if shadowed.get(sym).cloned().unwrap_or(0) == 0 {
-                            node_symbol_visitor(id, sym);
-                        }
-                    }
-                } else {
-                    for sym in &decls {
-                        shadowed
-                            .entry(*sym)
-                            .and_modify(|curr| *curr += 1)
-                            .or_insert(1);
+                shadowed.extend(decls.iter());
+            } else {
+                for sym in decls {
+                    if let Some(pos) = shadowed.iter().position(|s| *s == sym) {
+                        // Remove one instance of this symbol. The same symbol can appear
+                        // multiple times in `shadowed`.
+                        shadowed.remove(pos);
                     }
                 }
-            }
-            if up {
                 if let LocalVar(id, sym) = e {
-                    if shadowed.get(sym).cloned().unwrap_or(0) == 0 {
-                        node_symbol_visitor(id, sym);
-                    }
-                } else {
-                    for sym in &decls {
-                        if let Some(x) = shadowed.get_mut(sym) {
-                            *x -= 1;
-                        }
+                    if !shadowed.contains(sym) && !vars.iter().any(|(s, _)| s == sym) {
+                        vars.push((*sym, env.get_node_type(*id)));
                     }
                 }
             }
         };
         self.visit_pre_post(&mut visitor);
+        vars
     }
 
-    /// Returns just the free local variables in this expression.
-    pub fn free_vars(&self) -> BTreeSet<Symbol> {
-        let mut vars = BTreeSet::new();
-        let just_vars_collector = |_id: &NodeId, sym: &Symbol| {
-            vars.insert(*sym);
+    /// Returns the free local variables with node id in this expression
+    pub fn free_local_vars_with_node_id(&self) -> BTreeMap<Symbol, NodeId> {
+        let mut vars = BTreeMap::new();
+        let mut visitor = |up: bool, e: &ExpData| {
+            use ExpData::*;
+            if up {
+                if let LocalVar(id, sym) = e {
+                    if !vars.iter().any(|(s, _)| s == sym) {
+                        vars.insert(*sym, *id);
+                    }
+                }
+            }
         };
-        self.visit_free_local_vars(just_vars_collector);
+        self.visit_pre_post(&mut visitor);
         vars
     }
 
@@ -768,21 +647,6 @@ impl ExpData {
         called
     }
 
-    /// Returns the Move functions called by this expression, along with nodes of call sites.
-    pub fn called_funs_with_callsites(&self) -> BTreeMap<QualifiedId<FunId>, BTreeSet<NodeId>> {
-        let mut called: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
-        let mut visitor = |e: &ExpData| {
-            if let ExpData::Call(node_id, Operation::MoveFunction(mid, fid), _) = e {
-                called
-                    .entry(mid.qualified(*fid))
-                    .or_default()
-                    .insert(*node_id);
-            }
-        };
-        self.visit(&mut visitor);
-        called
-    }
-
     pub fn has_exit(&self) -> bool {
         // TODO: we currently cannot break out of a visitor, so we maintain a state when we
         // are inside a loop.
@@ -798,34 +662,25 @@ impl ExpData {
     }
 
     /// Returns true of the given expression is valid for a constant expression.
-    /// If not valid, then returns false and adds reasons why not to the argument reasons.
-    ///
     /// TODO: this mimics the current allowed expression forms the v1 compiler allows,
     /// but is not documented as such in the book
-    pub fn is_valid_for_constant(&self, env: &GlobalEnv, reasons: &mut Vec<(Loc, String)>) -> bool {
+    pub fn is_valid_for_constant(&self) -> bool {
         let mut valid = true;
         let mut visitor = |e: &ExpData| match e {
-            ExpData::Value(..) | ExpData::Invalid(_) | ExpData::Sequence(_, _) => {},
-            ExpData::Call(id, oper, _args) => {
-                // Note that _args are visited separately.  No need to check them here.
-                if !oper.is_builtin_op() {
-                    reasons.push((
-                        env.get_node_loc(*id),
-                        "Invalid call or operation in constant".to_owned(),
-                    ));
+            ExpData::Value(..) | ExpData::Invalid(_) => {},
+            ExpData::Call(_, oper, args) => {
+                if !oper.is_builtin_op() || !args.iter().all(|e| e.is_valid_for_constant()) {
                     valid = false;
                 }
             },
-            _ => {
-                let id = e.node_id();
-                reasons.push((
-                    env.get_node_loc(id),
-                    "Invalid statement or expression in constant".to_owned(),
-                ));
-                valid = false
+            ExpData::Sequence(_, items) => {
+                if !items.iter().all(|e| e.is_valid_for_constant()) {
+                    valid = false
+                }
             },
+            _ => valid = false,
         };
-        self.visit_top_down(&mut visitor);
+        self.visit(&mut visitor);
         valid
     }
 
@@ -836,18 +691,6 @@ impl ExpData {
     {
         self.visit_pre_post(&mut |up, e| {
             if up {
-                visitor(e);
-            }
-        });
-    }
-
-    /// Visits expression, calling visitor parent expression, then subexpressions, depth first.
-    pub fn visit_top_down<F>(&self, visitor: &mut F)
-    where
-        F: FnMut(&ExpData),
-    {
-        self.visit_pre_post(&mut |up, e| {
-            if !up {
                 visitor(e);
             }
         });
@@ -928,36 +771,10 @@ impl ExpData {
                 lhs.visit_pre_post(visitor);
                 rhs.visit_pre_post(visitor);
             },
-            SpecBlock(_, spec) => Self::visit_pre_post_spec(spec, visitor),
             // Explicitly list all enum variants
             LoopCont(..) | Value(..) | LocalVar(..) | Temporary(..) | Invalid(..) => {},
         }
         visitor(true, self);
-    }
-
-    fn visit_pre_post_spec<F>(spec: &Spec, visitor: &mut F)
-    where
-        F: FnMut(bool, &ExpData),
-    {
-        for cond in &spec.conditions {
-            Self::visit_pre_post_cond(cond, visitor)
-        }
-        for impl_spec in spec.on_impl.values() {
-            Self::visit_pre_post_spec(impl_spec, visitor)
-        }
-        for cond in spec.update_map.values() {
-            Self::visit_pre_post_cond(cond, visitor)
-        }
-    }
-
-    fn visit_pre_post_cond<F>(cond: &Condition, visitor: &mut F)
-    where
-        F: FnMut(bool, &ExpData),
-    {
-        cond.exp.visit_pre_post(visitor);
-        for exp in &cond.additional_exps {
-            exp.visit_pre_post(visitor);
-        }
     }
 
     /// Rewrites this expression and sub-expression based on the rewriter function. The
@@ -971,24 +788,6 @@ impl ExpData {
         ExpRewriter {
             exp_rewriter,
             node_rewriter: &mut |_| None,
-            pattern_rewriter: &mut |_, _| None,
-        }
-        .rewrite_exp(exp)
-    }
-
-    pub fn rewrite_exp_and_pattern<F, G>(
-        exp: Exp,
-        exp_rewriter: &mut F,
-        pattern_rewriter: &mut G,
-    ) -> Exp
-    where
-        F: FnMut(Exp) -> Result<Exp, Exp>,
-        G: FnMut(&Pattern, bool) -> Option<Pattern>,
-    {
-        ExpRewriter {
-            exp_rewriter,
-            node_rewriter: &mut |_| None,
-            pattern_rewriter,
         }
         .rewrite_exp(exp)
     }
@@ -1002,7 +801,6 @@ impl ExpData {
         ExpRewriter {
             exp_rewriter: &mut Err,
             node_rewriter,
-            pattern_rewriter: &mut |_, _| None,
         }
         .rewrite_exp(exp)
     }
@@ -1020,13 +818,12 @@ impl ExpData {
         ExpRewriter {
             exp_rewriter,
             node_rewriter,
-            pattern_rewriter: &mut |_, _| None,
         }
         .rewrite_exp(exp)
     }
 
-    /// A function which can be used by a `node_rewriter` argument to `ExpData::rewrite_node_id` to
-    /// instantiate types in an expression based on a type parameter instantiation.
+    /// A function which can be used for `Exp::rewrite_node_id` to instantiate types in
+    /// an expression based on a type parameter instantiation.
     pub fn instantiate_node(env: &GlobalEnv, id: NodeId, targs: &[Type]) -> Option<NodeId> {
         if targs.is_empty() {
             // shortcut
@@ -1045,31 +842,6 @@ impl ExpData {
             Some(new_id)
         } else {
             None
-        }
-    }
-
-    /// A function which can be used by a `node_rewriter` argument to `ExpData::rewrite_node_id` to
-    /// update node location (`Loc`), in addition to instantiating types.  This is currently only
-    /// useful in inlining, but is cleaner to implement here.
-    pub fn instantiate_node_new_loc(
-        env: &GlobalEnv,
-        id: NodeId,
-        targs: &[Type],
-        new_loc: &Loc,
-    ) -> Option<NodeId> {
-        let loc = env.get_node_loc(id);
-        if loc != *new_loc {
-            let node_ty = env.get_node_type(id);
-            let new_node_ty = node_ty.instantiate(targs);
-            let node_inst = env.get_node_instantiation_opt(id);
-            let new_node_inst = node_inst.clone().map(|i| Type::instantiate_vec(i, targs));
-            let new_id = env.new_node(new_loc.clone(), new_node_ty);
-            if let Some(inst) = new_node_inst {
-                env.set_node_instantiation(new_id, inst);
-            }
-            Some(new_id)
-        } else {
-            ExpData::instantiate_node(env, id, targs)
         }
     }
 
@@ -1162,22 +934,11 @@ impl ExpData {
             }
         });
     }
-
-    /// Returns the node id of the inner expression which delivers the result. For blocks,
-    /// this traverses into the body.
-    pub fn result_node_id(&self) -> NodeId {
-        if let ExpData::Block(_, _, _, body) = self {
-            body.result_node_id()
-        } else {
-            self.node_id()
-        }
-    }
 }
 
 struct ExpRewriter<'a> {
     exp_rewriter: &'a mut dyn FnMut(Exp) -> Result<Exp, Exp>,
     node_rewriter: &'a mut dyn FnMut(NodeId) -> Option<NodeId>,
-    pattern_rewriter: &'a mut dyn FnMut(&Pattern, bool) -> Option<Pattern>,
 }
 
 impl<'a> ExpRewriterFunctions for ExpRewriter<'a> {
@@ -1190,10 +951,6 @@ impl<'a> ExpRewriterFunctions for ExpRewriter<'a> {
 
     fn rewrite_node_id(&mut self, id: NodeId) -> Option<NodeId> {
         (*self.node_rewriter)(id)
-    }
-
-    fn rewrite_pattern(&mut self, pat: &Pattern, entering_scope: bool) -> Option<Pattern> {
-        (*self.pattern_rewriter)(pat, entering_scope)
     }
 }
 
@@ -1234,10 +991,6 @@ pub enum Operation {
     Gt,
     Le,
     Ge,
-
-    // Copy and Move
-    Copy,
-    Move,
 
     // Unary operators
     Not,
@@ -1355,7 +1108,7 @@ impl Pattern {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum TraceKind {
     /// A user level TRACE(..) in the source.
     User,
@@ -1453,11 +1206,10 @@ impl Operation {
                 | Not
                 | Cast
                 | Len
-                | Vector
         )
     }
 
-    /// Whether the operation allows to take reference parameters instead of values. This applies
+    /// Whether the operation alllows to take reference parameters instead of values. This applies
     /// currently to equality which can be used on `(T, T)`, `(T, &T)`, etc.
     pub fn allows_ref_param_for_value(&self) -> bool {
         matches!(self, Operation::Eq | Operation::Neq)
@@ -1713,7 +1465,6 @@ impl ExpData {
             env,
             exp: self,
             fun_env: None,
-            verbose: false,
         }
     }
 
@@ -1724,7 +1475,6 @@ impl ExpData {
             env: fun_env.module_env.env,
             exp: self,
             fun_env: Some(fun_env),
-            verbose: false,
         }
     }
 
@@ -1733,17 +1483,6 @@ impl ExpData {
             env: other.env,
             exp: self,
             fun_env: other.fun_env.clone(),
-            verbose: other.verbose,
-        }
-    }
-
-    #[allow(unused)]
-    pub fn display_verbose<'a>(&'a self, env: &'a GlobalEnv) -> ExpDisplay<'a> {
-        ExpDisplay {
-            env,
-            exp: self,
-            fun_env: None,
-            verbose: true,
         }
     }
 }
@@ -1753,15 +1492,11 @@ pub struct ExpDisplay<'a> {
     env: &'a GlobalEnv,
     exp: &'a ExpData,
     fun_env: Option<FunctionEnv<'a>>,
-    verbose: bool,
 }
 
 impl<'a> fmt::Display for ExpDisplay<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         use ExpData::*;
-        if self.verbose {
-            write!(f, "(")?;
-        }
         match self.exp {
             Invalid(_) => write!(f, "*invalid*"),
             Value(_, v) => write!(f, "{}", self.env.display(v)),
@@ -1857,17 +1592,6 @@ impl<'a> fmt::Display for ExpDisplay<'a> {
             Mutate(_, lhs, rhs) => {
                 write!(f, "{} = {}", lhs.display_cont(self), rhs.display_cont(self))
             },
-            SpecBlock(_, spec) => {
-                write!(f, "{}", self.env.display(spec))
-            },
-        }?;
-        if self.verbose {
-            let node_id = self.exp.node_id();
-            let node_type = self.env.get_node_type(node_id);
-            let type_ctx = self.type_ctx();
-            write!(f, ") : {}", node_type.display(&type_ctx))
-        } else {
-            Ok(())
         }
     }
 }
@@ -2117,7 +1841,7 @@ impl<'a> fmt::Display for EnvDisplay<'a, Condition> {
                     exps[1].display(self.env)
                 )?;
                 if exps.len() > 2 {
-                    write!(f, " if {}", exps[2].display(self.env))?;
+                    write!(f, "if {}", exps[2].display(self.env))?;
                 }
                 write!(f, ";")?
             },

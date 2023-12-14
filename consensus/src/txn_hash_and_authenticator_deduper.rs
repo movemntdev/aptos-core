@@ -5,7 +5,6 @@ use crate::{
     counters::{TXN_DEDUP_FILTERED, TXN_DEDUP_SECONDS},
     transaction_deduper::TransactionDeduper,
 };
-use aptos_experimental_runtimes::thread_manager::optimal_min_len;
 use aptos_types::transaction::SignedTransaction;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -58,12 +57,10 @@ impl TransactionDeduper for TxnHashAndAuthenticatorDeduper {
             return transactions;
         }
 
-        let num_txns = transactions.len();
-
         let hash_and_authenticators: Vec<_> = possible_duplicates
             .into_par_iter()
             .zip(&transactions)
-            .with_min_len(optimal_min_len(num_txns, 48))
+            .with_min_len(25)
             .map(|(need_hash, txn)| match need_hash {
                 true => Some((txn.clone().committed_hash(), txn.authenticator())),
                 false => None,

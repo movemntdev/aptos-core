@@ -28,12 +28,10 @@ use aptos_types::{
     transaction::{AtomicVersion, Version},
     write_set::{WriteOp, WriteSet},
 };
-use aptos_vm::data_cache::AsMoveResolver;
-use bytes::Bytes;
+use aptos_vm::data_cache::{AsMoveResolver, StorageAdapter};
 use move_core_types::{
     ident_str,
     language_storage::{StructTag, TypeTag},
-    resolver::MoveResolver,
 };
 use move_resource_viewer::{AnnotatedMoveValue, MoveValueAnnotator};
 use std::{
@@ -41,6 +39,7 @@ use std::{
     convert::TryInto,
     sync::{atomic::Ordering, Arc},
 };
+
 #[derive(Debug)]
 pub struct Indexer {
     db: DB,
@@ -87,9 +86,9 @@ impl Indexer {
         self.index_with_annotator(&annotator, first_version, write_sets)
     }
 
-    pub fn index_with_annotator<R: MoveResolver>(
+    pub fn index_with_annotator(
         &self,
-        annotator: &MoveValueAnnotator<R>,
+        annotator: &MoveValueAnnotator<StorageAdapter<DbStateView>>,
         first_version: Version,
         write_sets: &[&WriteSet],
     ) -> Result<()> {
@@ -151,15 +150,18 @@ impl Indexer {
     }
 }
 
-struct TableInfoParser<'a, R> {
+struct TableInfoParser<'a> {
     indexer: &'a Indexer,
-    annotator: &'a MoveValueAnnotator<'a, R>,
+    annotator: &'a MoveValueAnnotator<'a, StorageAdapter<'a, DbStateView>>,
     result: HashMap<TableHandle, TableInfo>,
-    pending_on: HashMap<TableHandle, Vec<Bytes>>,
+    pending_on: HashMap<TableHandle, Vec<&'a [u8]>>,
 }
 
-impl<'a, R: MoveResolver> TableInfoParser<'a, R> {
-    pub fn new(indexer: &'a Indexer, annotator: &'a MoveValueAnnotator<R>) -> Self {
+impl<'a> TableInfoParser<'a> {
+    pub fn new(
+        indexer: &'a Indexer,
+        annotator: &'a MoveValueAnnotator<StorageAdapter<DbStateView>>,
+    ) -> Self {
         Self {
             indexer,
             annotator,
@@ -186,7 +188,7 @@ impl<'a, R: MoveResolver> TableInfoParser<'a, R> {
         Ok(())
     }
 
-    fn parse_struct(&mut self, struct_tag: StructTag, bytes: &Bytes) -> Result<()> {
+    fn parse_struct(&mut self, struct_tag: StructTag, bytes: &[u8]) -> Result<()> {
         self.parse_move_value(
             &self
                 .annotator
@@ -194,8 +196,8 @@ impl<'a, R: MoveResolver> TableInfoParser<'a, R> {
         )
     }
 
-    fn parse_resource_group(&mut self, bytes: &Bytes) -> Result<()> {
-        type ResourceGroup = BTreeMap<StructTag, Bytes>;
+    fn parse_resource_group(&mut self, bytes: &[u8]) -> Result<()> {
+        type ResourceGroup = BTreeMap<StructTag, Vec<u8>>;
 
         for (struct_tag, bytes) in bcs::from_bytes::<ResourceGroup>(bytes)? {
             self.parse_struct(struct_tag, &bytes)?;
@@ -203,7 +205,7 @@ impl<'a, R: MoveResolver> TableInfoParser<'a, R> {
         Ok(())
     }
 
-    fn parse_table_item(&mut self, handle: TableHandle, bytes: &Bytes) -> Result<()> {
+    fn parse_table_item(&mut self, handle: TableHandle, bytes: &'a [u8]) -> Result<()> {
         match self.get_table_info(handle)? {
             Some(table_info) => {
                 self.parse_move_value(&self.annotator.view_value(&table_info.value_type, bytes)?)?;
@@ -212,7 +214,7 @@ impl<'a, R: MoveResolver> TableInfoParser<'a, R> {
                 self.pending_on
                     .entry(handle)
                     .or_insert_with(Vec::new)
-                    .push(bytes.clone());
+                    .push(bytes);
             },
         }
         Ok(())
@@ -267,7 +269,7 @@ impl<'a, R: MoveResolver> TableInfoParser<'a, R> {
             self.result.insert(handle, info);
             if let Some(pending_items) = self.pending_on.remove(&handle) {
                 for bytes in pending_items {
-                    self.parse_table_item(handle, &bytes)?;
+                    self.parse_table_item(handle, bytes)?;
                 }
             }
         }

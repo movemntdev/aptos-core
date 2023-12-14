@@ -2,16 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::change_set::VMChangeSet;
-use aptos_aggregator::{resolver::AggregatorV1Resolver, types::code_invariant_error};
+use aptos_state_view::StateView;
 use aptos_types::{
-    aggregator::PanicError,
-    contract_event::ContractEvent, //contract_event::ContractEvent,
     fee_statement::FeeStatement,
     state_store::state_key::StateKey,
     transaction::{TransactionOutput, TransactionStatus},
     write_set::WriteOp,
 };
-use move_core_types::vm_status::{StatusCode, VMStatus};
+use move_core_types::vm_status::VMStatus;
 
 /// Output produced by the VM after executing a transaction.
 ///
@@ -57,10 +55,6 @@ impl VMOutput {
         &self.change_set
     }
 
-    pub fn change_set_mut(&mut self) -> &mut VMChangeSet {
-        &mut self.change_set
-    }
-
     pub fn gas_used(&self) -> u64 {
         self.fee_statement.gas_used()
     }
@@ -76,106 +70,65 @@ impl VMOutput {
     /// Materializes delta sets.
     /// Guarantees that if deltas are materialized successfully, the output
     /// has an empty delta set.
-    /// TODO[agg_v2](cleanup) Consolidate materialization paths. See either:
-    /// - if we can/should move try_materialize_aggregator_v1_delta_set into
-    ///   executor.rs
-    /// - move all materialization (including delayed fields) into change_set
-    pub fn try_materialize(
-        &mut self,
-        resolver: &impl AggregatorV1Resolver,
-    ) -> anyhow::Result<(), VMStatus> {
+    pub fn try_materialize(self, state_view: &impl StateView) -> anyhow::Result<Self, VMStatus> {
         // First, check if output of transaction should be discarded or delta
         // change set is empty. In both cases, we do not need to apply any
         // deltas and can return immediately.
-        if self.status().is_discarded()
-            || (self.change_set().aggregator_v1_delta_set().is_empty()
-                && self.change_set().delayed_field_change_set().is_empty())
-        {
-            return Ok(());
+        if self.status().is_discarded() || self.change_set().aggregator_v1_delta_set().is_empty() {
+            return Ok(self);
         }
 
-        self.change_set
-            .try_materialize_aggregator_v1_delta_set(resolver)?;
-
-        Ok(())
+        let (change_set, fee_statement, status) = self.unpack_with_fee_statement();
+        let materialized_change_set = change_set.try_materialize(state_view)?;
+        Ok(VMOutput::new(
+            materialized_change_set,
+            fee_statement,
+            status,
+        ))
     }
 
     /// Same as `try_materialize` but also constructs `TransactionOutput`.
-    pub fn try_materialize_into_transaction_output(
-        mut self,
-        resolver: &impl AggregatorV1Resolver,
+    pub fn try_into_transaction_output(
+        self,
+        state_view: &impl StateView,
     ) -> anyhow::Result<TransactionOutput, VMStatus> {
-        self.try_materialize(resolver)?;
-        Self::convert_to_transaction_output(self).map_err(|e| {
-            VMStatus::error(
-                StatusCode::DELAYED_FIELDS_CODE_INVARIANT_ERROR,
-                Some(e.to_string()),
-            )
-        })
-    }
-
-    /// Constructs `TransactionOutput`, without doing `try_materialize`
-    pub fn into_transaction_output(self) -> anyhow::Result<TransactionOutput, VMStatus> {
-        let (change_set, fee_statement, status) = self.unpack_with_fee_statement();
-        let output = VMOutput::new(change_set, fee_statement, status);
-        Self::convert_to_transaction_output(output).map_err(|e| {
-            VMStatus::error(
-                StatusCode::DELAYED_FIELDS_CODE_INVARIANT_ERROR,
-                Some(e.to_string()),
-            )
-        })
-    }
-
-    fn convert_to_transaction_output(
-        materialized_output: VMOutput,
-    ) -> Result<TransactionOutput, PanicError> {
+        let materialized_output = self.try_materialize(state_view)?;
+        debug_assert!(
+            materialized_output
+                .change_set()
+                .aggregator_v1_delta_set()
+                .is_empty(),
+            "Aggregator deltas must be empty after materialization."
+        );
         let (vm_change_set, gas_used, status) = materialized_output.unpack();
         let (write_set, events) = vm_change_set.try_into_storage_change_set()?.into_inner();
         Ok(TransactionOutput::new(write_set, events, gas_used, status))
     }
 
-    /// Updates the VMChangeSet based on the input aggregator v1 deltas, patched resource write set,
-    /// patched events, and generates TransactionOutput
-    pub fn into_transaction_output_with_materialized_write_set(
+    /// Similar to `try_into_transaction_output` but deltas are materialized
+    /// externally by the caller beforehand.
+    pub fn into_transaction_output_with_materialized_deltas(
         mut self,
-        materialized_aggregator_v1_deltas: Vec<(StateKey, WriteOp)>,
-        patched_resource_write_set: Vec<(StateKey, WriteOp)>,
-        patched_events: Vec<ContractEvent>,
-    ) -> Result<TransactionOutput, PanicError> {
-        // materialize aggregator V1 deltas into writes
-        if materialized_aggregator_v1_deltas.len()
-            != self.change_set().aggregator_v1_delta_set().len()
-        {
-            return Err(code_invariant_error(
-                "Different number of materialized deltas and deltas in the output.",
-            ));
-        }
-        if !materialized_aggregator_v1_deltas
-            .iter()
-            .all(|(k, _)| self.change_set().aggregator_v1_delta_set().contains_key(k))
-        {
-            return Err(code_invariant_error(
-                "Materialized aggregator writes contain a key which does not exist in delta set.",
-            ));
-        }
+        materialized_deltas: Vec<(StateKey, WriteOp)>,
+    ) -> TransactionOutput {
+        // We should have a materialized delta for every delta in the output.
+        assert_eq!(
+            materialized_deltas.len(),
+            self.change_set().aggregator_v1_delta_set().len()
+        );
+        debug_assert!(
+            materialized_deltas
+                .iter()
+                .all(|(k, _)| self.change_set().aggregator_v1_delta_set().contains_key(k)),
+            "Materialized aggregator writes contain a key which does not exist in delta set."
+        );
         self.change_set
-            .extend_aggregator_v1_write_set(materialized_aggregator_v1_deltas.into_iter());
-        // TODO[agg_v2](cleanup) move all drains to happen when getting what to materialize.
-        let _ = self.change_set.drain_aggregator_v1_delta_set();
+            .extend_aggregator_write_set(materialized_deltas.into_iter());
 
-        // materialize delayed fields into resource writes
-        self.change_set
-            .extend_resource_write_set(patched_resource_write_set.into_iter())?;
-        let _ = self.change_set.drain_delayed_field_change_set();
-
-        // materialize delayed fields into events
-        if patched_events.len() != self.change_set().events().len() {
-            return Err(code_invariant_error(
-                "Different number of events and patched events in the output.",
-            ));
-        }
-        self.change_set.set_events(patched_events.into_iter());
-
-        Self::convert_to_transaction_output(self)
+        let (vm_change_set, gas_used, status) = self.unpack();
+        let (write_set, events) = vm_change_set
+            .into_storage_change_set_unchecked()
+            .into_inner();
+        TransactionOutput::new(write_set, events, gas_used, status)
     }
 }

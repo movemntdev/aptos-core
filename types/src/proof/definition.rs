@@ -10,7 +10,6 @@ use super::{
 };
 use crate::{
     ledger_info::LedgerInfo,
-    proof::accumulator::InMemoryTransactionAccumulator,
     transaction::{TransactionInfo, Version},
 };
 use anyhow::{bail, ensure, format_err, Context, Result};
@@ -383,10 +382,10 @@ impl SparseMerkleProof {
 /// attempt to extend their accumulator summary with an [`AccumulatorConsistencyProof`]
 /// to verifiably ratchet their trusted view of the accumulator to a newer state.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct TransactionAccumulatorSummary(pub InMemoryTransactionAccumulator);
+pub struct TransactionAccumulatorSummary(pub InMemoryAccumulator<TransactionAccumulatorHasher>);
 
 impl TransactionAccumulatorSummary {
-    pub fn new(accumulator: InMemoryTransactionAccumulator) -> Result<Self> {
+    pub fn new(accumulator: InMemoryAccumulator<TransactionAccumulatorHasher>) -> Result<Self> {
         ensure!(
             !accumulator.is_empty(),
             "empty accumulator: we can't verify consistency proofs from an empty accumulator",
@@ -891,7 +890,7 @@ impl TransactionInfoListWithProof {
                 .rev()
                 .cloned()
                 .collect::<Vec<_>>();
-            let accu_from_proof = InMemoryTransactionAccumulator::new(
+            let accu_from_proof = InMemoryAccumulator::<TransactionAccumulatorHasher>::new(
                 frozen_subtree_roots_from_proof,
                 first_version,
             )?

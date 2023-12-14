@@ -2,11 +2,11 @@ import { WalletSelector } from "@aptos-labs/wallet-adapter-ant-design";
 import { Layout, Row, Col, Button, Spin, List, Checkbox, Input } from "antd";
 
 import React, { useEffect, useState } from "react";
-import { useWallet, InputTransactionData } from "@aptos-labs/wallet-adapter-react";
+import { useWallet } from "@aptos-labs/wallet-adapter-react";
 
 import "@aptos-labs/wallet-adapter-ant-design/dist/index.css";
 import { CheckboxChangeEvent } from "antd/es/checkbox";
-import { Aptos } from "@aptos-labs/ts-sdk";
+import { Network, Provider } from "aptos";
 
 type Task = {
   address: string;
@@ -15,7 +15,7 @@ type Task = {
   task_id: string;
 };
 
-export const aptos = new Aptos();
+export const provider = new Provider(Network.DEVNET);
 // change this to be your module account address
 export const moduleAddress = "0xcbddf398841353776903dbab2fdaefc54f181d07e114ae818b1a67af28d1b018";
 
@@ -34,9 +34,9 @@ function App() {
   const fetchList = async () => {
     if (!account) return [];
     try {
-      const todoListResource = await aptos.getAccountResource(
-        {accountAddress:account?.address,
-          resourceType:`${moduleAddress}::todolist::TodoList`}
+      const todoListResource = await provider.getAccountResource(
+        account?.address,
+        `${moduleAddress}::todolist::TodoList`,
       );
       setAccountHasList(true);
       // tasks table handle
@@ -52,7 +52,7 @@ function App() {
           value_type: `${moduleAddress}::todolist::Task`,
           key: `${counter}`,
         };
-        const task = await aptos.getTableItem<Task>({handle:tableHandle, data:tableItem});
+        const task = await provider.getTableItem(tableHandle, tableItem);
         tasks.push(task);
         counter++;
       }
@@ -66,18 +66,18 @@ function App() {
   const addNewList = async () => {
     if (!account) return [];
     setTransactionInProgress(true);
-
-    const transaction:InputTransactionData = {
-      data:{
-        function:`${moduleAddress}::todolist::create_list`,
-        functionArguments:[]
-      }
-    }
+    // build a transaction payload to be submited
+    const payload = {
+      type: "entry_function_payload",
+      function: `${moduleAddress}::todolist::create_list`,
+      type_arguments: [],
+      arguments: [],
+    };
     try {
       // sign and submit transaction to chain
-      const response = await signAndSubmitTransaction(transaction);
+      const response = await signAndSubmitTransaction(payload);
       // wait for transaction
-      await aptos.waitForTransaction({transactionHash:response.hash});
+      await provider.waitForTransaction(response.hash);
       setAccountHasList(true);
     } catch (error: any) {
       setAccountHasList(false);
@@ -90,13 +90,13 @@ function App() {
     // check for connected account
     if (!account) return;
     setTransactionInProgress(true);
-
-    const transaction:InputTransactionData = {
-      data:{
-        function:`${moduleAddress}::todolist::create_task`,
-        functionArguments:[newTask]
-      }
-    }
+    // build a transaction payload to be submited
+    const payload = {
+      type: "entry_function_payload",
+      function: `${moduleAddress}::todolist::create_task`,
+      type_arguments: [],
+      arguments: [newTask],
+    };
 
     // hold the latest task.task_id from our local state
     const latestId = tasks.length > 0 ? parseInt(tasks[tasks.length - 1].task_id) + 1 : 1;
@@ -111,9 +111,9 @@ function App() {
 
     try {
       // sign and submit transaction to chain
-      const response = await signAndSubmitTransaction(transaction);
+      const response = await signAndSubmitTransaction(payload);
       // wait for transaction
-      await aptos.waitForTransaction({transactionHash:response.hash});
+      await provider.waitForTransaction(response.hash);
 
       // Create a new array based on current state:
       let newTasks = [...tasks];
@@ -135,19 +135,18 @@ function App() {
     if (!account) return;
     if (!event.target.checked) return;
     setTransactionInProgress(true);
-
-    const transaction:InputTransactionData = {
-      data:{
-        function:`${moduleAddress}::todolist::complete_task`,
-        functionArguments:[taskId]
-      }
-    }
+    const payload = {
+      type: "entry_function_payload",
+      function: `${moduleAddress}::todolist::complete_task`,
+      type_arguments: [],
+      arguments: [taskId],
+    };
 
     try {
       // sign and submit transaction to chain
-      const response = await signAndSubmitTransaction(transaction);
+      const response = await signAndSubmitTransaction(payload);
       // wait for transaction
-      await aptos.waitForTransaction({transactionHash:response.hash});
+      await provider.waitForTransaction(response.hash);
 
       setTasks((prevState) => {
         const newState = prevState.map((obj) => {

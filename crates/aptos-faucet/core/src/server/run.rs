@@ -48,7 +48,7 @@ pub struct HandlerConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RunConfig {
     /// API server config.
-    pub server_config: ServerConfig,
+    server_config: ServerConfig,
 
     /// Metrics server config.
     metrics_server_config: MetricsServerConfig,
@@ -69,6 +69,7 @@ pub struct RunConfig {
 impl RunConfig {
     pub async fn run(self) -> Result<()> {
         info!("Running with config: {:#?}", self);
+        println!("Faucet is starting, please wait...");
 
         // Set whether we should use useful errors.
         // If it's already set, then we'll carry on
@@ -211,6 +212,11 @@ impl RunConfig {
             }));
         }
 
+        println!(
+            "Faucet is running. Faucet endpoint: http://{}:{}",
+            self.server_config.listen_address, self.server_config.listen_port
+        );
+
         // Wait for all the futures. We expect none of them to ever end.
         futures::future::select_all(main_futures)
             .await
@@ -230,8 +236,7 @@ impl RunConfig {
     /// run by the Aptos CLI.
     pub fn build_for_cli(
         api_url: Url,
-        listen_address: String,
-        listen_port: u16,
+        faucet_port: u16,
         funder_key: FunderKeyEnum,
         do_not_delegate: bool,
         chain_id: Option<ChainId>,
@@ -242,8 +247,8 @@ impl RunConfig {
         };
         Self {
             server_config: ServerConfig {
-                listen_address,
-                listen_port,
+                listen_address: "0.0.0.0".to_string(),
+                listen_port: faucet_port,
                 api_path_base: "".to_string(),
             },
             metrics_server_config: MetricsServerConfig {
@@ -345,7 +350,6 @@ impl RunSimple {
             .context("Failed to load private key")?;
         let run_config = RunConfig::build_for_cli(
             self.api_connection_config.node_url.clone(),
-            self.listen_address.clone(),
             self.listen_port,
             FunderKeyEnum::Key(ConfigKey::new(key)),
             self.do_not_delegate,
@@ -821,7 +825,7 @@ mod test {
 
         // Assert that the account exists now with the expected balance.
         let response = aptos_node_api_client
-            .get_account_balance(AccountAddress::from_str(&fund_request.address.unwrap()).unwrap())
+            .get_account_balance(AccountAddress::from_hex(fund_request.address.unwrap()).unwrap())
             .await?;
 
         assert_eq!(response.into_inner().get(), 10);
@@ -879,7 +883,7 @@ mod test {
 
         // Assert that the account exists now with the expected balance.
         let response = aptos_node_api_client
-            .get_account_balance(AccountAddress::from_str(&fund_request.address.unwrap()).unwrap())
+            .get_account_balance(AccountAddress::from_hex(fund_request.address.unwrap()).unwrap())
             .await?;
 
         assert_eq!(response.into_inner().get(), 10);
@@ -927,7 +931,7 @@ mod test {
 
         // Confirm that the account was given the full 1000 OCTA as requested.
         let response = aptos_node_api_client
-            .get_account_balance(AccountAddress::from_str(&fund_request.address.unwrap()).unwrap())
+            .get_account_balance(AccountAddress::from_hex(fund_request.address.unwrap()).unwrap())
             .await?;
 
         assert_eq!(response.into_inner().get(), 1000);
@@ -945,7 +949,7 @@ mod test {
 
         // Confirm that the account was only given 100 OCTA (maximum_amount), not 1000.
         let response = aptos_node_api_client
-            .get_account_balance(AccountAddress::from_str(&fund_request.address.unwrap()).unwrap())
+            .get_account_balance(AccountAddress::from_hex(fund_request.address.unwrap()).unwrap())
             .await?;
 
         assert_eq!(response.into_inner().get(), 100);

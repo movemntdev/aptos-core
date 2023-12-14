@@ -13,7 +13,6 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
-anyhow = { workspace = true }
 aptos-bounded-executor = { workspace = true }
 aptos-channels = { workspace = true }
 aptos-config = { workspace = true }
@@ -31,7 +30,7 @@ bcs = { workspace = true }
 bytes = { workspace = true }
 dashmap = { workspace = true }
 futures = { workspace = true }
-mini-moka = { workspace = true }
+lru = { workspace = true }
 once_cell = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }

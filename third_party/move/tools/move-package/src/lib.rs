@@ -23,7 +23,7 @@ use move_compiler::{
     command_line::SKIP_ATTRIBUTE_CHECKS, shared::known_attributes::KnownAttribute,
 };
 use move_core_types::account_address::AccountAddress;
-use move_model::model;
+use move_model::model::GlobalEnv;
 use serde::{Deserialize, Serialize};
 use source_package::layout::SourcePackageLayout;
 use std::{
@@ -114,14 +114,6 @@ pub struct BuildConfig {
     #[clap(name = "generate-abis", long = "abi", global = true)]
     pub generate_abis: bool,
 
-    /// Whether to generate a move model. Used programmatically only.
-    #[clap(skip)]
-    pub generate_move_model: bool,
-
-    /// Whether the generated model shall contain all functions, including test-only ones.
-    #[clap(skip)]
-    pub full_model_generation: bool,
-
     /// Installation directory for compiled artifacts. Defaults to current directory.
     #[clap(long = "install-dir", value_parser, global = true)]
     pub install_dir: Option<PathBuf>,
@@ -207,7 +199,7 @@ impl BuildConfig {
         self,
         path: &Path,
         writer: &mut W,
-    ) -> Result<(CompiledPackage, Option<model::GlobalEnv>)> {
+    ) -> Result<CompiledPackage> {
         let config = self.compiler_config.clone(); // Need clone because of mut self
         let resolved_graph = self.resolution_graph_for_package(path, writer)?;
         let mutx = PackageLock::lock();
@@ -236,7 +228,7 @@ impl BuildConfig {
         self,
         path: &Path,
         model_config: ModelConfig,
-    ) -> Result<model::GlobalEnv> {
+    ) -> Result<GlobalEnv> {
         // resolution graph diagnostics are only needed for CLI commands so ignore them by passing a
         // vector as the writer
         let resolved_graph = self.resolution_graph_for_package(path, &mut Vec::new())?;

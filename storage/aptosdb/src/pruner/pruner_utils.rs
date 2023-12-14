@@ -8,7 +8,7 @@ use crate::{
     pruner::state_merkle_pruner::generics::StaleNodeIndexSchemaTrait,
     schema::{
         db_metadata::{DbMetadataKey, DbMetadataSchema, DbMetadataValue},
-        transaction_info::TransactionInfoSchema,
+        version_data::VersionDataSchema,
     },
     state_kv_db::StateKvDb,
     state_merkle_db::StateMerkleDb,
@@ -28,8 +28,8 @@ pub(crate) fn get_ledger_pruner_progress(ledger_db: &LedgerDb) -> Result<Version
             version
         } else {
             let mut iter = ledger_db
-                .transaction_info_db()
-                .iter::<TransactionInfoSchema>(ReadOptions::default())?;
+                .metadata_db()
+                .iter::<VersionDataSchema>(ReadOptions::default())?;
             iter.seek_to_first();
             match iter.next().transpose()? {
                 Some((version, _)) => version,

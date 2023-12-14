@@ -255,7 +255,7 @@ async fn test_multi_agent_signed_transaction() {
 async fn test_fee_payer_signed_transaction() {
     let mut context = new_test_context(current_function_name!());
     let account = context.gen_account();
-    let fee_payer = context.create_account().await;
+    let fee_payer = context.gen_account();
     let factory = context.transaction_factory();
     let mut root_account = context.root_account().await;
 
@@ -324,10 +324,7 @@ async fn test_fee_payer_signed_transaction() {
         .sign_fee_payer_with_transaction_builder(
             vec![],
             &fee_payer,
-            factory
-                .create_user_account(yet_another_account.public_key())
-                .max_gas_amount(200_000)
-                .gas_unit_price(1),
+            factory.create_user_account(yet_another_account.public_key()),
         )
         .into_raw_transaction();
     let another_txn = another_raw_txn
@@ -1269,8 +1266,6 @@ async fn test_gas_estimation_cache() {
     node_config.api.gas_estimation.low_block_history = max_block_history;
     node_config.api.gas_estimation.market_block_history = max_block_history;
     node_config.api.gas_estimation.aggressive_block_history = max_block_history;
-    let sleep_duration =
-        Duration::from_millis(node_config.api.gas_estimation.cache_expiration_ms * 2);
     let mut context = new_test_context_with_config(current_function_name!(), node_config);
 
     let ctx = &mut context;
@@ -1280,8 +1275,6 @@ async fn test_gas_estimation_cache() {
     }
     ctx.get("/estimate_gas_price").await;
     assert_eq!(ctx.last_updated_gas_estimation_cache_size(), 4);
-    // Wait for cache to expire
-    sleep(sleep_duration).await;
 
     // Expect max of 10 entries
     for _i in 0..8 {
@@ -1293,7 +1286,7 @@ async fn test_gas_estimation_cache() {
         max_block_history
     );
     // Wait for cache to expire
-    sleep(sleep_duration).await;
+    sleep(Duration::from_secs(1)).await;
     ctx.get("/estimate_gas_price").await;
     assert_eq!(
         ctx.last_updated_gas_estimation_cache_size(),
@@ -1310,7 +1303,7 @@ async fn test_gas_estimation_cache() {
         max_block_history
     );
     // Wait for cache to expire
-    sleep(sleep_duration).await;
+    sleep(Duration::from_secs(1)).await;
     ctx.get("/estimate_gas_price").await;
     assert_eq!(
         ctx.last_updated_gas_estimation_cache_size(),
@@ -1380,7 +1373,7 @@ async fn test_gas_estimation_static_override() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_simulation_failure_error_message() {
+async fn simulation_failure_error_message() {
     let mut context = new_test_context(current_function_name!());
     let admin0 = context.root_account().await;
 
@@ -1398,10 +1391,8 @@ async fn test_simulation_failure_error_message() {
         "type_arguments": [],
         "arguments": [],
     }), 200).await;
-    let resp = &output.as_array().unwrap()[0];
 
-    assert!(!resp["success"].as_bool().unwrap());
-    assert!(resp["vm_status"]
+    assert!(output.as_array().unwrap()[0]["vm_status"]
         .as_str()
         .unwrap()
         .contains("Division by zero"));

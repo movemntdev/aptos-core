@@ -2,27 +2,22 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::metrics::{
-    BYTES_READY_TO_TRANSFER_FROM_SERVER, CONNECTION_COUNT, ERROR_COUNT,
-    LATEST_PROCESSED_VERSION as LATEST_PROCESSED_VERSION_OLD, PROCESSED_BATCH_SIZE,
+    CONNECTION_COUNT, ERROR_COUNT, LATEST_PROCESSED_VERSION, PROCESSED_BATCH_SIZE,
     PROCESSED_LATENCY_IN_SECS, PROCESSED_LATENCY_IN_SECS_ALL, PROCESSED_VERSIONS_COUNT,
     SHORT_CONNECTION_COUNT,
 };
-use anyhow::Context;
 use aptos_indexer_grpc_utils::{
     build_protobuf_encoded_transaction_wrappers,
     cache_operator::{CacheBatchGetStatus, CacheOperator},
     chunk_transactions,
     config::IndexerGrpcFileStoreConfig,
     constants::{
-        IndexerGrpcRequestMetadata, GRPC_AUTH_TOKEN_HEADER, GRPC_REQUEST_NAME_HEADER,
-        MESSAGE_SIZE_LIMIT,
+        BLOB_STORAGE_SIZE, GRPC_AUTH_TOKEN_HEADER, GRPC_REQUEST_NAME_HEADER, MESSAGE_SIZE_LIMIT,
     },
-    counters::{log_grpc_step, IndexerGrpcStep},
     file_store_operator::{FileStoreOperator, GcsFileStoreOperator, LocalFileStoreOperator},
-    time_diff_since_pb_timestamp_in_secs,
-    types::RedisUrl,
-    EncodedTransactionWithVersion,
+    time_diff_since_pb_timestamp_in_secs, EncodedTransactionWithVersion,
 };
+use aptos_logger::prelude::{sample, SampleRate};
 use aptos_moving_average::MovingAverage;
 use aptos_protos::{
     indexer::v1::{raw_data_server::RawData, GetTransactionsRequest, TransactionsResponse},
@@ -30,19 +25,22 @@ use aptos_protos::{
 };
 use futures::Stream;
 use prost::Message;
-use std::{
-    collections::HashMap,
-    pin::Pin,
-    str::FromStr,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, pin::Pin, sync::Arc, time::Duration};
 use tokio::sync::mpsc::{channel, error::SendTimeoutError};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
-use tracing::{error, info, warn};
-use uuid::Uuid;
+use tracing::{error, info, warn, Instrument};
 type ResponseStream = Pin<Box<dyn Stream<Item = Result<TransactionsResponse, Status>> + Send>>;
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+struct RequestMetadata {
+    pub request_token: String,
+    pub request_name: String,
+    pub request_email: String,
+    pub request_user_classification: String,
+    pub request_api_key_name: String,
+}
 
 const MOVING_AVERAGE_WINDOW_SIZE: u64 = 10_000;
 // When trying to fetch beyond the current head of cache, the server will retry after this duration.
@@ -50,6 +48,9 @@ const AHEAD_OF_CACHE_RETRY_SLEEP_DURATION_MS: u64 = 50;
 // When error happens when fetching data from cache and file store, the server will retry after this duration.
 // TODO(larry): fix all errors treated as transient errors.
 const TRANSIENT_DATA_ERROR_RETRY_SLEEP_DURATION_MS: u64 = 1000;
+
+// Default max response channel size.
+const DEFAULT_MAX_RESPONSE_CHANNEL_SIZE: usize = 3;
 
 // The server will retry to send the response to the client and give up after RESPONSE_CHANNEL_SEND_TIMEOUT.
 // This is to prevent the server from being occupied by a slow client.
@@ -60,33 +61,27 @@ const SHORT_CONNECTION_DURATION_IN_SECS: u64 = 10;
 const REQUEST_HEADER_APTOS_EMAIL_HEADER: &str = "x-aptos-email";
 const REQUEST_HEADER_APTOS_USER_CLASSIFICATION_HEADER: &str = "x-aptos-user-classification";
 const REQUEST_HEADER_APTOS_API_KEY_NAME: &str = "x-aptos-api-key-name";
-const RESPONSE_HEADER_APTOS_CONNECTION_ID_HEADER: &str = "x-aptos-connection-id";
-const SERVICE_TYPE: &str = "data_service";
 
 pub struct RawDataServerWrapper {
     pub redis_client: Arc<redis::Client>,
     pub file_store_config: IndexerGrpcFileStoreConfig,
-    pub data_service_response_channel_size: usize,
-    pub enable_verbose_logging: bool,
+    pub data_service_response_channel_size: Option<usize>,
 }
 
 impl RawDataServerWrapper {
     pub fn new(
-        redis_address: RedisUrl,
+        redis_address: String,
         file_store_config: IndexerGrpcFileStoreConfig,
-        data_service_response_channel_size: usize,
-        enable_verbose_logging: bool,
-    ) -> anyhow::Result<Self> {
-        Ok(Self {
+        data_service_response_channel_size: Option<usize>,
+    ) -> Self {
+        Self {
             redis_client: Arc::new(
-                redis::Client::open(redis_address.0.clone()).with_context(|| {
-                    format!("Failed to create redis client for {}", redis_address)
-                })?,
+                redis::Client::open(format!("redis://{}", redis_address))
+                    .expect("Create redis client failed."),
             ),
             file_store_config,
             data_service_response_channel_size,
-            enable_verbose_logging,
-        })
+        }
     }
 }
 
@@ -128,7 +123,10 @@ impl RawData for RawDataServerWrapper {
         let transactions_count = request.transactions_count;
 
         // Response channel to stream the data to the client.
-        let (tx, rx) = channel(self.data_service_response_channel_size);
+        let (tx, rx) = channel(
+            self.data_service_response_channel_size
+                .unwrap_or(DEFAULT_MAX_RESPONSE_CHANNEL_SIZE),
+        );
         let mut current_version = match &request.starting_version {
             Some(version) => *version,
             None => {
@@ -151,54 +149,40 @@ impl RawData for RawDataServerWrapper {
         };
 
         // Adds tracing context for the request.
-        log_grpc_step(
-            SERVICE_TYPE,
-            IndexerGrpcStep::DataServiceNewRequestReceived,
-            self.enable_verbose_logging,
-            Some(current_version as i64),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(request_metadata.clone()),
+        let serving_span = tracing::span!(
+            tracing::Level::INFO,
+            "Data Serving",
+            request_name = request_metadata.request_name.as_str(),
+            request_email = request_metadata.request_email.as_str(),
+            request_api_key_name = request_metadata.request_api_key_name.as_str(),
+            request_token = request_metadata.request_token.as_str(),
+            request_user_classification = request_metadata.request_user_classification.as_str(),
         );
 
         let redis_client = self.redis_client.clone();
-        let enable_verbose_logging = self.enable_verbose_logging;
-        tokio::spawn({
-            let request_metadata = request_metadata.clone();
+        tokio::spawn(
             async move {
                 let mut connection_start_time = Some(std::time::Instant::now());
                 let mut transactions_count = transactions_count;
-
-                // Establish redis connection
                 let conn = match redis_client.get_tokio_connection_manager().await {
                     Ok(conn) => conn,
                     Err(e) => {
                         ERROR_COUNT
                             .with_label_values(&["redis_connection_failed"])
                             .inc();
-                        SHORT_CONNECTION_COUNT
-                            .with_label_values(&[
-                                request_metadata.request_api_key_name.as_str(),
-                                request_metadata.request_email.as_str(),
-                                request_metadata.processor_name.as_str(),
-                            ])
-                            .inc();
+                        SHORT_CONNECTION_COUNT.inc();
                         // Connection will be dropped anyway, so we ignore the error here.
                         let _result = tx
                             .send_timeout(
                                 Err(Status::unavailable(
-                                    "[Data Service] Cannot connect to Redis; please retry.",
+                                    "[Indexer Data] Cannot connect to Redis; please retry.",
                                 )),
                                 RESPONSE_CHANNEL_SEND_TIMEOUT,
                             )
                             .await;
                         error!(
                             error = e.to_string(),
-                            "[Data Service] Failed to get redis connection."
+                            "[Indexer Data] Failed to get redis connection."
                         );
                         return;
                     },
@@ -206,32 +190,25 @@ impl RawData for RawDataServerWrapper {
                 let mut cache_operator = CacheOperator::new(conn);
                 file_store_operator.verify_storage_bucket_existence().await;
 
-                // Validate redis chain id
                 let chain_id = match cache_operator.get_chain_id().await {
                     Ok(chain_id) => chain_id,
                     Err(e) => {
                         ERROR_COUNT
                             .with_label_values(&["redis_get_chain_id_failed"])
                             .inc();
-                        SHORT_CONNECTION_COUNT
-                            .with_label_values(&[
-                                request_metadata.request_api_key_name.as_str(),
-                                request_metadata.request_email.as_str(),
-                                request_metadata.processor_name.as_str(),
-                            ])
-                            .inc();
+                        SHORT_CONNECTION_COUNT.inc();
                         // Connection will be dropped anyway, so we ignore the error here.
                         let _result = tx
                             .send_timeout(
                                 Err(Status::unavailable(
-                                    "[Data Service] Cannot get the chain id from redis; please retry.",
+                                    "[Indexer Data] Cannot get the chain id; please retry.",
                                 )),
                                 RESPONSE_CHANNEL_SEND_TIMEOUT,
                             )
                             .await;
                         error!(
                             error = e.to_string(),
-                            "[Data Service] Failed to get chain id from redis."
+                            "[Indexer Data] Failed to get chain id."
                         );
                         return;
                     },
@@ -239,35 +216,23 @@ impl RawData for RawDataServerWrapper {
                 // Data service metrics.
                 let mut tps_calculator = MovingAverage::new(MOVING_AVERAGE_WINDOW_SIZE);
 
+                info!(
+                    chain_id = chain_id,
+                    current_version = current_version,
+                    "[Indexer Data] New request received."
+                );
+
                 loop {
                     // 1. Fetch data from cache and file store.
-                    let current_batch_start_time = std::time::Instant::now();
                     let mut transaction_data = match data_fetch(
                         current_version,
                         &mut cache_operator,
                         file_store_operator.as_ref(),
-                        current_batch_start_time,
-                        request_metadata.clone(),
-                        enable_verbose_logging,
                     )
                     .await
                     {
                         Ok(TransactionsDataStatus::Success(transactions)) => transactions,
                         Ok(TransactionsDataStatus::AheadOfCache) => {
-                            info!(
-                                start_version = current_version,
-                                request_name = request_metadata.processor_name.as_str(),
-                                request_email = request_metadata.request_email.as_str(),
-                                request_api_key_name = request_metadata.request_api_key_name.as_str(),
-                                processor_name = request_metadata.processor_name.as_str(),
-                                connection_id = request_metadata.request_connection_id.as_str(),
-                    request_user_classification =
-                        request_metadata.request_user_classification.as_str(),
-                                duration_in_secs = current_batch_start_time.elapsed().as_secs_f64(),
-                                service_type = SERVICE_TYPE,
-                                "[Data Service] Requested data is ahead of cache. Sleeping for {} ms.",
-                                AHEAD_OF_CACHE_RETRY_SLEEP_DURATION_MS,
-                            );
                             ahead_of_cache_data_handling().await;
                             // Retry after a short sleep.
                             continue;
@@ -284,8 +249,6 @@ impl RawData for RawDataServerWrapper {
                             continue;
                         },
                     };
-
-                    // TODO: Unify the truncation logic for start and end.
                     if let Some(count) = transactions_count {
                         if count == 0 {
                             // End the data stream.
@@ -293,37 +256,18 @@ impl RawData for RawDataServerWrapper {
                             connection_start_time = None;
                             break;
                         } else if (count as usize) < transaction_data.len() {
-                            // Trim the data to the requested end version.
+                            // Trim the data to the requested size.
                             transaction_data.truncate(count as usize);
                             transactions_count = Some(0);
                         } else {
                             transactions_count = Some(count - transaction_data.len() as u64);
                         }
                     };
-                    // Note: this is not the actual bytes transferred to the client.
-                    // This is the bytes consumed internally by the server
-                    // and ready to be transferred to the client.
-                    let bytes_ready_to_transfer = transaction_data
-                        .iter()
-                        .map(|(encoded, _)| encoded.len())
-                        .sum::<usize>();
-                    BYTES_READY_TO_TRANSFER_FROM_SERVER
-                        .with_label_values(&[
-                            request_metadata.request_api_key_name.as_str(),
-                            request_metadata.request_email.as_str(),
-                            request_metadata.processor_name.as_str(),
-                        ])
-                        .inc_by(bytes_ready_to_transfer as u64);
                     // 2. Push the data to the response channel, i.e. stream the data to the client.
                     let current_batch_size = transaction_data.as_slice().len();
                     let end_of_batch_version = transaction_data.as_slice().last().unwrap().1;
-                    let resp_items = get_transactions_responses_builder(
-                        transaction_data,
-                        chain_id as u32,
-                        current_batch_start_time,
-                        request_metadata.clone(),
-                        enable_verbose_logging,
-                    );
+                    let resp_items =
+                        get_transactions_responses_builder(transaction_data, chain_id as u32);
                     let data_latency_in_secs = resp_items
                         .last()
                         .unwrap()
@@ -334,104 +278,81 @@ impl RawData for RawDataServerWrapper {
                         .as_ref()
                         .map(time_diff_since_pb_timestamp_in_secs);
 
-                    match channel_send_multiple_with_timeout(
-                        resp_items,
-                        tx.clone(),
-                        current_batch_start_time,
-                        request_metadata.clone(),
-                        enable_verbose_logging,
-                    )
-                    .await
-                    {
+                    match channel_send_multiple_with_timeout(resp_items, tx.clone()).await {
                         Ok(_) => {
                             PROCESSED_BATCH_SIZE
                                 .with_label_values(&[
-                                    request_metadata.request_api_key_name.as_str(),
-                                    request_metadata.request_email.as_str(),
-                                    request_metadata.processor_name.as_str(),
+                                    request_metadata.request_user_classification.as_str(),
+                                    request_metadata.request_name.as_str(),
                                 ])
                                 .set(current_batch_size as i64);
-                            // TODO: Reasses whether this metric useful
-                            LATEST_PROCESSED_VERSION_OLD
+                            LATEST_PROCESSED_VERSION
                                 .with_label_values(&[
-                                    request_metadata.request_api_key_name.as_str(),
-                                    request_metadata.request_email.as_str(),
-                                    request_metadata.processor_name.as_str(),
+                                    request_metadata.request_user_classification.as_str(),
+                                    request_metadata.request_name.as_str(),
                                 ])
                                 .set(end_of_batch_version as i64);
                             PROCESSED_VERSIONS_COUNT
                                 .with_label_values(&[
-                                    request_metadata.request_api_key_name.as_str(),
-                                    request_metadata.request_email.as_str(),
-                                    request_metadata.processor_name.as_str(),
+                                    request_metadata.request_user_classification.as_str(),
+                                    request_metadata.request_name.as_str(),
                                 ])
                                 .inc_by(current_batch_size as u64);
                             if let Some(data_latency_in_secs) = data_latency_in_secs {
-                                PROCESSED_LATENCY_IN_SECS
-                                    .with_label_values(&[
-                                        request_metadata.request_api_key_name.as_str(),
-                                        request_metadata.request_email.as_str(),
-                                        request_metadata.processor_name.as_str(),
-                                    ])
-                                    .set(data_latency_in_secs);
-                                PROCESSED_LATENCY_IN_SECS_ALL
-                                    .with_label_values(&[request_metadata
-                                        .request_user_classification
-                                        .as_str()])
-                                    .observe(data_latency_in_secs);
+                                // HACK: If it's a partial batch, we record the latency because it usually means
+                                // the data is the latest.
+                                if current_batch_size % BLOB_STORAGE_SIZE != 0 {
+                                    PROCESSED_LATENCY_IN_SECS
+                                        .with_label_values(&[
+                                            request_metadata.request_user_classification.as_str(),
+                                            request_metadata.request_name.as_str(),
+                                        ])
+                                        .set(data_latency_in_secs);
+                                    PROCESSED_LATENCY_IN_SECS_ALL
+                                        .with_label_values(&[request_metadata
+                                            .request_user_classification
+                                            .as_str()])
+                                        .observe(data_latency_in_secs);
+                                }
                             }
                         },
                         Err(SendTimeoutError::Timeout(_)) => {
-                            warn!("[Data Service] Receiver is full; exiting.");
+                            warn!("[Indexer Data] Receiver is full; exiting.");
                             break;
                         },
                         Err(SendTimeoutError::Closed(_)) => {
-                            warn!("[Data Service] Receiver is closed; exiting.");
+                            warn!("[Indexer Data] Receiver is closed; exiting.");
                             break;
                         },
                     }
                     // 3. Update the current version and record current tps.
                     tps_calculator.tick_now(current_batch_size as u64);
                     current_version = end_of_batch_version + 1;
+                    sample!(
+                        SampleRate::Duration(Duration::from_secs(15)),
+                        info!(
+                            current_version = current_version,
+                            end_version = end_of_batch_version,
+                            batch_size = current_batch_size,
+                            tps = (tps_calculator.avg() * 1000.0) as u64,
+                            "[Indexer Data] Sending batch."
+                        );
+                    )
                 }
-                info!(
-                    request_name = request_metadata.processor_name.as_str(),
-                    request_email = request_metadata.request_email.as_str(),
-                    request_api_key_name = request_metadata.request_api_key_name.as_str(),
-                    processor_name = request_metadata.processor_name.as_str(),
-                    connection_id = request_metadata.request_connection_id.as_str(),
-                    request_user_classification =
-                        request_metadata.request_user_classification.as_str(),
-                    request_user_classification =
-                        request_metadata.request_user_classification.as_str(),
-                    service_type = SERVICE_TYPE,
-                    "[Data Service] Client disconnected."
-                );
+                info!("[Indexer Data] Client disconnected.");
                 if let Some(start_time) = connection_start_time {
                     if start_time.elapsed().as_secs() < SHORT_CONNECTION_DURATION_IN_SECS {
-                        SHORT_CONNECTION_COUNT
-                            .with_label_values(&[
-                                request_metadata.request_api_key_name.as_str(),
-                                request_metadata.request_email.as_str(),
-                                request_metadata.processor_name.as_str(),
-                            ])
-                            .inc();
+                        SHORT_CONNECTION_COUNT.inc();
                     }
                 }
             }
-        });
+            .instrument(serving_span),
+        );
 
         let output_stream = ReceiverStream::new(rx);
-        let mut response = Response::new(Box::pin(output_stream) as Self::GetTransactionsStream);
-
-        response.metadata_mut().insert(
-            RESPONSE_HEADER_APTOS_CONNECTION_ID_HEADER,
-            tonic::metadata::MetadataValue::from_str(
-                request_metadata.request_connection_id.as_str(),
-            )
-            .unwrap(),
-        );
-        Ok(response)
+        Ok(Response::new(
+            Box::pin(output_stream) as Self::GetTransactionsStream
+        ))
     }
 }
 
@@ -439,9 +360,6 @@ impl RawData for RawDataServerWrapper {
 fn get_transactions_responses_builder(
     data: Vec<EncodedTransactionWithVersion>,
     chain_id: u32,
-    current_batch_start_time: Instant,
-    request_metadata: IndexerGrpcRequestMetadata,
-    enable_logging: bool,
 ) -> Vec<TransactionsResponse> {
     let transactions: Vec<Transaction> = data
         .into_iter()
@@ -452,38 +370,13 @@ fn get_transactions_responses_builder(
         })
         .collect();
     let chunks = chunk_transactions(transactions, MESSAGE_SIZE_LIMIT);
-    let resp_items = chunks
+    chunks
         .into_iter()
         .map(|chunk| TransactionsResponse {
             chain_id: Some(chain_id as u64),
             transactions: chunk,
         })
-        .collect::<Vec<TransactionsResponse>>();
-
-    let overall_size_in_bytes = resp_items
-        .iter()
-        .map(|resp_item| resp_item.encoded_len())
-        .sum::<usize>();
-    let overall_start_txn = resp_items.first().unwrap().transactions.first().unwrap();
-    let overall_end_txn = resp_items.last().unwrap().transactions.last().unwrap();
-    let overall_start_version = overall_start_txn.version;
-    let overall_end_version = overall_end_txn.version;
-    let overall_start_txn_timestamp = overall_start_txn.clone().timestamp;
-    let overall_end_txn_timestamp = overall_end_txn.clone().timestamp;
-    log_grpc_step(
-        SERVICE_TYPE,
-        IndexerGrpcStep::DataServiceTxnsDecoded,
-        enable_logging,
-        Some(overall_start_version as i64),
-        Some(overall_end_version as i64),
-        overall_start_txn_timestamp.as_ref(),
-        overall_end_txn_timestamp.as_ref(),
-        Some(current_batch_start_time.elapsed().as_secs_f64()),
-        Some(overall_size_in_bytes),
-        Some((overall_end_version - overall_start_version + 1) as i64),
-        Some(request_metadata.clone()),
-    );
-    resp_items
+        .collect::<Vec<TransactionsResponse>>()
 }
 
 /// Fetches data from cache or the file store. It returns the data if it is ready in the cache or file store.
@@ -492,9 +385,6 @@ async fn data_fetch(
     starting_version: u64,
     cache_operator: &mut CacheOperator<redis::aio::ConnectionManager>,
     file_store_operator: &dyn FileStoreOperator,
-    current_batch_start_time: Instant,
-    request_metadata: IndexerGrpcRequestMetadata,
-    enable_logging: bool,
 ) -> anyhow::Result<TransactionsDataStatus> {
     let batch_get_result = cache_operator
         .batch_get_encoded_proto_data(starting_version)
@@ -503,91 +393,17 @@ async fn data_fetch(
     match batch_get_result {
         // Data is not ready yet in the cache.
         Ok(CacheBatchGetStatus::NotReady) => Ok(TransactionsDataStatus::AheadOfCache),
-        Ok(CacheBatchGetStatus::Ok(transactions)) => {
-            let size_in_bytes = transactions
-                .iter()
-                .map(|transaction| transaction.len())
-                .sum::<usize>();
-            let num_of_transactions = transactions.len();
-            let duration_in_secs = current_batch_start_time.elapsed().as_secs_f64();
-            let start_version_timestamp = {
-                let decoded_transaction = base64::decode(transactions.first().unwrap())
-                    .expect("Failed to decode base64.");
-                let transaction =
-                    Transaction::decode(&*decoded_transaction).expect("Failed to decode protobuf.");
-                transaction.timestamp
-            };
-            let end_version_timestamp = {
-                let decoded_transaction =
-                    base64::decode(transactions.last().unwrap()).expect("Failed to decode base64.");
-                let transaction =
-                    Transaction::decode(&*decoded_transaction).expect("Failed to decode protobuf.");
-                transaction.timestamp
-            };
-
-            log_grpc_step(
-                SERVICE_TYPE,
-                IndexerGrpcStep::DataServiceDataFetchedCache,
-                enable_logging,
-                Some(starting_version as i64),
-                Some(starting_version as i64 + num_of_transactions as i64 - 1),
-                start_version_timestamp.as_ref(),
-                end_version_timestamp.as_ref(),
-                Some(duration_in_secs),
-                Some(size_in_bytes),
-                Some(num_of_transactions as i64),
-                Some(request_metadata.clone()),
-            );
-
-            Ok(TransactionsDataStatus::Success(
-                build_protobuf_encoded_transaction_wrappers(transactions, starting_version),
-            ))
-        },
+        Ok(CacheBatchGetStatus::Ok(transactions)) => Ok(TransactionsDataStatus::Success(
+            build_protobuf_encoded_transaction_wrappers(transactions, starting_version),
+        )),
         Ok(CacheBatchGetStatus::EvictedFromCache) => {
             // Data is evicted from the cache. Fetch from file store.
             let file_store_batch_get_result =
                 file_store_operator.get_transactions(starting_version).await;
             match file_store_batch_get_result {
-                Ok(transactions) => {
-                    let size_in_bytes = transactions
-                        .iter()
-                        .map(|transaction| transaction.len())
-                        .sum::<usize>();
-                    let num_of_transactions = transactions.len();
-                    let duration_in_secs = current_batch_start_time.elapsed().as_secs_f64();
-                    let start_version_timestamp = {
-                        let decoded_transaction = base64::decode(transactions.first().unwrap())
-                            .expect("Failed to decode base64.");
-                        let transaction = Transaction::decode(&*decoded_transaction)
-                            .expect("Failed to decode protobuf.");
-                        transaction.timestamp
-                    };
-                    let end_version_timestamp = {
-                        let decoded_transaction = base64::decode(transactions.last().unwrap())
-                            .expect("Failed to decode base64.");
-                        let transaction = Transaction::decode(&*decoded_transaction)
-                            .expect("Failed to decode protobuf.");
-                        transaction.timestamp
-                    };
-
-                    log_grpc_step(
-                        SERVICE_TYPE,
-                        IndexerGrpcStep::DataServiceDataFetchedFilestore,
-                        enable_logging,
-                        Some(starting_version as i64),
-                        Some(starting_version as i64 + num_of_transactions as i64 - 1),
-                        start_version_timestamp.as_ref(),
-                        end_version_timestamp.as_ref(),
-                        Some(duration_in_secs),
-                        Some(size_in_bytes),
-                        Some(num_of_transactions as i64),
-                        Some(request_metadata.clone()),
-                    );
-
-                    Ok(TransactionsDataStatus::Success(
-                        build_protobuf_encoded_transaction_wrappers(transactions, starting_version),
-                    ))
-                },
+                Ok(transactions) => Ok(TransactionsDataStatus::Success(
+                    build_protobuf_encoded_transaction_wrappers(transactions, starting_version),
+                )),
                 Err(e) => {
                     if e.to_string().contains("Transactions file not found") {
                         Ok(TransactionsDataStatus::DataGap)
@@ -616,7 +432,7 @@ fn data_gap_handling(version: u64) {
     // Do not crash the server when gap detected since other clients may still be able to get data.
     error!(
         current_version = version,
-        "[Data Service] Data gap detected. Please check the logs for more details."
+        "[Indexer Data] Data gap detected. Please check the logs for more details."
     );
 }
 
@@ -625,7 +441,7 @@ async fn data_fetch_error_handling(err: anyhow::Error, current_version: u64, cha
     error!(
         chain_id = chain_id,
         current_version = current_version,
-        "[Data Service] Failed to fetch data from cache and file store. {:?}",
+        "[Indexer Data] Failed to fetch data from cache and file store. {:?}",
         err
     );
     tokio::time::sleep(Duration::from_millis(
@@ -635,9 +451,7 @@ async fn data_fetch_error_handling(err: anyhow::Error, current_version: u64, cha
 }
 
 /// Gets the request metadata. Useful for logging.
-fn get_request_metadata(
-    req: &Request<GetTransactionsRequest>,
-) -> tonic::Result<IndexerGrpcRequestMetadata> {
+fn get_request_metadata(req: &Request<GetTransactionsRequest>) -> tonic::Result<RequestMetadata> {
     let request_metadata_pairs = vec![
         ("request_api_key_name", REQUEST_HEADER_APTOS_API_KEY_NAME),
         ("request_email", REQUEST_HEADER_APTOS_EMAIL_HEADER),
@@ -646,9 +460,9 @@ fn get_request_metadata(
             REQUEST_HEADER_APTOS_USER_CLASSIFICATION_HEADER,
         ),
         ("request_token", GRPC_AUTH_TOKEN_HEADER),
-        ("processor_name", GRPC_REQUEST_NAME_HEADER),
+        ("request_name", GRPC_REQUEST_NAME_HEADER),
     ];
-    let mut request_metadata_map: HashMap<String, String> = request_metadata_pairs
+    let request_metadata_map: HashMap<String, String> = request_metadata_pairs
         .into_iter()
         .map(|(key, value)| {
             (
@@ -660,11 +474,7 @@ fn get_request_metadata(
             )
         })
         .collect();
-    request_metadata_map.insert(
-        "request_connection_id".to_string(),
-        Uuid::new_v4().to_string(),
-    );
-    let request_metadata: IndexerGrpcRequestMetadata =
+    let request_metadata: RequestMetadata =
         serde_json::from_str(&serde_json::to_string(&request_metadata_map).unwrap()).unwrap();
     // TODO: update the request name if these are internal requests.
     Ok(request_metadata)
@@ -673,75 +483,21 @@ fn get_request_metadata(
 async fn channel_send_multiple_with_timeout(
     resp_items: Vec<TransactionsResponse>,
     tx: tokio::sync::mpsc::Sender<Result<TransactionsResponse, Status>>,
-    current_batch_start_time: Instant,
-    request_metadata: IndexerGrpcRequestMetadata,
-    enable_logging: bool,
 ) -> Result<(), SendTimeoutError<Result<TransactionsResponse, Status>>> {
-    let overall_size_in_bytes = resp_items
-        .iter()
-        .map(|resp_item| resp_item.encoded_len())
-        .sum::<usize>();
-    let overall_start_txn = resp_items.first().unwrap().transactions.first().unwrap();
-    let overall_end_txn = resp_items.last().unwrap().transactions.last().unwrap();
-    let overall_start_version = overall_start_txn.version;
-    let overall_end_version = overall_end_txn.version;
-    let overall_start_txn_timestamp = overall_start_txn.clone().timestamp;
-    let overall_end_txn_timestamp = overall_end_txn.clone().timestamp;
-
     for resp_item in resp_items {
-        let response_size = resp_item.encoded_len();
-        let num_of_transactions = resp_item.transactions.len();
-        let start_version = resp_item.transactions.first().unwrap().version;
-        let end_version = resp_item.transactions.last().unwrap().version;
-        let start_version_txn_timestamp = resp_item
-            .transactions
-            .first()
-            .unwrap()
-            .timestamp
-            .as_ref()
-            .unwrap();
-        let end_version_txn_timestamp = resp_item
-            .transactions
-            .last()
-            .unwrap()
-            .timestamp
-            .as_ref()
-            .unwrap();
-
+        let current_instant = std::time::Instant::now();
         tx.send_timeout(
-            Result::<TransactionsResponse, Status>::Ok(resp_item.clone()),
+            Result::<TransactionsResponse, Status>::Ok(resp_item),
             RESPONSE_CHANNEL_SEND_TIMEOUT,
         )
         .await?;
-
-        log_grpc_step(
-            SERVICE_TYPE,
-            IndexerGrpcStep::DataServiceChunkSent,
-            enable_logging,
-            Some(start_version as i64),
-            Some(end_version as i64),
-            Some(start_version_txn_timestamp),
-            Some(end_version_txn_timestamp),
-            Some(current_batch_start_time.elapsed().as_secs_f64()),
-            Some(response_size),
-            Some(num_of_transactions as i64),
-            Some(request_metadata.clone()),
+        sample!(
+            SampleRate::Duration(Duration::from_secs(60)),
+            info!(
+                "[data service] response waiting time in seconds: {}",
+                current_instant.elapsed().as_secs_f64()
+            );
         );
     }
-
-    log_grpc_step(
-        SERVICE_TYPE,
-        IndexerGrpcStep::DataServiceAllChunksSent,
-        enable_logging,
-        Some(overall_start_version as i64),
-        Some(overall_end_version as i64),
-        overall_start_txn_timestamp.as_ref(),
-        overall_end_txn_timestamp.as_ref(),
-        Some(current_batch_start_time.elapsed().as_secs_f64()),
-        Some(overall_size_in_bytes),
-        Some((overall_end_version - overall_start_version + 1) as i64),
-        Some(request_metadata.clone()),
-    );
-
     Ok(())
 }

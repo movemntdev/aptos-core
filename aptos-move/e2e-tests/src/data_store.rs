@@ -35,10 +35,10 @@ pub static GENESIS_CHANGE_SET_TESTNET: Lazy<ChangeSet> =
 pub static GENESIS_CHANGE_SET_MAINNET: Lazy<ChangeSet> =
     Lazy::new(|| generate_genesis_change_set_for_mainnet(GenesisOptions::Mainnet));
 
-/// An in-memory implementation of `StateView` and `ExecutorView` for the VM.
+/// An in-memory implementation of `StateView` and `RemoteCache` for the VM.
 ///
 /// Tests use this to set up state, and pass in a reference to the cache whenever a `StateView` or
-/// `ExecutorView` is needed.
+/// `RemoteCache` is needed.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct FakeDataStore {
     state_data: HashMap<StateKey, StateValue>,
@@ -50,14 +50,9 @@ impl FakeDataStore {
         FakeDataStore {
             state_data: data
                 .into_iter()
-                .map(|(k, v)| (k, StateValue::new_legacy(v.into())))
+                .map(|(k, v)| (k, StateValue::new_legacy(v)))
                 .collect(),
         }
-    }
-
-    /// Creates a new `FakeDataStore` with the provided initial data.
-    pub fn new_with_state_value(data: HashMap<StateKey, StateValue>) -> Self {
-        FakeDataStore { state_data: data }
     }
 
     /// Adds a [`WriteSet`] to this data store.
@@ -75,7 +70,7 @@ impl FakeDataStore {
     /// Returns the previous data if the key was occupied.
     pub fn set_legacy(&mut self, state_key: StateKey, bytes: Vec<u8>) -> Option<StateValue> {
         self.state_data
-            .insert(state_key, StateValue::new_legacy(bytes.into()))
+            .insert(state_key, StateValue::new_legacy(bytes))
     }
 
     /// Sets a (key, value) pair within this data store.
@@ -83,12 +78,6 @@ impl FakeDataStore {
     /// Returns the previous data if the key was occupied.
     pub fn set(&mut self, state_key: StateKey, state_value: StateValue) -> Option<StateValue> {
         self.state_data.insert(state_key, state_value)
-    }
-
-    /// Checks whether the state_key is in this data store
-    ///
-    pub fn contains_key(&self, state_key: &StateKey) -> bool {
-        self.state_data.contains_key(state_key)
     }
 
     /// Deletes a key from this data store.
@@ -118,7 +107,7 @@ impl FakeDataStore {
         let access_path = AccessPath::from(module_id);
         self.set(
             StateKey::access_path(access_path),
-            StateValue::new_legacy(blob.into()),
+            StateValue::new_legacy(blob),
         );
     }
 }

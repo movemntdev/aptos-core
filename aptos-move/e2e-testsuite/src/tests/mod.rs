@@ -20,7 +20,6 @@ mod failed_transaction_tests;
 mod genesis;
 mod genesis_initializations;
 mod invariant_violation;
-mod loader;
 mod mint;
 mod module_publishing;
 mod on_chain_configs;

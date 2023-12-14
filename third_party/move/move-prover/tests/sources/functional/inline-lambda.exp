@@ -9,7 +9,6 @@ error: unknown assertion failed
   =         a1 = <redacted>
   =         a2 = <redacted>
   =     at tests/sources/functional/inline-lambda.move:11: test_apply
-  =     at tests/sources/functional/inline-lambda.move:2: apply
   =         v#0 = <redacted>
   =     at tests/sources/functional/inline-lambda.move:4: apply
   =     at tests/sources/functional/inline-lambda.move:5: apply
@@ -17,7 +16,6 @@ error: unknown assertion failed
   =         r1 = <redacted>
   =     at tests/sources/functional/inline-lambda.move:13: test_apply
   =     at tests/sources/functional/inline-lambda.move:16: test_apply
-  =     at tests/sources/functional/inline-lambda.move:2: apply
   =         v#3 = <redacted>
   =     at tests/sources/functional/inline-lambda.move:4: apply
   =     at tests/sources/functional/inline-lambda.move:5: apply
@@ -32,7 +30,6 @@ error: unknown assertion failed
    =         a1 = <redacted>
    =         a2 = <redacted>
    =     at tests/sources/functional/inline-lambda.move:11: test_apply
-   =     at tests/sources/functional/inline-lambda.move:2: apply
    =         v#0 = <redacted>
    =     at tests/sources/functional/inline-lambda.move:4: apply
    =     at tests/sources/functional/inline-lambda.move:5: apply
@@ -40,7 +37,6 @@ error: unknown assertion failed
    =         r1 = <redacted>
    =     at tests/sources/functional/inline-lambda.move:13: test_apply
    =     at tests/sources/functional/inline-lambda.move:16: test_apply
-   =     at tests/sources/functional/inline-lambda.move:2: apply
    =         v#3 = <redacted>
    =     at tests/sources/functional/inline-lambda.move:4: apply
    =     at tests/sources/functional/inline-lambda.move:5: apply

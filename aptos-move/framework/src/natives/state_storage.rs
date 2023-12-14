@@ -5,8 +5,7 @@ use aptos_gas_schedule::gas_params::natives::aptos_framework::*;
 use aptos_native_interface::{
     RawSafeNative, SafeNativeBuilder, SafeNativeContext, SafeNativeResult,
 };
-use aptos_types::vm_status::StatusCode;
-use aptos_vm_types::resolver::StateStorageView;
+use aptos_types::{state_store::state_storage_usage::StateStorageUsage, vm_status::StatusCode};
 use better_any::{Tid, TidAble};
 use move_binary_format::errors::PartialVMError;
 use move_vm_runtime::native_functions::NativeFunction;
@@ -17,20 +16,25 @@ use move_vm_types::{
 use smallvec::{smallvec, SmallVec};
 use std::collections::VecDeque;
 
+/// Ability to reveal the state storage utilization info.
+pub trait StateStorageUsageResolver {
+    fn get_state_storage_usage(&self) -> anyhow::Result<StateStorageUsage>;
+}
+
 /// Exposes the ability to query state storage utilization info to native functions.
 #[derive(Tid)]
 pub struct NativeStateStorageContext<'a> {
-    resolver: &'a dyn StateStorageView,
+    resolver: &'a dyn StateStorageUsageResolver,
 }
 
 impl<'a> NativeStateStorageContext<'a> {
-    pub fn new(resolver: &'a dyn StateStorageView) -> Self {
+    pub fn new(resolver: &'a dyn StateStorageUsageResolver) -> Self {
         Self { resolver }
     }
 }
 
 /***************************************************************************************************
- * native get_state_storage_usage_only_at_epoch_beginning
+ * native get_state_storage_usage_only_at_eopch_beginning
  *
  *   gas cost: base_cost
  *
@@ -50,7 +54,7 @@ fn native_get_usage(
     context.charge(STATE_STORAGE_GET_USAGE_BASE_COST)?;
 
     let ctx = context.extensions().get::<NativeStateStorageContext>();
-    let usage = ctx.resolver.get_usage().map_err(|err| {
+    let usage = ctx.resolver.get_state_storage_usage().map_err(|err| {
         PartialVMError::new(StatusCode::VM_EXTENSION_ERROR)
             .with_message(format!("Failed to get state storage usage: {}", err))
     })?;

@@ -12,7 +12,6 @@ use aptos_types::{
         state_key::StateKey, state_storage_usage::StateStorageUsage, state_value::StateValue,
     },
 };
-use bytes::Bytes;
 use move_core_types::language_storage::ModuleId;
 use std::collections::HashMap;
 
@@ -43,7 +42,8 @@ impl TStateView for GenesisStateView {
         Ok(self
             .state_data
             .get(state_key)
-            .map(|bytes| StateValue::new_legacy(Bytes::copy_from_slice(bytes))))
+            .cloned()
+            .map(StateValue::new_legacy))
     }
 
     fn get_usage(&self) -> Result<StateStorageUsage> {

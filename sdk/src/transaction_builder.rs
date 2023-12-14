@@ -157,6 +157,10 @@ impl TransactionFactory {
         ))
     }
 
+    pub fn create_account(&self, address: AccountAddress) -> TransactionBuilder {
+        self.payload(aptos_stdlib::aptos_account_create_account(address))
+    }
+
     pub fn implicitly_create_user_account_and_transfer(
         &self,
         public_key: &Ed25519PublicKey,

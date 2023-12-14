@@ -77,7 +77,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -238,7 +237,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -350,7 +348,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -412,7 +409,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -482,7 +478,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -542,7 +537,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -600,7 +594,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -665,7 +658,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -727,7 +719,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -788,7 +779,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -850,7 +840,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -912,7 +901,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -980,7 +968,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -1040,7 +1027,7 @@
           "refId": "C"
         }
       ],
-      "title": "Avg. Block timestamp to synced",
+      "title": "Block timestamp to synced",
       "type": "timeseries"
     },
     {
@@ -1054,7 +1041,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -1094,7 +1080,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "${Datasource}" },
           "editorMode": "code",
-          "expr": "(sum(rate(aptos_data_client_sync_latencies_sum{chain_name=~\"$chain_name\", namespace=~\"$namespace\",label=\"propose_to_sync_latency\",role=\"fullnode\",kubernetes_pod_name=~\".*aptos-node-.*-fullnode-.*\"}[$__rate_interval])) / sum(rate(aptos_data_client_sync_latencies_count{chain_name=~\"$chain_name\", namespace=~\"$namespace\",label=\"propose_to_sync_latency\",kubernetes_pod_name=~\".*aptos-node-.*-fullnode-.*\"}[$__rate_interval])))\n-\nquantile(0.67, rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"committed\"}[$__rate_interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"committed\"}[$__rate_interval]))",
+          "expr": "(sum(rate(aptos_data_client_sync_latencies_sum{chain_name=~\"$chain_name\", namespace=~\"$namespace\",label=\"propose_to_sync_latency\",role=\"fullnode\",kubernetes_pod_name=~\".*aptos-node-.*-fullnode-.*\"}[$__rate_interval])) / sum(rate(aptos_data_client_sync_latencies_count{chain_name=~\"$chain_name\", namespace=~\"$namespace\",label=\"propose_to_sync_latency\",kubernetes_pod_name=~\".*aptos-node-.*-fullnode-.*\"}[$__rate_interval])))\n-\nquantile(0.67, rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"committed\"}[$__rate_interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"committed\"}[$__rate_interval])) < 1000000",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 1,
@@ -1105,7 +1091,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "${Datasource}" },
           "editorMode": "code",
-          "expr": "(sum by (role) (rate(aptos_data_client_sync_latencies_sum{chain_name=~\"$chain_name\", namespace=~\"$namespace\",label=\"propose_to_sync_latency\",role=\"fullnode\",kubernetes_pod_name=~\"^(pfn|public-fullnode-).*\"}[$__rate_interval])) / sum by (role) (rate(aptos_data_client_sync_latencies_count{chain_name=~\"$chain_name\", namespace=~\"$namespace\",label=\"propose_to_sync_latency\",kubernetes_pod_name=~\"^(pfn|public-fullnode-).*\"}[$__rate_interval]))) \n-\nquantile(0.67, rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"committed\"}[$__rate_interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"committed\"}[$__rate_interval]))",
+          "expr": "(sum by (role) (rate(aptos_data_client_sync_latencies_sum{chain_name=~\"$chain_name\", namespace=~\"$namespace\",label=\"propose_to_sync_latency\",role=\"fullnode\",kubernetes_pod_name=~\"^(pfn|public-fullnode-).*\"}[$__rate_interval])) / sum by (role) (rate(aptos_data_client_sync_latencies_count{chain_name=~\"$chain_name\", namespace=~\"$namespace\",label=\"propose_to_sync_latency\",kubernetes_pod_name=~\"^(pfn|public-fullnode-).*\"}[$__rate_interval]))) \n-\nquantile(0.67, rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"committed\"}[$__rate_interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"committed\"}[$__rate_interval])) < 1000000",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 1,
@@ -1114,7 +1100,7 @@
           "refId": "C"
         }
       ],
-      "title": "Avg. State sync latencies",
+      "title": "State sync latencies",
       "type": "timeseries"
     },
     {
@@ -1128,7 +1114,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -1168,7 +1153,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "${Datasource}" },
           "editorMode": "code",
-          "expr": "(sum(rate(aptos_data_client_sync_latencies_sum{chain_name=~\"$chain_name\", namespace=~\"$namespace\",label=\"propose_to_sync_latency\",role=\"fullnode\",kubernetes_pod_name=~\".*aptos-node-.*-fullnode-.*\"}[$__rate_interval])) / sum(rate(aptos_data_client_sync_latencies_count{chain_name=~\"$chain_name\", namespace=~\"$namespace\",label=\"propose_to_sync_latency\",kubernetes_pod_name=~\".*aptos-node-.*-fullnode-.*\"}[$__rate_interval])))\n-\nquantile(0.67, rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"committed\"}[$__rate_interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"committed\"}[$__rate_interval]))",
+          "expr": "(sum(rate(aptos_data_client_sync_latencies_sum{chain_name=~\"$chain_name\", namespace=~\"$namespace\",label=\"propose_to_sync_latency\",role=\"fullnode\",kubernetes_pod_name=~\".*aptos-node-.*-fullnode-.*\"}[$__rate_interval])) / sum(rate(aptos_data_client_sync_latencies_count{chain_name=~\"$chain_name\", namespace=~\"$namespace\",label=\"propose_to_sync_latency\",kubernetes_pod_name=~\".*aptos-node-.*-fullnode-.*\"}[$__rate_interval])))\n-\nquantile(0.67, rate(aptos_consensus_block_tracing_sum{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"committed\"}[$__rate_interval]) / rate(aptos_consensus_block_tracing_count{chain_name=~\"$chain_name\", cluster=~\"$cluster\", metrics_source=~\"$metrics_source\", namespace=~\"$namespace\", kubernetes_pod_name=~\"$kubernetes_pod_name\", role=~\"$role\", stage=\"committed\"}[$__rate_interval])) < 1000000",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 1,
@@ -1191,7 +1176,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -1254,7 +1238,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -1320,7 +1303,7 @@
           "refId": "A"
         }
       ],
-      "title": "(Ignore) State sync latencies stacked (VFN in Forge)",
+      "title": "State sync latencies stacked (VFN in Forge)",
       "type": "timeseries"
     },
     {
@@ -1334,7 +1317,6 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "axisShow": false,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 10,
@@ -1400,12 +1382,13 @@
           "refId": "A"
         }
       ],
-      "title": "(Ignore) State sync latencies stacked (PFN in Forge)",
+      "title": "State sync latencies stacked (PFN in Forge)",
       "type": "timeseries"
     }
   ],
   "refresh": "",
   "schemaVersion": 38,
+  "style": "dark",
   "tags": ["aptos-core"],
   "templating": {
     "list": [
@@ -1581,8 +1564,8 @@
         "multiFormat": "",
         "name": "interval",
         "options": [
-          { "selected": true, "text": "auto", "value": "$__auto_interval_interval" },
-          { "selected": false, "text": "1m", "value": "1m" },
+          { "selected": false, "text": "auto", "value": "$__auto_interval_interval" },
+          { "selected": true, "text": "1m", "value": "1m" },
           { "selected": false, "text": "5m", "value": "5m" },
           { "selected": false, "text": "10m", "value": "10m" },
           { "selected": false, "text": "30m", "value": "30m" },
@@ -1612,6 +1595,6 @@
   "timezone": "",
   "title": "end-to-end-txn-latency",
   "uid": "ae591b2c-8a2f-445d-9122-ee53f99400df",
-  "version": 43,
+  "version": 42,
   "weekStart": ""
 }

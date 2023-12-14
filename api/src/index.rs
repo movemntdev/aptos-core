@@ -4,7 +4,7 @@
 
 use crate::{
     accept_type::AcceptType,
-    context::{api_spawn_blocking, Context},
+    context::Context,
     response::{BasicResponse, BasicResponseStatus, BasicResult},
     ApiTags,
 };
@@ -13,6 +13,7 @@ use poem_openapi::OpenApi;
 use std::sync::Arc;
 
 /// API for the index, to retrieve the ledger information
+#[derive(Clone)]
 pub struct IndexApi {
     pub context: Arc<Context>,
 }
@@ -36,7 +37,7 @@ impl IndexApi {
 
         let node_role = self.context.node_role();
 
-        api_spawn_blocking(move || match accept_type {
+        match accept_type {
             AcceptType::Json => {
                 let index_response = IndexResponse::new(
                     ledger_info.clone(),
@@ -53,7 +54,33 @@ impl IndexApi {
                 let index_response = IndexResponseBcs::new(ledger_info.clone(), node_role);
                 BasicResponse::try_from_bcs((index_response, &ledger_info, BasicResponseStatus::Ok))
             },
-        })
-        .await
+        }
+    }
+
+    pub async fn get_ledger_info_raw(&self, accept_type: AcceptType) -> BasicResult<IndexResponse> {
+        self.context
+            .check_api_output_enabled("Get ledger info", &accept_type)?;
+        let ledger_info = self.context.get_latest_ledger_info()?;
+
+        let node_role = self.context.node_role();
+
+        match accept_type {
+            AcceptType::Json => {
+                let index_response = IndexResponse::new(
+                    ledger_info.clone(),
+                    node_role,
+                    Some(aptos_build_info::get_git_hash()),
+                );
+                BasicResponse::try_from_json((
+                    index_response,
+                    &ledger_info,
+                    BasicResponseStatus::Ok,
+                ))
+            },
+            AcceptType::Bcs => {
+                let index_response = IndexResponseBcs::new(ledger_info.clone(), node_role);
+                BasicResponse::try_from_bcs((index_response, &ledger_info, BasicResponseStatus::Ok))
+            },
+        }
     }
 }

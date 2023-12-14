@@ -12,7 +12,7 @@ pub trait TransactionDeduper: Send + Sync {
 }
 
 /// No Op Deduper to maintain backward compatibility
-pub struct NoOpDeduper {}
+struct NoOpDeduper {}
 
 impl TransactionDeduper for NoOpDeduper {
     fn dedup(&self, txns: Vec<SignedTransaction>) -> Vec<SignedTransaction> {

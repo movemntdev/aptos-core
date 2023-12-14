@@ -6,9 +6,8 @@ use crate::{
     errors::{SafeNativeError, SafeNativeResult},
 };
 use aptos_gas_algebra::DynamicExpression;
-use aptos_gas_schedule::{MiscGasParameters, NativeGasParameters, ToOnChainGasSchedule};
+use aptos_gas_schedule::{MiscGasParameters, NativeGasParameters};
 use aptos_types::on_chain_config::{Features, TimedFeatures};
-use bytes::Bytes;
 use move_vm_runtime::native_functions::{NativeContext, NativeFunction};
 use move_vm_types::{
     loaded_data::runtime_types::Type, natives::function::NativeResult, values::Value,
@@ -170,31 +169,5 @@ impl SafeNativeBuilder {
         natives
             .into_iter()
             .map(|(func_name, func)| (func_name.into(), self.make_native(func)))
-    }
-
-    pub fn id_bytes(&self) -> Bytes {
-        let Self {
-            data,
-            enable_incremental_gas_charging,
-            gas_hook: _gas_hook,
-        } = self;
-        let SharedData {
-            gas_feature_version,
-            native_gas_params,
-            misc_gas_params,
-            timed_features,
-            features,
-        } = data.as_ref();
-
-        bcs::to_bytes(&(
-            enable_incremental_gas_charging,
-            gas_feature_version,
-            native_gas_params.to_on_chain_gas_schedule(*gas_feature_version),
-            misc_gas_params.to_on_chain_gas_schedule(*gas_feature_version),
-            timed_features,
-            features,
-        ))
-        .expect("bcs::to_bytes() failed.")
-        .into()
     }
 }

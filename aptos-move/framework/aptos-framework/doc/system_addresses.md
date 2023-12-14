@@ -1,5 +1,5 @@
 
-<a id="0x1_system_addresses"></a>
+<a name="0x1_system_addresses"></a>
 
 # Module `0x1::system_addresses`
 
@@ -19,7 +19,6 @@
 -  [Function `is_vm_address`](#0x1_system_addresses_is_vm_address)
 -  [Function `is_reserved_address`](#0x1_system_addresses_is_reserved_address)
 -  [Specification](#@Specification_1)
-    -  [Module-level Specification](#@Module-level_Specification_2)
     -  [Function `assert_core_resource`](#@Specification_1_assert_core_resource)
     -  [Function `assert_core_resource_address`](#@Specification_1_assert_core_resource_address)
     -  [Function `is_core_resource_address`](#@Specification_1_is_core_resource_address)
@@ -35,12 +34,12 @@
 
 
 
-<a id="@Constants_0"></a>
+<a name="@Constants_0"></a>
 
 ## Constants
 
 
-<a id="0x1_system_addresses_ENOT_APTOS_FRAMEWORK_ADDRESS"></a>
+<a name="0x1_system_addresses_ENOT_APTOS_FRAMEWORK_ADDRESS"></a>
 
 The address/account did not correspond to the core framework address
 
@@ -50,7 +49,7 @@ The address/account did not correspond to the core framework address
 
 
 
-<a id="0x1_system_addresses_ENOT_CORE_RESOURCE_ADDRESS"></a>
+<a name="0x1_system_addresses_ENOT_CORE_RESOURCE_ADDRESS"></a>
 
 The address/account did not correspond to the core resource address
 
@@ -60,7 +59,7 @@ The address/account did not correspond to the core resource address
 
 
 
-<a id="0x1_system_addresses_ENOT_FRAMEWORK_RESERVED_ADDRESS"></a>
+<a name="0x1_system_addresses_ENOT_FRAMEWORK_RESERVED_ADDRESS"></a>
 
 The address is not framework reserved address
 
@@ -70,7 +69,7 @@ The address is not framework reserved address
 
 
 
-<a id="0x1_system_addresses_EVM"></a>
+<a name="0x1_system_addresses_EVM"></a>
 
 The operation can only be performed by the VM
 
@@ -80,7 +79,7 @@ The operation can only be performed by the VM
 
 
 
-<a id="0x1_system_addresses_assert_core_resource"></a>
+<a name="0x1_system_addresses_assert_core_resource"></a>
 
 ## Function `assert_core_resource`
 
@@ -104,7 +103,7 @@ The operation can only be performed by the VM
 
 </details>
 
-<a id="0x1_system_addresses_assert_core_resource_address"></a>
+<a name="0x1_system_addresses_assert_core_resource_address"></a>
 
 ## Function `assert_core_resource_address`
 
@@ -128,7 +127,7 @@ The operation can only be performed by the VM
 
 </details>
 
-<a id="0x1_system_addresses_is_core_resource_address"></a>
+<a name="0x1_system_addresses_is_core_resource_address"></a>
 
 ## Function `is_core_resource_address`
 
@@ -152,7 +151,7 @@ The operation can only be performed by the VM
 
 </details>
 
-<a id="0x1_system_addresses_assert_aptos_framework"></a>
+<a name="0x1_system_addresses_assert_aptos_framework"></a>
 
 ## Function `assert_aptos_framework`
 
@@ -179,7 +178,7 @@ The operation can only be performed by the VM
 
 </details>
 
-<a id="0x1_system_addresses_assert_framework_reserved_address"></a>
+<a name="0x1_system_addresses_assert_framework_reserved_address"></a>
 
 ## Function `assert_framework_reserved_address`
 
@@ -203,7 +202,7 @@ The operation can only be performed by the VM
 
 </details>
 
-<a id="0x1_system_addresses_assert_framework_reserved"></a>
+<a name="0x1_system_addresses_assert_framework_reserved"></a>
 
 ## Function `assert_framework_reserved`
 
@@ -230,7 +229,7 @@ The operation can only be performed by the VM
 
 </details>
 
-<a id="0x1_system_addresses_is_framework_reserved_address"></a>
+<a name="0x1_system_addresses_is_framework_reserved_address"></a>
 
 ## Function `is_framework_reserved_address`
 
@@ -264,7 +263,7 @@ Return true if <code>addr</code> is 0x0 or under the on chain governance's contr
 
 </details>
 
-<a id="0x1_system_addresses_is_aptos_framework_address"></a>
+<a name="0x1_system_addresses_is_aptos_framework_address"></a>
 
 ## Function `is_aptos_framework_address`
 
@@ -289,7 +288,7 @@ Return true if <code>addr</code> is 0x1.
 
 </details>
 
-<a id="0x1_system_addresses_assert_vm"></a>
+<a name="0x1_system_addresses_assert_vm"></a>
 
 ## Function `assert_vm`
 
@@ -314,7 +313,7 @@ Assert that the signer has the VM reserved address.
 
 </details>
 
-<a id="0x1_system_addresses_is_vm"></a>
+<a name="0x1_system_addresses_is_vm"></a>
 
 ## Function `is_vm`
 
@@ -339,7 +338,7 @@ Return true if <code>addr</code> is a reserved address for the VM to call system
 
 </details>
 
-<a id="0x1_system_addresses_is_vm_address"></a>
+<a name="0x1_system_addresses_is_vm_address"></a>
 
 ## Function `is_vm_address`
 
@@ -364,7 +363,7 @@ Return true if <code>addr</code> is a reserved address for the VM to call system
 
 </details>
 
-<a id="0x1_system_addresses_is_reserved_address"></a>
+<a name="0x1_system_addresses_is_reserved_address"></a>
 
 ## Function `is_reserved_address`
 
@@ -389,14 +388,9 @@ Return true if <code>addr</code> is either the VM address or an Aptos Framework 
 
 </details>
 
-<a id="@Specification_1"></a>
+<a name="@Specification_1"></a>
 
 ## Specification
-
-
-<a id="@Module-level_Specification_2"></a>
-
-### Module-level Specification
 
 
 
@@ -406,7 +400,7 @@ Return true if <code>addr</code> is either the VM address or an Aptos Framework 
 
 
 
-<a id="@Specification_1_assert_core_resource"></a>
+<a name="@Specification_1_assert_core_resource"></a>
 
 ### Function `assert_core_resource`
 
@@ -423,7 +417,7 @@ Return true if <code>addr</code> is either the VM address or an Aptos Framework 
 
 
 
-<a id="@Specification_1_assert_core_resource_address"></a>
+<a name="@Specification_1_assert_core_resource_address"></a>
 
 ### Function `assert_core_resource_address`
 
@@ -440,7 +434,7 @@ Return true if <code>addr</code> is either the VM address or an Aptos Framework 
 
 
 
-<a id="@Specification_1_is_core_resource_address"></a>
+<a name="@Specification_1_is_core_resource_address"></a>
 
 ### Function `is_core_resource_address`
 
@@ -458,7 +452,7 @@ Return true if <code>addr</code> is either the VM address or an Aptos Framework 
 
 
 
-<a id="@Specification_1_assert_aptos_framework"></a>
+<a name="@Specification_1_assert_aptos_framework"></a>
 
 ### Function `assert_aptos_framework`
 
@@ -475,7 +469,7 @@ Return true if <code>addr</code> is either the VM address or an Aptos Framework 
 
 
 
-<a id="@Specification_1_assert_framework_reserved_address"></a>
+<a name="@Specification_1_assert_framework_reserved_address"></a>
 
 ### Function `assert_framework_reserved_address`
 
@@ -491,7 +485,7 @@ Return true if <code>addr</code> is either the VM address or an Aptos Framework 
 
 
 
-<a id="@Specification_1_assert_framework_reserved"></a>
+<a name="@Specification_1_assert_framework_reserved"></a>
 
 ### Function `assert_framework_reserved`
 
@@ -507,7 +501,7 @@ Return true if <code>addr</code> is either the VM address or an Aptos Framework 
 
 
 
-<a id="@Specification_1_assert_vm"></a>
+<a name="@Specification_1_assert_vm"></a>
 
 ### Function `assert_vm`
 

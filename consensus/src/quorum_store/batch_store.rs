@@ -14,9 +14,12 @@ use crate::{
 use anyhow::bail;
 use aptos_consensus_types::proof_of_store::{ProofOfStore, SignedBatchInfo};
 use aptos_crypto::HashValue;
-use aptos_executor_types::{ExecutorError, ExecutorResult};
+use aptos_executor_types::Error;
 use aptos_logger::prelude::*;
-use aptos_types::{transaction::SignedTransaction, validator_signer::ValidatorSigner, PeerId};
+use aptos_types::{
+    transaction::SignedTransaction, validator_signer::ValidatorSigner,
+    validator_verifier::ValidatorVerifier, PeerId,
+};
 use dashmap::{
     mapref::entry::Entry::{Occupied, Vacant},
     DashMap,
@@ -105,7 +108,7 @@ impl QuotaManager {
 
 /// Provides in memory representation of stored batches (strong cache), and allows
 /// efficient concurrent readers.
-pub struct BatchStore {
+pub struct BatchStore<T> {
     epoch: OnceCell<u64>,
     last_certified_time: AtomicU64,
     db_cache: DashMap<HashValue, PersistedValue>,
@@ -115,10 +118,12 @@ pub struct BatchStore {
     memory_quota: usize,
     db_quota: usize,
     batch_quota: usize,
+    batch_requester: BatchRequester<T>,
     validator_signer: ValidatorSigner,
+    validator_verifier: ValidatorVerifier,
 }
 
-impl BatchStore {
+impl<T: QuorumStoreSender + Clone + Send + Sync + 'static> BatchStore<T> {
     pub(crate) fn new(
         epoch: u64,
         last_certified_time: u64,
@@ -126,7 +131,9 @@ impl BatchStore {
         memory_quota: usize,
         db_quota: usize,
         batch_quota: usize,
+        batch_requester: BatchRequester<T>,
         validator_signer: ValidatorSigner,
+        validator_verifier: ValidatorVerifier,
     ) -> Self {
         let db_clone = db.clone();
         let batch_store = Self {
@@ -139,7 +146,9 @@ impl BatchStore {
             memory_quota,
             db_quota,
             batch_quota,
+            batch_requester,
             validator_signer,
+            validator_verifier,
         };
         let db_content = db_clone
             .get_all_batches()
@@ -329,7 +338,7 @@ impl BatchStore {
         }
     }
 
-    pub fn update_certified_timestamp(&self, certified_time: u64) {
+    pub async fn update_certified_timestamp(&self, certified_time: u64) {
         trace!("QS: batch reader updating time {:?}", certified_time);
         let prev_time = self
             .last_certified_time
@@ -353,22 +362,19 @@ impl BatchStore {
         self.last_certified_time.load(Ordering::Relaxed)
     }
 
-    fn get_batch_from_db(&self, digest: &HashValue) -> ExecutorResult<PersistedValue> {
+    fn get_batch_from_db(&self, digest: &HashValue) -> Result<PersistedValue, Error> {
         counters::GET_BATCH_FROM_DB_COUNT.inc();
 
         match self.db.get_batch(digest) {
             Ok(Some(value)) => Ok(value),
             Ok(None) | Err(_) => {
                 error!("Could not get batch from db");
-                Err(ExecutorError::CouldNotGetData)
+                Err(Error::CouldNotGetData)
             },
         }
     }
 
-    pub(crate) fn get_batch_from_local(
-        &self,
-        digest: &HashValue,
-    ) -> ExecutorResult<PersistedValue> {
+    pub(crate) fn get_batch_from_local(&self, digest: &HashValue) -> Result<PersistedValue, Error> {
         if let Some(value) = self.db_cache.get(digest) {
             if value.payload_storage_mode() == StorageMode::PersistedOnly {
                 self.get_batch_from_db(digest)
@@ -377,7 +383,7 @@ impl BatchStore {
                 Ok(value.clone())
             }
         } else {
-            Err(ExecutorError::CouldNotGetData)
+            Err(Error::CouldNotGetData)
         }
     }
 }
@@ -389,58 +395,32 @@ pub trait BatchReader: Send + Sync {
     fn get_batch(
         &self,
         proof: ProofOfStore,
-    ) -> oneshot::Receiver<ExecutorResult<Vec<SignedTransaction>>>;
-
-    fn update_certified_timestamp(&self, certified_time: u64);
+    ) -> oneshot::Receiver<Result<Vec<SignedTransaction>, Error>>;
 }
 
-pub struct BatchReaderImpl<T> {
-    batch_store: Arc<BatchStore>,
-    batch_requester: Arc<BatchRequester<T>>,
-}
-
-impl<T: QuorumStoreSender + Clone + Send + Sync + 'static> BatchReaderImpl<T> {
-    pub(crate) fn new(batch_store: Arc<BatchStore>, batch_requester: BatchRequester<T>) -> Self {
-        Self {
-            batch_store,
-            batch_requester: Arc::new(batch_requester),
-        }
-    }
-}
-
-impl<T: QuorumStoreSender + Clone + Send + Sync + 'static> BatchReader for BatchReaderImpl<T> {
+impl<T: QuorumStoreSender + Clone + Send + Sync + 'static> BatchReader for BatchStore<T> {
     fn exists(&self, digest: &HashValue) -> Option<PeerId> {
-        self.batch_store
-            .get_batch_from_local(digest)
-            .map(|v| v.author())
-            .ok()
+        self.get_batch_from_local(digest).map(|v| v.author()).ok()
     }
 
     fn get_batch(
         &self,
         proof: ProofOfStore,
-    ) -> oneshot::Receiver<ExecutorResult<Vec<SignedTransaction>>> {
+    ) -> oneshot::Receiver<Result<Vec<SignedTransaction>, Error>> {
         let (tx, rx) = oneshot::channel();
 
-        if let Ok(mut value) = self.batch_store.get_batch_from_local(proof.digest()) {
+        if let Ok(mut value) = self.get_batch_from_local(proof.digest()) {
             tx.send(Ok(value.take_payload().expect("Must have payload")))
                 .unwrap();
         } else {
             // Quorum store metrics
             counters::MISSED_BATCHES_COUNT.inc();
-            let batch_store = self.batch_store.clone();
-            let batch_requester = self.batch_requester.clone();
-            tokio::spawn(async move {
-                if let Some((batch_info, payload)) = batch_requester.request_batch(proof, tx).await
-                {
-                    batch_store.persist(vec![PersistedValue::new(batch_info, Some(payload))]);
-                }
-            });
+            self.batch_requester.request_batch(
+                *proof.digest(),
+                proof.shuffled_signers(&self.validator_verifier),
+                tx,
+            );
         }
         rx
-    }
-
-    fn update_certified_timestamp(&self, certified_time: u64) {
-        self.batch_store.update_certified_timestamp(certified_time);
     }
 }

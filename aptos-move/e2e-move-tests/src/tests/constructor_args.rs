@@ -41,10 +41,7 @@ fn success_generic(
     // Load the code
     let acc = h.new_account_at(AccountAddress::from_hex_literal("0xcafe").unwrap());
 
-    assert_success!(h.publish_package_cache_building(
-        &acc,
-        &common::test_dir_path("constructor_args.data/pack")
-    ));
+    assert_success!(h.publish_package(&acc, &common::test_dir_path("constructor_args.data/pack")));
 
     // Check in initial state, resource does not exist.
     assert!(!h.exists_resource(acc.address(), module_data()));
@@ -75,10 +72,7 @@ fn success_generic_view(
 ) {
     // Load the code
     let acc = h.new_account_at(AccountAddress::from_hex_literal("0xcafe").unwrap());
-    assert_success!(h.publish_package_cache_building(
-        &acc,
-        &common::test_dir_path("constructor_args.data/pack")
-    ));
+    assert_success!(h.publish_package(&acc, &common::test_dir_path("constructor_args.data/pack")));
 
     // Check in initial state, resource does not exist.
     assert!(!h.exists_resource(acc.address(), module_data()));
@@ -103,10 +97,7 @@ fn fail_generic(ty_args: Vec<TypeTag>, tests: Vec<(&str, Vec<Vec<u8>>, Closure)>
 
     // Load the code
     let acc = h.new_account_at(AccountAddress::from_hex_literal("0xcafe").unwrap());
-    assert_success!(h.publish_package_cache_building(
-        &acc,
-        &common::test_dir_path("constructor_args.data/pack")
-    ));
+    assert_success!(h.publish_package(&acc, &common::test_dir_path("constructor_args.data/pack")));
 
     // Check in initial state, resource does not exist.
     assert!(!h.exists_resource(acc.address(), module_data()));

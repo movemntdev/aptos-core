@@ -19,9 +19,11 @@ use aptos_consensus_types::common::{Author, Round};
 use aptos_crypto::HashValue;
 use aptos_infallible::{Mutex, MutexGuard};
 use aptos_logger::prelude::*;
-use aptos_storage_interface::DbReader;
+use aptos_storage_interface::{DbReader, Order};
 use aptos_types::{
-    account_config::NewBlockEvent, epoch_change::EpochChangeProof, epoch_state::EpochState,
+    account_config::{new_block_event_key, NewBlockEvent},
+    epoch_change::EpochChangeProof,
+    epoch_state::EpochState,
 };
 use std::{
     cmp::max,
@@ -74,7 +76,21 @@ impl AptosDBBackend {
         // assumes target round is not too far from latest commit
         let limit = self.window_size + self.seek_len;
 
-        let events = self.aptos_db.get_latest_block_events(limit)?;
+        // there is a race condition between the next two lines, and new events being added.
+        // I.e. when latest_db_version is fetched, and get_events are called.
+        // if in between a new entry gets added max_returned_version will be larger than
+        // latest_db_version, and so we should take the max of the two.
+
+        // we cannot reorder those two functions, as if get_events is first,
+        // and then new entry gets added before get_latest_version is called,
+        // we would incorrectly think that we have a newer version.
+        let events = self.aptos_db.get_events(
+            &new_block_event_key(),
+            u64::max_value(),
+            Order::Descending,
+            limit as u64,
+            latest_db_version,
+        )?;
 
         let max_returned_version = events.first().map_or(0, |first| first.transaction_version);
 
@@ -540,7 +556,7 @@ pub struct LeaderReputation {
     epoch: u64,
     epoch_to_proposers: HashMap<u64, Vec<Author>>,
     voting_powers: Vec<u64>,
-    backend: Arc<dyn MetadataBackend>,
+    backend: Box<dyn MetadataBackend>,
     heuristic: Box<dyn ReputationHeuristic>,
     exclude_round: u64,
     use_root_hash: bool,
@@ -552,7 +568,7 @@ impl LeaderReputation {
         epoch: u64,
         epoch_to_proposers: HashMap<u64, Vec<Author>>,
         voting_powers: Vec<u64>,
-        backend: Arc<dyn MetadataBackend>,
+        backend: Box<dyn MetadataBackend>,
         heuristic: Box<dyn ReputationHeuristic>,
         exclude_round: u64,
         use_root_hash: bool,
@@ -619,14 +635,14 @@ impl LeaderReputation {
 
                 if counter_index == max(CHAIN_HEALTH_WINDOW_SIZES.len() - 2, 0) {
                     // Only emit this for one window value. Currently defaults to 100
-                    candidates.iter().for_each(|author| {
-                        if participants.contains(author) {
+                    candidates.iter().for_each(|x| {
+                        if participants.contains(x) {
                             CONSENSUS_PARTICIPATION_STATUS
-                                .with_label_values(&[&author.to_hex()])
+                                .with_label_values(&[&x.to_string()])
                                 .set(1_i64)
                         } else {
                             CONSENSUS_PARTICIPATION_STATUS
-                                .with_label_values(&[&author.to_hex()])
+                                .with_label_values(&[&x.to_string()])
                                 .set(0_i64)
                         }
                     });

@@ -145,7 +145,6 @@ module std::features {
         is_enabled(BLS12_381_STRUCTURES)
     }
 
-
     /// Whether native_public_key_validate aborts when a public key of the wrong length is given
     /// Lifetime: ephemeral
     const ED25519_PUBKEY_VALIDATE_RETURN_FALSE_WRONG_LENGTH: u64 = 14;
@@ -242,30 +241,15 @@ module std::features {
     /// Lifetime: transient
     const SIGNATURE_CHECKER_V2_SCRIPT_FIX: u64 = 29;
 
-    /// Whether the Aggregator V2 API feature is enabled.
-    /// Once enabled, the functions from aggregator_v2.move will be available for use.
+    /// Whether the aggregator snapshots feature is enabled.
     /// Lifetime: transient
-    const AGGREGATOR_V2_API: u64 = 30;
+    const AGGREGATOR_SNAPSHOTS: u64 = 30;
 
-    public fun get_aggregator_v2_api_feature(): u64 { AGGREGATOR_V2_API }
+    public fun get_aggregator_snapshots_feature(): u64 { AGGREGATOR_SNAPSHOTS }
 
-    public fun aggregator_v2_api_enabled(): bool acquires Features {
-        is_enabled(AGGREGATOR_V2_API)
-    }
-
-    // Backed by same flag as get_aggregator_v2_api_feature
-    public fun get_aggregator_snapshots_feature(): u64 { AGGREGATOR_V2_API }
-
-    // Backed by same flag as aggregator_v2_api_enabled
     public fun aggregator_snapshots_enabled(): bool acquires Features {
-        is_enabled(AGGREGATOR_V2_API)
+        is_enabled(AGGREGATOR_SNAPSHOTS)
     }
-
-    const SAFER_RESOURCE_GROUPS: u64 = 31;
-
-    const SAFER_METADATA: u64 = 32;
-
-    const SINGLE_SENDER_AUTHENTICATOR: u64 = 33;
 
     /// Whether the automatic creation of accounts is enabled for sponsored transactions.
     /// Lifetime: transient
@@ -277,60 +261,9 @@ module std::features {
         is_enabled(SPONSORED_AUTOMATIC_ACCOUNT_CREATION)
     }
 
-    const FEE_PAYER_ACCOUNT_OPTIONAL: u64 = 35;
-
-    /// Whether the Aggregator V2 delayed fields feature is enabled.
-    /// Once enabled, Aggregator V2 functions become parallel.
+    /// Whether the fix to reduce the maximum identifer length is enabled.
     /// Lifetime: transient
-    const AGGREGATOR_V2_DELAYED_FIELDS: u64 = 36;
-
-    /// Whether enable TokenV2 collection creation and Fungible Asset creation
-    /// to create higher throughput concurrent variants.
-    /// Lifetime: transient
-    const CONCURRENT_ASSETS: u64 = 37;
-
-    public fun get_concurrent_assets_feature(): u64 { CONCURRENT_ASSETS }
-
-    public fun concurrent_assets_enabled(): bool acquires Features {
-        is_enabled(CONCURRENT_ASSETS)
-    }
-
     const LIMIT_MAX_IDENTIFIER_LENGTH: u64 = 38;
-
-    /// Whether allow changing beneficiaries for operators.
-    /// Lifetime: transient
-    const OPERATOR_BENEFICIARY_CHANGE: u64 = 39;
-
-    public fun get_operator_beneficiary_change_feature(): u64 { OPERATOR_BENEFICIARY_CHANGE }
-
-    public fun operator_beneficiary_change_enabled(): bool acquires Features {
-        is_enabled(OPERATOR_BENEFICIARY_CHANGE)
-    }
-
-    const VM_BINARY_FORMAT_V7: u64 = 40;
-
-    const RESOURCE_GROUPS_CHARGE_AS_SIZE_SUM: u64 = 41;
-
-    /// Whether the operator commission rate change in delegation pool is enabled.
-    /// Lifetime: transient
-    const COMMISSION_CHANGE_DELEGATION_POOL: u64 = 42;
-
-    public fun get_commission_change_delegation_pool_feature(): u64 { COMMISSION_CHANGE_DELEGATION_POOL }
-
-    public fun commission_change_delegation_pool_enabled(): bool acquires Features {
-        is_enabled(COMMISSION_CHANGE_DELEGATION_POOL)
-    }
-
-    /// Whether the generic algebra implementation for BN254 operations are enabled.
-    ///
-    /// Lifetime: transient
-    const BN254_STRUCTURES: u64 = 43;
-
-    public fun get_bn254_strutures_feature(): u64 { BN254_STRUCTURES }
-
-    public fun bn254_structures_enabled(): bool acquires Features {
-        is_enabled(BN254_STRUCTURES)
-    }
 
     // ============================================================================================
     // Feature Flag Implementation
@@ -359,9 +292,8 @@ module std::features {
         });
     }
 
-    #[view]
     /// Check whether the feature is enabled.
-    public fun is_enabled(feature: u64): bool acquires Features {
+    fun is_enabled(feature: u64): bool acquires Features {
         exists<Features>(@std) &&
             contains(&borrow_global<Features>(@std).features, feature)
     }

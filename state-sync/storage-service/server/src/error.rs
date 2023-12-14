@@ -33,9 +33,3 @@ impl From<aptos_storage_service_types::responses::Error> for Error {
         Error::UnexpectedErrorEncountered(error.to_string())
     }
 }
-
-impl From<anyhow::Error> for Error {
-    fn from(error: anyhow::Error) -> Self {
-        Error::UnexpectedErrorEncountered(error.to_string())
-    }
-}

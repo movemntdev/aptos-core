@@ -3,8 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::Result;
-use aptos_logger::info;
-use aptos_state_view::{account_with_state_view::AsAccountWithStateView, StateView};
+use aptos_state_view::account_with_state_view::AsAccountWithStateView;
 use aptos_storage_interface::{
     cached_state_view::CachedDbStateView,
     state_view::{DbStateView, LatestDbStateCheckpointView},
@@ -15,8 +14,7 @@ use aptos_types::{
     account_view::AccountView,
     transaction::{SignedTransaction, VMValidatorResult},
 };
-use aptos_vm::{data_cache::AsMoveResolver, AptosVM};
-use aptos_vm_logging::log_schema::AdapterLogSchema;
+use aptos_vm::AptosVM;
 use fail::fail_point;
 use std::sync::Arc;
 
@@ -50,20 +48,12 @@ impl Clone for VMValidator {
 }
 
 impl VMValidator {
-    fn new_vm_for_validation(state_view: &impl StateView) -> AptosVM {
-        info!(
-            AdapterLogSchema::new(state_view.id(), 0),
-            "AptosVM created for Validation"
-        );
-        AptosVM::new(&state_view.as_move_resolver())
-    }
-
     pub fn new(db_reader: Arc<dyn DbReader>) -> Self {
         let db_state_view = db_reader
             .latest_state_checkpoint_view()
             .expect("Get db view cannot fail");
 
-        let vm = Self::new_vm_for_validation(&db_state_view);
+        let vm = AptosVM::new_for_validation(&db_state_view);
         VMValidator {
             db_reader,
             state_view: db_state_view.into(),
@@ -89,7 +79,7 @@ impl TransactionValidation for VMValidator {
     fn restart(&mut self) -> Result<()> {
         self.notify_commit();
 
-        self.vm = Self::new_vm_for_validation(&self.state_view);
+        self.vm = AptosVM::new_for_validation(&self.state_view);
         Ok(())
     }
 

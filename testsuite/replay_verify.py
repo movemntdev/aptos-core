@@ -15,7 +15,7 @@ from collections import deque
 from verify_core.common import clear_artifacts, query_backup_latest_version
 
 # This script runs the replay-verify from the root of aptos-core
-# It assumes the aptos-debugger binary is already built with the release profile
+# It assumes the aptos-db-tool binary is already built with the release profile
 
 
 # The key is the runner's number and the value is the range of txns that the runner is responsible for
@@ -71,19 +71,6 @@ MAINNET_RANGES = [
 ]
 
 
-# retry the replay_verify_partition if it fails
-def retry_replay_verify_partition(func, *args, **kwargs) -> Tuple[int, int, bytes]:
-    (partition_number, code, msg) = (0, 0, b"")
-    NUM_OF_RETRIES = 6
-    for i in range(1, NUM_OF_RETRIES + 1):
-        print(f"try {i}")
-        (partition_number, code, msg) = func(*args, **kwargs)
-        # let's only not retry on txn error and success case,
-        if code == 2 or code == 0:
-            break
-    return (partition_number, code, msg)
-
-
 def replay_verify_partition(
     n: int,
     N: int,
@@ -122,8 +109,7 @@ def replay_verify_partition(
     # run and print output
     process = subprocess.Popen(
         [
-            "target/release/aptos-debugger",
-            "aptos-db",
+            "target/release/aptos-db-tool",
             "replay-verify",
             *txns_to_skip_args,
             "--concurrent-downloads",
@@ -221,10 +207,9 @@ def main(runner_no=None, runner_cnt=None, start_version=None, end_version=None):
 
     with Pool(N) as p:
         all_partitions = p.starmap(
-            retry_replay_verify_partition,
+            replay_verify_partition,
             [
                 (
-                    replay_verify_partition,
                     n,
                     N,
                     runner_start,

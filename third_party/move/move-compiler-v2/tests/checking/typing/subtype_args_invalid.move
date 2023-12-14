@@ -16,8 +16,4 @@ module 0x8675309::M {
         mut_imm<u64>(&0, &0);
         mut_mut<u64>(&0, &0);
     }
-
-    inline fun t2(f: |&mut u64, &u64|) {
-        f(&0, &0); // not okay
-    }
 }

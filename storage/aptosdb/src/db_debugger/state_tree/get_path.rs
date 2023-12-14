@@ -3,15 +3,11 @@
 
 use crate::{
     db_debugger::common::{parse_nibble_path, DbDir},
-    schema::jellyfish_merkle_node::JellyfishMerkleNodeSchema,
-    state_merkle_db::StateMerkleDb,
+    jellyfish_merkle_node::JellyfishMerkleNodeSchema,
 };
 use anyhow::{ensure, Result};
 use aptos_crypto::HashValue;
-use aptos_jellyfish_merkle::{
-    node_type::{Child, Node, NodeKey, NodeType},
-    TreeReader,
-};
+use aptos_jellyfish_merkle::node_type::{Child, Node, NodeKey, NodeType};
 use aptos_types::{
     nibble::{nibble_path::NibblePath, Nibble},
     transaction::Version,
@@ -45,10 +41,7 @@ impl Cmd {
         );
 
         let db = self.db_dir.open_state_merkle_db()?;
-        let mut iter = db
-            .metadata_db()
-            .rev_iter::<JellyfishMerkleNodeSchema>(Default::default())?;
-
+        let mut iter = db.rev_iter::<JellyfishMerkleNodeSchema>(Default::default())?;
         iter.seek_for_prev(&NodeKey::new_empty_path(self.before_version - 1))?;
         let mut version = iter.next().transpose()?.unwrap().0.version();
         let root_version = version;
@@ -86,7 +79,7 @@ impl Cmd {
 
     pub fn render_node(
         &self,
-        db: &StateMerkleDb,
+        db: &aptos_schemadb::DB,
         version: Version,
         pos: &NibblePath,
         root_version: Version,
@@ -94,7 +87,7 @@ impl Cmd {
         expected_hash: Option<HashValue>,
     ) -> Result<Option<(Version, HashValue)>> {
         let node_key = NodeKey::new(version, pos.clone());
-        let node = db.get_node_option(&node_key, "unknown")?;
+        let node = db.get::<JellyfishMerkleNodeSchema>(&node_key)?;
         let node_type = match node {
             None => "No node",
             Some(Node::Internal(_)) => "Internal node",

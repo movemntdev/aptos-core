@@ -5,15 +5,11 @@
 mod bytecode_generator;
 mod experiments;
 mod file_format_generator;
-pub mod inliner;
 mod options;
 pub mod pipeline;
 
-use crate::pipeline::{
-    livevar_analysis_processor::LiveVarAnalysisProcessor,
-    reference_safety_processor::ReferenceSafetyProcessor, visibility_checker::VisibilityChecker,
-};
-use anyhow::bail;
+use crate::pipeline::livevar_analysis_processor::LiveVarAnalysisProcessor;
+use anyhow::anyhow;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream, WriteColor};
 pub use experiments::*;
 use move_compiler::{
@@ -46,27 +42,14 @@ pub fn run_move_compiler(
     options: Options,
 ) -> anyhow::Result<(GlobalEnv, Vec<AnnotatedCompiledUnit>)> {
     // Run context check.
-    let mut env = run_checker(options.clone())?;
+    let env = run_checker(options.clone())?;
     check_errors(&env, error_writer, "checking errors")?;
-
-    if options.debug {
-        eprintln!("After error check, GlobalEnv={}", env.dump_env());
-    }
-
-    // Run inlining.
-    inliner::run_inlining(&mut env);
-    check_errors(&env, error_writer, "inlining")?;
-
-    if options.debug {
-        eprintln!("After inlining, GlobalEnv={}", env.dump_env());
-    }
-
     // Run code generator
     let mut targets = run_bytecode_gen(&env);
     check_errors(&env, error_writer, "code generation errors")?;
     // Run transformation pipeline
     let pipeline = bytecode_pipeline(&env);
-    if options.debug || options.dump_bytecode {
+    if options.dump_bytecode {
         // Dump bytecode to files, using a basename for the individual sources derived
         // from the first input file.
         let dump_base_name = options
@@ -78,14 +61,13 @@ pub fn run_move_compiler(
                     .map(|f| f.to_string_lossy().as_ref().to_owned())
             })
             .unwrap_or_else(|| "dump".to_owned());
-        pipeline.run_with_dump(&env, &mut targets, &dump_base_name, options.debug)
+        pipeline.run_with_dump(&env, &mut targets, &dump_base_name, false)
     } else {
         pipeline.run(&env, &mut targets)
     }
-    check_errors(&env, error_writer, "stackless-bytecode analysis errors")?;
     let modules_and_scripts = run_file_format_gen(&env, &targets);
     check_errors(&env, error_writer, "assembling errors")?;
-    let annotated = annotate_units(modules_and_scripts);
+    let annotated = annotate_units(&env, modules_and_scripts);
     Ok((env, annotated))
 }
 
@@ -94,28 +76,18 @@ pub fn run_move_compiler(
 pub fn run_checker(options: Options) -> anyhow::Result<GlobalEnv> {
     // Run the model builder, which performs context checking.
     let addrs = move_model::parse_addresses_from_options(options.named_address_mapping.clone())?;
-    let mut env = move_model::run_model_builder_in_compiler_mode(
+    let env = move_model::run_model_builder_in_compiler_mode(
         PackageInfo {
             sources: options.sources.clone(),
             address_map: addrs.clone(),
         },
         vec![PackageInfo {
             sources: options.dependencies.clone(),
-            address_map: addrs.clone(),
+            address_map: addrs,
         }],
         options.skip_attribute_checks,
-        if !options.skip_attribute_checks && options.known_attributes.is_empty() {
-            KnownAttribute::get_all_attribute_names()
-        } else {
-            &options.known_attributes
-        },
+        KnownAttribute::get_all_attribute_names(),
     )?;
-    // Store address aliases
-    let map = addrs
-        .into_iter()
-        .map(|(s, a)| (env.symbol_pool().make(&s), a.into_inner()))
-        .collect();
-    env.set_address_alias_map(map);
     // Store options in env, for later access
     env.set_extension(options);
     Ok(env)
@@ -138,10 +110,10 @@ pub fn run_bytecode_gen(env: &GlobalEnv) -> FunctionTargetsHolder {
     }
     while let Some(id) = todo.pop_first() {
         done.insert(id);
-        let func_env = env.get_function(id);
         let data = bytecode_generator::generate_bytecode(env, id);
         targets.insert_target_data(&id, FunctionVariant::Baseline, data);
-        for callee in func_env
+        for callee in env
+            .get_function(id)
             .get_called_functions()
             .expect("called functions available")
         {
@@ -158,17 +130,9 @@ pub fn run_file_format_gen(env: &GlobalEnv, targets: &FunctionTargetsHolder) -> 
 }
 
 /// Returns the bytecode processing pipeline.
-pub fn bytecode_pipeline(env: &GlobalEnv) -> FunctionTargetPipeline {
-    let options = env.get_extension::<Options>().expect("options");
-    let safety_on = !options.experiment_on(Experiment::NO_SAFETY);
+pub fn bytecode_pipeline(_env: &GlobalEnv) -> FunctionTargetPipeline {
     let mut pipeline = FunctionTargetPipeline::default();
-    if safety_on {
-        pipeline.add_processor(Box::new(VisibilityChecker()));
-    }
     pipeline.add_processor(Box::new(LiveVarAnalysisProcessor()));
-    if safety_on {
-        pipeline.add_processor(Box::new(ReferenceSafetyProcessor {}));
-    }
     pipeline
 }
 
@@ -181,7 +145,7 @@ pub fn check_errors<W: WriteColor>(
     let options = env.get_extension::<Options>().unwrap_or_default();
     env.report_diag(error_writer, options.report_severity());
     if env.has_errors() {
-        bail!("exiting with {}", msg);
+        Err(anyhow!(format!("exiting with {}", msg)))
     } else {
         Ok(())
     }
@@ -190,12 +154,12 @@ pub fn check_errors<W: WriteColor>(
 /// Annotate the given compiled units.
 /// TODO: this currently only fills in defaults. The annotations are only used in
 /// the prover, and compiler v2 is not yet connected to the prover.
-pub fn annotate_units(units: Vec<CompiledUnit>) -> Vec<AnnotatedCompiledUnit> {
+pub fn annotate_units(env: &GlobalEnv, units: Vec<CompiledUnit>) -> Vec<AnnotatedCompiledUnit> {
+    let loc = env.unknown_move_ir_loc();
     units
         .into_iter()
         .map(|u| match u {
             CompiledUnit::Module(named_module) => {
-                let loc = named_module.source_map.definition_location;
                 AnnotatedCompiledUnit::Module(AnnotatedCompiledModule {
                     loc,
                     module_name_loc: loc,
@@ -206,7 +170,7 @@ pub fn annotate_units(units: Vec<CompiledUnit>) -> Vec<AnnotatedCompiledUnit> {
             },
             CompiledUnit::Script(named_script) => {
                 AnnotatedCompiledUnit::Script(AnnotatedCompiledScript {
-                    loc: named_script.source_map.definition_location,
+                    loc,
                     named_script,
                     function_info: FunctionInfo {
                         spec_info: Default::default(),

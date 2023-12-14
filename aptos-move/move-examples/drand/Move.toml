@@ -1,5 +1,5 @@
 [package]
-name = "DrandLottery"
+name = "Drand lottery"
 version = "0.0.1"
 
 [dependencies]

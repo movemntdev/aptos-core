@@ -8,7 +8,6 @@ use crate::{
     quorum_cert::QuorumCert,
 };
 use anyhow::{bail, ensure, format_err};
-use aptos_bitvec::BitVec;
 use aptos_crypto::{bls12381, hash::CryptoHash, HashValue};
 use aptos_infallible::duration_since_epoch;
 use aptos_types::{
@@ -19,7 +18,6 @@ use aptos_types::{
     ledger_info::LedgerInfo,
     transaction::{SignedTransaction, Transaction, Version},
     validator_signer::ValidatorSigner,
-    validator_txn::ValidatorTransaction,
     validator_verifier::ValidatorVerifier,
 };
 use mirai_annotations::debug_checked_verify_eq;
@@ -71,7 +69,7 @@ impl Display for Block {
             author,
             self.epoch(),
             self.round(),
-            self.parent_id(),
+            self.quorum_cert().certified_block().id(),
             self.timestamp_usecs(),
         )
     }
@@ -97,7 +95,7 @@ impl Block {
     }
 
     pub fn parent_id(&self) -> HashValue {
-        self.block_data.parent_id()
+        self.block_data.quorum_cert().certified_block().id()
     }
 
     pub fn payload(&self) -> Option<&Payload> {
@@ -209,31 +207,13 @@ impl Block {
         epoch: u64,
         round: Round,
         timestamp: u64,
-        validator_txns: Vec<ValidatorTransaction>,
         payload: Payload,
         author: Author,
         failed_authors: Vec<(Round, Author)>,
-        parent_block_id: HashValue,
-        parents_bitvec: BitVec,
-        node_digests: Vec<HashValue>,
-    ) -> Self {
-        let block_data = BlockData::new_for_dag(
-            epoch,
-            round,
-            timestamp,
-            validator_txns,
-            payload,
-            author,
-            failed_authors,
-            parent_block_id,
-            parents_bitvec,
-            node_digests,
-        );
-        Self {
-            id: block_data.hash(),
-            block_data,
-            signature: None,
-        }
+    ) -> anyhow::Result<Self> {
+        let block_data =
+            BlockData::new_for_dag(epoch, round, timestamp, payload, author, failed_authors);
+        Self::new_proposal_from_block_data(block_data, &ValidatorSigner::from_int(0))
     }
 
     pub fn new_proposal(
@@ -245,28 +225,6 @@ impl Block {
         failed_authors: Vec<(Round, Author)>,
     ) -> anyhow::Result<Self> {
         let block_data = BlockData::new_proposal(
-            payload,
-            validator_signer.author(),
-            failed_authors,
-            round,
-            timestamp_usecs,
-            quorum_cert,
-        );
-
-        Self::new_proposal_from_block_data(block_data, validator_signer)
-    }
-
-    pub fn new_proposal_ext(
-        validator_txns: Vec<ValidatorTransaction>,
-        payload: Payload,
-        round: Round,
-        timestamp_usecs: u64,
-        quorum_cert: QuorumCert,
-        validator_signer: &ValidatorSigner,
-        failed_authors: Vec<(Round, Author)>,
-    ) -> anyhow::Result<Self> {
-        let block_data = BlockData::new_proposal_ext(
-            validator_txns,
             payload,
             validator_signer.author(),
             failed_authors,
@@ -299,10 +257,6 @@ impl Block {
         }
     }
 
-    pub fn validator_txns(&self) -> Option<&Vec<ValidatorTransaction>> {
-        self.block_data.validator_txns()
-    }
-
     /// Verifies that the proposal and the QC are correctly signed.
     /// If this is the genesis block, we skip these checks.
     pub fn validate_signature(&self, validator: &ValidatorVerifier) -> anyhow::Result<()> {
@@ -317,15 +271,6 @@ impl Block {
                 validator.verify(*author, &self.block_data, signature)?;
                 self.quorum_cert().verify(validator)
             },
-            BlockType::ProposalExt(proposal_ext) => {
-                let signature = self
-                    .signature
-                    .as_ref()
-                    .ok_or_else(|| format_err!("Missing signature in Proposal"))?;
-                validator.verify(*proposal_ext.author(), &self.block_data, signature)?;
-                self.quorum_cert().verify(validator)
-            },
-            BlockType::DAGBlock { .. } => bail!("We should not accept DAG block from others"),
         }
     }
 
@@ -410,65 +355,44 @@ impl Block {
         Ok(())
     }
 
-    pub fn transactions_to_execute_for_metadata(
-        block_id: HashValue,
-        validator_txns: Vec<ValidatorTransaction>,
-        txns: Vec<SignedTransaction>,
-        metadata: BlockMetadata,
-        is_block_gas_limit: bool,
-    ) -> Vec<Transaction> {
-        let txns = once(Transaction::BlockMetadata(metadata))
-            .chain(
-                validator_txns
-                    .into_iter()
-                    .map(Transaction::ValidatorTransaction),
-            )
-            .chain(txns.into_iter().map(Transaction::UserTransaction));
-
-        if is_block_gas_limit {
-            // After the per-block gas limit change, StateCheckpoint txn
-            // is inserted after block execution
-            txns.collect()
-        } else {
-            // Before the per-block gas limit change, StateCheckpoint txn
-            // is inserted here for compatibility.
-            txns.chain(once(Transaction::StateCheckpoint(block_id)))
-                .collect()
-        }
-    }
-
     pub fn transactions_to_execute(
         &self,
         validators: &[AccountAddress],
-        validator_txns: Vec<ValidatorTransaction>,
         txns: Vec<SignedTransaction>,
-        is_block_gas_limit: bool,
+        block_gas_limit: Option<u64>,
     ) -> Vec<Transaction> {
-        let metadata = self.new_block_metadata(validators);
-        Self::transactions_to_execute_for_metadata(
-            self.id,
-            validator_txns,
-            txns,
-            metadata,
-            is_block_gas_limit,
-        )
-    }
-
-    fn previous_bitvec(&self) -> BitVec {
-        if let BlockType::DAGBlock { parents_bitvec, .. } = self.block_data.block_type() {
-            parents_bitvec.clone()
+        if block_gas_limit.is_some() {
+            // After the per-block gas limit change, StateCheckpoint txn
+            // is inserted after block execution
+            once(Transaction::BlockMetadata(
+                self.new_block_metadata(validators),
+            ))
+            .chain(txns.into_iter().map(Transaction::UserTransaction))
+            .collect()
         } else {
-            self.quorum_cert().ledger_info().get_voters_bitvec().clone()
+            // Before the per-block gas limit change, StateCheckpoint txn
+            // is inserted here for compatibility.
+            once(Transaction::BlockMetadata(
+                self.new_block_metadata(validators),
+            ))
+            .chain(txns.into_iter().map(Transaction::UserTransaction))
+            .chain(once(Transaction::StateCheckpoint(self.id)))
+            .collect()
         }
     }
 
-    pub fn new_block_metadata(&self, validators: &[AccountAddress]) -> BlockMetadata {
+    fn new_block_metadata(&self, validators: &[AccountAddress]) -> BlockMetadata {
         BlockMetadata::new(
             self.id(),
             self.epoch(),
             self.round(),
             self.author().unwrap_or(AccountAddress::ZERO),
-            self.previous_bitvec().into(),
+            // A bitvec of voters
+            self.quorum_cert()
+                .ledger_info()
+                .get_voters_bitvec()
+                .clone()
+                .into(),
             // For nil block, we use 0x0 which is convention for nil address in move.
             self.block_data()
                 .failed_authors()

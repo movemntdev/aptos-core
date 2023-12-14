@@ -8,15 +8,12 @@ use crate::{
         baseline::BaselineOutput,
         types::{
             EmptyDataView, KeyType, MockOutput, MockTask, MockTransaction, TransactionGen,
-            TransactionGenParams,
+            TransactionGenParams, ValueType,
         },
     },
     txn_commit_hook::NoOpTransactionCommitHook,
 };
-use aptos_types::{
-    block_executor::config::BlockExecutorConfig, contract_event::TransactionEvent,
-    executable::ExecutableTestType,
-};
+use aptos_types::{contract_event::ReadWriteEvent, executable::ExecutableTestType};
 use criterion::{BatchSize, Bencher as CBencher};
 use num_cpus;
 use proptest::{
@@ -37,17 +34,20 @@ pub struct Bencher<K, V, E> {
 
 pub(crate) struct BencherState<
     K: Hash + Clone + Debug + Eq + PartialOrd + Ord,
-    E: Send + Sync + Debug + Clone + TransactionEvent,
-> {
-    transactions: Vec<MockTransaction<KeyType<K>, E>>,
-    baseline_output: BaselineOutput<KeyType<K>>,
+    V: Clone + Eq + Arbitrary,
+    E: Send + Sync + Debug + Clone + ReadWriteEvent,
+> where
+    Vec<u8>: From<V>,
+{
+    transactions: Vec<MockTransaction<KeyType<K>, ValueType<V>, E>>,
+    baseline_output: BaselineOutput<KeyType<K>, ValueType<V>>,
 }
 
 impl<K, V, E> Bencher<K, V, E>
 where
     K: Hash + Clone + Debug + Eq + Send + Sync + PartialOrd + Ord + Arbitrary + 'static,
     V: Clone + Eq + Send + Sync + Arbitrary + 'static,
-    E: Send + Sync + Debug + Clone + TransactionEvent + 'static,
+    E: Send + Sync + Debug + Clone + ReadWriteEvent + 'static,
     Vec<u8>: From<V>,
 {
     pub fn new(transaction_size: usize, universe_size: usize) -> Self {
@@ -62,7 +62,7 @@ where
     pub fn bench(&self, key_strategy: &impl Strategy<Value = K>, bencher: &mut CBencher) {
         bencher.iter_batched(
             || {
-                BencherState::<K, E>::with_universe::<V>(
+                BencherState::<K, V, E>::with_universe(
                     vec(key_strategy, self.universe_size),
                     self.transaction_size,
                     self.transaction_gen_param,
@@ -75,16 +75,16 @@ where
     }
 }
 
-impl<K, E> BencherState<K, E>
+impl<K, V, E> BencherState<K, V, E>
 where
     K: Hash + Clone + Debug + Eq + Send + Sync + PartialOrd + Ord + 'static,
-    E: Send + Sync + Debug + Clone + TransactionEvent + 'static,
+    V: Clone + Eq + Send + Sync + Arbitrary + 'static,
+    E: Send + Sync + Debug + Clone + ReadWriteEvent + 'static,
+    Vec<u8>: From<V>,
 {
     /// Creates a new benchmark state with the given account universe strategy and number of
     /// transactions.
-    pub(crate) fn with_universe<
-        V: Into<Vec<u8>> + Clone + Eq + Send + Sync + Arbitrary + 'static,
-    >(
+    pub(crate) fn with_universe(
         universe_strategy: impl Strategy<Value = Vec<K>>,
         num_transactions: usize,
         transaction_params: TransactionGenParams,
@@ -117,7 +117,7 @@ where
     }
 
     pub(crate) fn run(self) {
-        let data_view = EmptyDataView::<KeyType<K>> {
+        let data_view = EmptyDataView::<KeyType<K>, ValueType<V>> {
             phantom: PhantomData,
         };
 
@@ -128,14 +128,13 @@ where
                 .unwrap(),
         );
 
-        let config = BlockExecutorConfig::new_no_block_limit(num_cpus::get());
         let output = BlockExecutor::<
-            MockTransaction<KeyType<K>, E>,
-            MockTask<KeyType<K>, E>,
-            EmptyDataView<KeyType<K>>,
-            NoOpTransactionCommitHook<MockOutput<KeyType<K>, E>, usize>,
+            MockTransaction<KeyType<K>, ValueType<V>, E>,
+            MockTask<KeyType<K>, ValueType<V>, E>,
+            EmptyDataView<KeyType<K>, ValueType<V>>,
+            NoOpTransactionCommitHook<MockOutput<KeyType<K>, ValueType<V>, E>, usize>,
             ExecutableTestType,
-        >::new(config, executor_thread_pool, None)
+        >::new(num_cpus::get(), executor_thread_pool, None, None)
         .execute_transactions_parallel((), &self.transactions, &data_view);
 
         self.baseline_output.assert_output(&output);

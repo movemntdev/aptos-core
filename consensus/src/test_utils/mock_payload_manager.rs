@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    error::QuorumStoreError,
-    payload_client::{user::quorum_store_client::QuorumStoreClient, PayloadClient},
+    error::QuorumStoreError, payload_client::QuorumStoreClient, state_replication::PayloadClient,
 };
 use anyhow::Result;
 use aptos_consensus_types::{
@@ -13,7 +12,6 @@ use aptos_consensus_types::{
 };
 use aptos_types::{
     transaction::{ExecutionStatus, TransactionStatus},
-    validator_txn::{pool::ValidatorTransactionFilter, ValidatorTransaction},
     vm_status::StatusCode,
 };
 use futures::{channel::mpsc, future::BoxFuture};
@@ -58,17 +56,13 @@ impl PayloadClient for MockPayloadManager {
         _max_poll_time: Duration,
         _max_size: u64,
         _max_bytes: u64,
-        _validator_txn_filter: ValidatorTransactionFilter,
-        _user_txn_filter: PayloadFilter,
+        _exclude: PayloadFilter,
         _wait_callback: BoxFuture<'static, ()>,
         _pending_ordering: bool,
         _pending_uncommitted_blocks: usize,
         _recent_fill_fraction: f32,
-    ) -> Result<(Vec<ValidatorTransaction>, Payload), QuorumStoreError> {
+    ) -> Result<Payload, QuorumStoreError> {
         // generate 1k txn is too slow with coverage instrumentation
-        Ok((
-            vec![ValidatorTransaction::dummy(vec![0xFF; 1024])],
-            random_payload(10),
-        ))
+        Ok(random_payload(10))
     }
 }

@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::{bail, Error};
-use bytes::Bytes;
 use itertools::Itertools;
 use move_async_vm::{
     actor_metadata,
@@ -25,7 +24,6 @@ use move_core_types::{
     language_storage::{ModuleId, StructTag},
     metadata::Metadata,
     resolver::{resource_size, ModuleResolver, ResourceResolver},
-    value::MoveTypeLayout,
 };
 use move_prover_test_utils::{baseline_test::verify_or_update_baseline, extract_test_directives};
 use move_vm_test_utils::gas_schedule::GasStatus;
@@ -48,7 +46,7 @@ struct Harness {
     vm: AsyncVM,
     actor_instances: Vec<(ModuleId, AccountAddress)>,
     baseline: RefCell<String>,
-    resource_store: RefCell<BTreeMap<(AccountAddress, StructTag), Bytes>>,
+    resource_store: RefCell<BTreeMap<(AccountAddress, StructTag), Vec<u8>>>,
 }
 
 fn test_account() -> AccountAddress {
@@ -387,23 +385,22 @@ impl<'a> ModuleResolver for HarnessProxy<'a> {
         vec![]
     }
 
-    fn get_module(&self, id: &ModuleId) -> Result<Option<Bytes>, Error> {
+    fn get_module(&self, id: &ModuleId) -> Result<Option<Vec<u8>>, Error> {
         Ok(self
             .harness
             .module_cache
             .get(id.name())
-            .map(|c| c.serialize(None).into()))
+            .map(|c| c.serialize(None)))
     }
 }
 
 impl<'a> ResourceResolver for HarnessProxy<'a> {
-    fn get_resource_bytes_with_metadata_and_layout(
+    fn get_resource_with_metadata(
         &self,
         address: &AccountAddress,
         typ: &StructTag,
         _metadata: &[Metadata],
-        _maybe_layout: Option<&MoveTypeLayout>,
-    ) -> anyhow::Result<(Option<Bytes>, usize)> {
+    ) -> anyhow::Result<(Option<Vec<u8>>, usize)> {
         let res = self
             .harness
             .resource_store

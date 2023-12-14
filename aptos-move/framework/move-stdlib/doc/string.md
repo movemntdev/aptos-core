@@ -1,5 +1,5 @@
 
-<a id="0x1_string"></a>
+<a name="0x1_string"></a>
 
 # Module `0x1::string`
 
@@ -35,7 +35,7 @@ The <code><a href="string.md#0x1_string">string</a></code> module defines the <c
 
 
 
-<a id="0x1_string_String"></a>
+<a name="0x1_string_String"></a>
 
 ## Struct `String`
 
@@ -63,12 +63,12 @@ A <code><a href="string.md#0x1_string_String">String</a></code> holds a sequence
 
 </details>
 
-<a id="@Constants_0"></a>
+<a name="@Constants_0"></a>
 
 ## Constants
 
 
-<a id="0x1_string_EINVALID_INDEX"></a>
+<a name="0x1_string_EINVALID_INDEX"></a>
 
 Index out of range.
 
@@ -78,7 +78,7 @@ Index out of range.
 
 
 
-<a id="0x1_string_EINVALID_UTF8"></a>
+<a name="0x1_string_EINVALID_UTF8"></a>
 
 An invalid UTF8 encoding.
 
@@ -88,7 +88,7 @@ An invalid UTF8 encoding.
 
 
 
-<a id="0x1_string_utf8"></a>
+<a name="0x1_string_utf8"></a>
 
 ## Function `utf8`
 
@@ -114,7 +114,7 @@ Creates a new string from a sequence of bytes. Aborts if the bytes do not repres
 
 </details>
 
-<a id="0x1_string_try_utf8"></a>
+<a name="0x1_string_try_utf8"></a>
 
 ## Function `try_utf8`
 
@@ -143,7 +143,7 @@ Tries to create a new string from a sequence of bytes.
 
 </details>
 
-<a id="0x1_string_bytes"></a>
+<a name="0x1_string_bytes"></a>
 
 ## Function `bytes`
 
@@ -168,7 +168,7 @@ Returns a reference to the underlying byte vector.
 
 </details>
 
-<a id="0x1_string_is_empty"></a>
+<a name="0x1_string_is_empty"></a>
 
 ## Function `is_empty`
 
@@ -193,7 +193,7 @@ Checks whether this string is empty.
 
 </details>
 
-<a id="0x1_string_length"></a>
+<a name="0x1_string_length"></a>
 
 ## Function `length`
 
@@ -218,7 +218,7 @@ Returns the length of this string, in bytes.
 
 </details>
 
-<a id="0x1_string_append"></a>
+<a name="0x1_string_append"></a>
 
 ## Function `append`
 
@@ -243,7 +243,7 @@ Appends a string.
 
 </details>
 
-<a id="0x1_string_append_utf8"></a>
+<a name="0x1_string_append_utf8"></a>
 
 ## Function `append_utf8`
 
@@ -268,7 +268,7 @@ Appends bytes which must be in valid utf8 format.
 
 </details>
 
-<a id="0x1_string_insert"></a>
+<a name="0x1_string_insert"></a>
 
 ## Function `insert`
 
@@ -301,7 +301,7 @@ boundary.
 
 </details>
 
-<a id="0x1_string_sub_string"></a>
+<a name="0x1_string_sub_string"></a>
 
 ## Function `sub_string`
 
@@ -334,7 +334,7 @@ guaranteeing that the result is valid utf8.
 
 </details>
 
-<a id="0x1_string_index_of"></a>
+<a name="0x1_string_index_of"></a>
 
 ## Function `index_of`
 
@@ -359,7 +359,7 @@ Computes the index of the first occurrence of a string. Returns <code><a href="s
 
 </details>
 
-<a id="0x1_string_internal_check_utf8"></a>
+<a name="0x1_string_internal_check_utf8"></a>
 
 ## Function `internal_check_utf8`
 
@@ -381,7 +381,7 @@ Computes the index of the first occurrence of a string. Returns <code><a href="s
 
 </details>
 
-<a id="0x1_string_internal_is_char_boundary"></a>
+<a name="0x1_string_internal_is_char_boundary"></a>
 
 ## Function `internal_is_char_boundary`
 
@@ -403,7 +403,7 @@ Computes the index of the first occurrence of a string. Returns <code><a href="s
 
 </details>
 
-<a id="0x1_string_internal_sub_string"></a>
+<a name="0x1_string_internal_sub_string"></a>
 
 ## Function `internal_sub_string`
 
@@ -425,7 +425,7 @@ Computes the index of the first occurrence of a string. Returns <code><a href="s
 
 </details>
 
-<a id="0x1_string_internal_index_of"></a>
+<a name="0x1_string_internal_index_of"></a>
 
 ## Function `internal_index_of`
 
@@ -447,12 +447,12 @@ Computes the index of the first occurrence of a string. Returns <code><a href="s
 
 </details>
 
-<a id="@Specification_1"></a>
+<a name="@Specification_1"></a>
 
 ## Specification
 
 
-<a id="@Specification_1_internal_check_utf8"></a>
+<a name="@Specification_1_internal_check_utf8"></a>
 
 ### Function `internal_check_utf8`
 
@@ -470,7 +470,7 @@ Computes the index of the first occurrence of a string. Returns <code><a href="s
 
 
 
-<a id="@Specification_1_internal_is_char_boundary"></a>
+<a name="@Specification_1_internal_is_char_boundary"></a>
 
 ### Function `internal_is_char_boundary`
 
@@ -488,7 +488,7 @@ Computes the index of the first occurrence of a string. Returns <code><a href="s
 
 
 
-<a id="@Specification_1_internal_sub_string"></a>
+<a name="@Specification_1_internal_sub_string"></a>
 
 ### Function `internal_sub_string`
 
@@ -506,7 +506,7 @@ Computes the index of the first occurrence of a string. Returns <code><a href="s
 
 
 
-<a id="@Specification_1_internal_index_of"></a>
+<a name="@Specification_1_internal_index_of"></a>
 
 ### Function `internal_index_of`
 
@@ -525,7 +525,7 @@ Computes the index of the first occurrence of a string. Returns <code><a href="s
 
 
 
-<a id="0x1_string_spec_utf8"></a>
+<a name="0x1_string_spec_utf8"></a>
 
 
 <pre><code><b>fun</b> <a href="string.md#0x1_string_spec_utf8">spec_utf8</a>(bytes: <a href="vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="string.md#0x1_string_String">String</a> {
@@ -536,15 +536,15 @@ Computes the index of the first occurrence of a string. Returns <code><a href="s
 
 
 
-<a id="0x1_string_spec_internal_check_utf8"></a>
+<a name="0x1_string_spec_internal_check_utf8"></a>
 
 
 <pre><code><b>fun</b> <a href="string.md#0x1_string_spec_internal_check_utf8">spec_internal_check_utf8</a>(v: <a href="vector.md#0x1_vector">vector</a>&lt;u8&gt;): bool;
-<a id="0x1_string_spec_internal_is_char_boundary"></a>
+<a name="0x1_string_spec_internal_is_char_boundary"></a>
 <b>fun</b> <a href="string.md#0x1_string_spec_internal_is_char_boundary">spec_internal_is_char_boundary</a>(v: <a href="vector.md#0x1_vector">vector</a>&lt;u8&gt;, i: u64): bool;
-<a id="0x1_string_spec_internal_sub_string"></a>
+<a name="0x1_string_spec_internal_sub_string"></a>
 <b>fun</b> <a href="string.md#0x1_string_spec_internal_sub_string">spec_internal_sub_string</a>(v: <a href="vector.md#0x1_vector">vector</a>&lt;u8&gt;, i: u64, j: u64): <a href="vector.md#0x1_vector">vector</a>&lt;u8&gt;;
-<a id="0x1_string_spec_internal_index_of"></a>
+<a name="0x1_string_spec_internal_index_of"></a>
 <b>fun</b> <a href="string.md#0x1_string_spec_internal_index_of">spec_internal_index_of</a>(v: <a href="vector.md#0x1_vector">vector</a>&lt;u8&gt;, r: <a href="vector.md#0x1_vector">vector</a>&lt;u8&gt;): u64;
 </code></pre>
 

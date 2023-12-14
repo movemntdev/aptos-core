@@ -11,7 +11,7 @@ mod bytecode;
 mod convert;
 mod derives;
 mod error;
-mod hash;
+pub mod hash;
 mod headers;
 mod index;
 mod ledger_info;
@@ -57,7 +57,7 @@ pub use transaction::{
     UserTransactionRequest, VersionedEvent, WriteModule, WriteResource, WriteSet, WriteSetChange,
     WriteSetPayload, WriteTableItem,
 };
-pub use view::{ViewFunction, ViewRequest};
+pub use view::ViewRequest;
 pub use wrappers::{EventGuid, IdentifierWrapper, StateKeyWrapper};
 
 pub fn deserialize_from_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>

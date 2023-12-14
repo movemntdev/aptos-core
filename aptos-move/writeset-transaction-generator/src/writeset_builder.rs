@@ -9,14 +9,14 @@ use aptos_state_view::StateView;
 use aptos_types::{
     account_address::AccountAddress,
     account_config::{self, aptos_test_root_address},
-    on_chain_config::{Features, TimedFeaturesBuilder},
+    on_chain_config::{Features, TimedFeatures},
     transaction::{ChangeSet, Script, Version},
 };
 use aptos_vm::{
-    data_cache::AsMoveResolver,
+    data_cache::StorageAdapter,
     move_vm_ext::{MoveVmExt, SessionExt, SessionId},
 };
-use aptos_vm_types::storage::change_set_configs::ChangeSetConfigs;
+use aptos_vm_types::storage::ChangeSetConfigs;
 use move_core_types::{
     identifier::Identifier,
     language_storage::{ModuleId, TypeTag},
@@ -109,30 +109,31 @@ pub fn build_changeset<S: StateView, F>(state_view: &S, procedure: F, chain_id: 
 where
     F: FnOnce(&mut GenesisSession),
 {
-    let resolver = state_view.as_move_resolver();
     let move_vm = MoveVmExt::new(
         NativeGasParameters::zeros(),
         MiscGasParameters::zeros(),
         LATEST_GAS_FEATURE_VERSION,
         chain_id,
         Features::default(),
-        TimedFeaturesBuilder::enable_all().build(),
-        &resolver,
+        TimedFeatures::enable_all(),
     )
     .unwrap();
+    let state_view_storage = StorageAdapter::new(state_view);
     let change_set = {
         // TODO: specify an id by human and pass that in.
         let genesis_id = HashValue::zero();
-        let mut session =
-            GenesisSession(move_vm.new_session(&resolver, SessionId::genesis(genesis_id)));
+        let mut session = GenesisSession(
+            move_vm.new_session(&state_view_storage, SessionId::genesis(genesis_id)),
+        );
         session.disable_reconfiguration();
         procedure(&mut session);
         session.enable_reconfiguration();
         session
             .0
-            .finish(&ChangeSetConfigs::unlimited_at_gas_feature_version(
-                LATEST_GAS_FEATURE_VERSION,
-            ))
+            .finish(
+                &mut (),
+                &ChangeSetConfigs::unlimited_at_gas_feature_version(LATEST_GAS_FEATURE_VERSION),
+            )
             .map_err(|err| format_err!("Unexpected VM Error: {:?}", err))
             .unwrap()
     };

@@ -15,6 +15,7 @@ use aptos_config::{
     config::{AptosDataClientConfig, StorageServiceConfig},
     network_id::PeerNetworkId,
 };
+use aptos_infallible::Mutex;
 use aptos_storage_service_types::{
     requests::{
         DataRequest, StorageServiceRequest, SubscribeTransactionOutputsWithProofRequest,
@@ -30,15 +31,15 @@ use arc_swap::ArcSwap;
 use claims::assert_matches;
 use dashmap::DashMap;
 use futures::channel::oneshot;
-use mini_moka::sync::Cache;
-use std::sync::Arc;
+use lru::LruCache;
+use std::{collections::HashMap, sync::Arc};
 use tokio::runtime::Handle;
 
 #[tokio::test]
 async fn test_peers_with_ready_subscriptions() {
     // Create a mock time service and subscriptions map
     let time_service = TimeService::mock();
-    let subscriptions = Arc::new(DashMap::new());
+    let subscriptions = Arc::new(Mutex::new(HashMap::new()));
 
     // Create three peers with ready subscriptions
     let mut peer_network_ids = vec![];
@@ -55,7 +56,9 @@ async fn test_peers_with_ready_subscriptions() {
             Some(0),
             Some(0),
         );
-        subscriptions.insert(peer_network_id, subscription_stream_requests);
+        subscriptions
+            .lock()
+            .insert(peer_network_id, subscription_stream_requests);
     }
 
     // Create epoch ending test data at version 9
@@ -78,7 +81,7 @@ async fn test_peers_with_ready_subscriptions() {
     let cached_storage_server_summary =
         Arc::new(ArcSwap::from(Arc::new(StorageServerSummary::default())));
     let optimistic_fetches = Arc::new(DashMap::new());
-    let lru_response_cache = Cache::new(0);
+    let lru_response_cache = Arc::new(Mutex::new(LruCache::new(0)));
     let request_moderator = Arc::new(RequestModerator::new(
         AptosDataClientConfig::default(),
         cached_storage_server_summary.clone(),
@@ -127,7 +130,7 @@ async fn test_peers_with_ready_subscriptions() {
     )]);
 
     // Manually remove subscription 1 from the map
-    subscriptions.remove(&peer_network_ids[0]);
+    subscriptions.lock().remove(&peer_network_ids[0]);
 
     // Update the storage server summary so that there is new data (at version 8)
     let highest_synced_ledger_info =
@@ -153,7 +156,7 @@ async fn test_peers_with_ready_subscriptions() {
     )]);
 
     // Manually remove subscription 2 from the map
-    subscriptions.remove(&peer_network_ids[1]);
+    subscriptions.lock().remove(&peer_network_ids[1]);
 
     // Update the storage server summary so that there is new data (at version 100)
     let _ = utils::update_storage_summary_cache(cached_storage_server_summary.clone(), 100, 2);
@@ -176,7 +179,7 @@ async fn test_peers_with_ready_subscriptions() {
     assert_eq!(peers_with_ready_subscriptions, vec![]);
 
     // Verify that the subscriptions are now empty
-    assert!(subscriptions.is_empty());
+    assert!(subscriptions.lock().is_empty());
 }
 
 #[tokio::test]
@@ -198,7 +201,7 @@ async fn test_remove_expired_subscriptions_no_new_data() {
     let cached_storage_server_summary =
         Arc::new(ArcSwap::from(Arc::new(StorageServerSummary::default())));
     let optimistic_fetches = Arc::new(DashMap::new());
-    let lru_response_cache = Cache::new(0);
+    let lru_response_cache = Arc::new(Mutex::new(LruCache::new(0)));
     let request_moderator = Arc::new(RequestModerator::new(
         AptosDataClientConfig::default(),
         cached_storage_server_summary.clone(),
@@ -209,15 +212,17 @@ async fn test_remove_expired_subscriptions_no_new_data() {
 
     // Create the first batch of test subscriptions
     let num_subscriptions_in_batch = 10;
-    let subscriptions = Arc::new(DashMap::new());
+    let subscriptions = Arc::new(Mutex::new(HashMap::new()));
     for _ in 0..num_subscriptions_in_batch {
         let subscription_stream_requests =
             create_subscription_stream_requests(time_service.clone(), Some(9), Some(9), None, None);
-        subscriptions.insert(PeerNetworkId::random(), subscription_stream_requests);
+        subscriptions
+            .lock()
+            .insert(PeerNetworkId::random(), subscription_stream_requests);
     }
 
     // Verify the number of active subscriptions
-    assert_eq!(subscriptions.len(), num_subscriptions_in_batch);
+    assert_eq!(subscriptions.lock().len(), num_subscriptions_in_batch);
 
     // Elapse a small amount of time (not enough to expire the subscriptions)
     utils::elapse_time(max_subscription_period_ms / 2, &time_service).await;
@@ -240,17 +245,19 @@ async fn test_remove_expired_subscriptions_no_new_data() {
     .await
     .unwrap();
     assert!(peers_with_ready_subscriptions.is_empty());
-    assert_eq!(subscriptions.len(), num_subscriptions_in_batch);
+    assert_eq!(subscriptions.lock().len(), num_subscriptions_in_batch);
 
     // Create another batch of test subscriptions
     for _ in 0..num_subscriptions_in_batch {
         let subscription_stream_requests =
             create_subscription_stream_requests(time_service.clone(), Some(9), Some(9), None, None);
-        subscriptions.insert(PeerNetworkId::random(), subscription_stream_requests);
+        subscriptions
+            .lock()
+            .insert(PeerNetworkId::random(), subscription_stream_requests);
     }
 
     // Verify the new number of active subscriptions
-    assert_eq!(subscriptions.len(), num_subscriptions_in_batch * 2);
+    assert_eq!(subscriptions.lock().len(), num_subscriptions_in_batch * 2);
 
     // Elapse enough time to expire the first batch of subscriptions
     utils::elapse_time(max_subscription_period_ms, &time_service).await;
@@ -270,7 +277,7 @@ async fn test_remove_expired_subscriptions_no_new_data() {
     .await
     .unwrap();
     assert!(peers_with_ready_subscriptions.is_empty());
-    assert_eq!(subscriptions.len(), num_subscriptions_in_batch);
+    assert_eq!(subscriptions.lock().len(), num_subscriptions_in_batch);
 
     // Elapse enough time to expire the second batch of subscriptions
     utils::elapse_time(max_subscription_period_ms, &time_service).await;
@@ -290,7 +297,7 @@ async fn test_remove_expired_subscriptions_no_new_data() {
     .await
     .unwrap();
     assert!(peers_with_ready_subscriptions.is_empty());
-    assert!(subscriptions.is_empty());
+    assert!(subscriptions.lock().is_empty());
 }
 
 #[tokio::test]
@@ -307,7 +314,7 @@ async fn test_remove_expired_subscriptions_blocked_stream() {
 
     // Create a batch of test subscriptions
     let num_subscriptions_in_batch = 10;
-    let subscriptions = Arc::new(DashMap::new());
+    let subscriptions = Arc::new(Mutex::new(HashMap::new()));
     let mut peer_network_ids = vec![];
     for i in 0..num_subscriptions_in_batch {
         // Create a new peer
@@ -322,7 +329,9 @@ async fn test_remove_expired_subscriptions_blocked_stream() {
             Some(i as u64),
             Some(0),
         );
-        subscriptions.insert(peer_network_id, subscription_stream_requests);
+        subscriptions
+            .lock()
+            .insert(peer_network_id, subscription_stream_requests);
     }
 
     // Create test data with an empty storage server summary
@@ -330,7 +339,7 @@ async fn test_remove_expired_subscriptions_blocked_stream() {
     let cached_storage_server_summary =
         Arc::new(ArcSwap::from(Arc::new(StorageServerSummary::default())));
     let optimistic_fetches = Arc::new(DashMap::new());
-    let lru_response_cache = Cache::new(0);
+    let lru_response_cache = Arc::new(Mutex::new(LruCache::new(0)));
     let request_moderator = Arc::new(RequestModerator::new(
         AptosDataClientConfig::default(),
         cached_storage_server_summary.clone(),
@@ -363,9 +372,11 @@ async fn test_remove_expired_subscriptions_blocked_stream() {
 
     // Verify that all subscription streams are now empty because
     // the pending requests were sent.
-    assert_eq!(subscriptions.len(), num_subscriptions_in_batch);
-    for subscription in subscriptions.iter() {
-        assert!(subscription.value().first_pending_request().is_none());
+    assert_eq!(subscriptions.lock().len(), num_subscriptions_in_batch);
+    for (_, subscription_stream_requests) in subscriptions.lock().iter() {
+        assert!(subscription_stream_requests
+            .first_pending_request()
+            .is_none());
     }
 
     // Elapse enough time to expire the blocked streams
@@ -396,8 +407,8 @@ async fn test_remove_expired_subscriptions_blocked_stream() {
     .await
     .unwrap();
     assert!(peers_with_ready_subscriptions.is_empty());
-    assert_eq!(subscriptions.len(), 1);
-    assert!(subscriptions.contains_key(&peer_network_ids[0]));
+    assert_eq!(subscriptions.lock().len(), 1);
+    assert!(subscriptions.lock().contains_key(&peer_network_ids[0]));
 }
 
 #[tokio::test]
@@ -414,7 +425,7 @@ async fn test_remove_expired_subscriptions_blocked_stream_index() {
 
     // Create the first batch of test subscriptions
     let num_subscriptions_in_batch = 10;
-    let subscriptions = Arc::new(DashMap::new());
+    let subscriptions = Arc::new(Mutex::new(HashMap::new()));
     for _ in 0..num_subscriptions_in_batch {
         let subscription_stream_requests = create_subscription_stream_requests(
             time_service.clone(),
@@ -423,7 +434,9 @@ async fn test_remove_expired_subscriptions_blocked_stream_index() {
             None,
             Some(0),
         );
-        subscriptions.insert(PeerNetworkId::random(), subscription_stream_requests);
+        subscriptions
+            .lock()
+            .insert(PeerNetworkId::random(), subscription_stream_requests);
     }
 
     // Create test data with an empty storage server summary
@@ -431,7 +444,7 @@ async fn test_remove_expired_subscriptions_blocked_stream_index() {
     let cached_storage_server_summary =
         Arc::new(ArcSwap::from(Arc::new(StorageServerSummary::default())));
     let optimistic_fetches = Arc::new(DashMap::new());
-    let lru_response_cache = Cache::new(0);
+    let lru_response_cache = Arc::new(Mutex::new(LruCache::new(0)));
     let request_moderator = Arc::new(RequestModerator::new(
         AptosDataClientConfig::default(),
         cached_storage_server_summary.clone(),
@@ -485,7 +498,7 @@ async fn test_remove_expired_subscriptions_blocked_stream_index() {
     .await
     .unwrap();
     assert!(peers_with_ready_subscriptions.is_empty());
-    assert!(subscriptions.is_empty());
+    assert!(subscriptions.lock().is_empty());
 
     // Create another batch of test subscriptions (where the stream is
     // blocked on the next index to serve).
@@ -503,11 +516,13 @@ async fn test_remove_expired_subscriptions_blocked_stream_index() {
             None,
             Some(i as u64 + 1),
         );
-        subscriptions.insert(peer_network_id, subscription_stream_requests);
+        subscriptions
+            .lock()
+            .insert(peer_network_id, subscription_stream_requests);
     }
 
     // Verify the number of active subscriptions
-    assert_eq!(subscriptions.len(), num_subscriptions_in_batch);
+    assert_eq!(subscriptions.lock().len(), num_subscriptions_in_batch);
 
     // Verify that none of the subscriptions are ready to be served (they are blocked)
     let peers_with_ready_subscriptions = subscription::get_peers_with_ready_subscriptions(
@@ -571,8 +586,8 @@ async fn test_remove_expired_subscriptions_blocked_stream_index() {
     )
     .await
     .unwrap();
-    assert_eq!(subscriptions.len(), 1);
-    assert!(subscriptions.contains_key(&peer_network_ids[0]));
+    assert_eq!(subscriptions.lock().len(), 1);
+    assert!(subscriptions.lock().contains_key(&peer_network_ids[0]));
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -581,7 +596,7 @@ async fn test_subscription_invalid_requests() {
     let time_service = TimeService::mock();
 
     // Create a new batch of subscriptions that includes a single stream and request
-    let subscriptions = Arc::new(DashMap::new());
+    let subscriptions = Arc::new(Mutex::new(HashMap::new()));
     let peer_network_id = PeerNetworkId::random();
     let peer_known_version = 10;
     let peer_known_epoch = 1;
@@ -593,7 +608,9 @@ async fn test_subscription_invalid_requests() {
         Some(subscription_stream_id),
         Some(0),
     );
-    subscriptions.insert(peer_network_id, subscription_stream_requests);
+    subscriptions
+        .lock()
+        .insert(peer_network_id, subscription_stream_requests);
 
     // Add a request to the stream that is invalid (the stream id is incorrect)
     let subscription_request = create_subscription_request(
@@ -645,10 +662,10 @@ async fn test_subscription_invalid_requests() {
 
     // Update the next index to serve for the stream
     let next_index_to_serve = 10;
-    let mut subscription = subscriptions.get_mut(&peer_network_id).unwrap();
-    let subscription_stream_requests = subscription.value_mut();
+    let mut subscriptions_lock = subscriptions.lock();
+    let subscription_stream_requests = subscriptions_lock.get_mut(&peer_network_id).unwrap();
     subscription_stream_requests.set_next_index_to_serve(next_index_to_serve);
-    drop(subscription);
+    drop(subscriptions_lock);
 
     // Add a request to the stream that is invalid (the stream index is less than the next index to serve)
     let subscription_request = create_subscription_request(
@@ -976,11 +993,11 @@ async fn test_subscription_overwrite_streams() {
 /// Adds a subscription request to the subscription stream for the given peer
 fn add_subscription_request_to_stream(
     subscription_request: SubscriptionRequest,
-    subscriptions: Arc<DashMap<PeerNetworkId, SubscriptionStreamRequests>>,
+    subscriptions: Arc<Mutex<HashMap<PeerNetworkId, SubscriptionStreamRequests>>>,
     peer_network_id: &PeerNetworkId,
 ) -> Result<(), (Error, SubscriptionRequest)> {
-    let mut subscription = subscriptions.get_mut(peer_network_id).unwrap();
-    let subscription_stream_requests = subscription.value_mut();
+    let mut subscriptions = subscriptions.lock();
+    let subscription_stream_requests = subscriptions.get_mut(peer_network_id).unwrap();
     subscription_stream_requests
         .add_subscription_request(StorageServiceConfig::default(), subscription_request)
 }
@@ -1084,15 +1101,15 @@ fn create_subscription_stream_requests(
 /// Verifies that the pending subscription request indices are valid.
 /// Note the expected end indices are exclusive.
 fn verify_pending_subscription_request_indices(
-    active_subscriptions: Arc<DashMap<PeerNetworkId, SubscriptionStreamRequests>>,
+    active_subscriptions: Arc<Mutex<HashMap<PeerNetworkId, SubscriptionStreamRequests>>>,
     peer_network_id: PeerNetworkId,
     expected_start_index: u64,
     expected_end_index: u64,
     ignored_end_index: u64,
 ) {
     // Get the pending subscription requests
-    let mut subscription = active_subscriptions.get_mut(&peer_network_id).unwrap();
-    let subscription_stream_requests = subscription.value_mut();
+    let mut active_subscriptions = active_subscriptions.lock();
+    let subscription_stream_requests = active_subscriptions.get_mut(&peer_network_id).unwrap();
     let pending_subscription_requests =
         subscription_stream_requests.get_pending_subscription_requests();
 

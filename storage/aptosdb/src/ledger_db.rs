@@ -74,16 +74,18 @@ pub struct LedgerDb {
 }
 
 impl LedgerDb {
+    // TODO(grao): Support more flexible path to make it easier for people to put different shards
+    // on different disks.
     pub(crate) fn new<P: AsRef<Path>>(
         db_root_path: P,
         rocksdb_configs: RocksdbConfigs,
         readonly: bool,
     ) -> Result<Self> {
-        let sharding = rocksdb_configs.enable_storage_sharding;
-        let ledger_metadata_db_path = Self::metadata_db_path(db_root_path.as_ref(), sharding);
+        let ledger_metadata_db_path =
+            Self::metadata_db_path(db_root_path.as_ref(), rocksdb_configs.split_ledger_db);
         let ledger_metadata_db = Arc::new(Self::open_rocksdb(
             ledger_metadata_db_path.clone(),
-            if sharding {
+            if rocksdb_configs.split_ledger_db {
                 LEDGER_METADATA_DB_NAME
             } else {
                 LEDGER_DB_NAME
@@ -94,11 +96,10 @@ impl LedgerDb {
 
         info!(
             ledger_metadata_db_path = ledger_metadata_db_path,
-            sharding = sharding,
             "Opened ledger metadata db!"
         );
 
-        if !sharding {
+        if !rocksdb_configs.split_ledger_db {
             info!("Individual ledger dbs are not enabled!");
             return Ok(Self {
                 ledger_metadata_db: Arc::clone(&ledger_metadata_db),
@@ -162,30 +163,33 @@ impl LedgerDb {
     pub(crate) fn create_checkpoint(
         db_root_path: impl AsRef<Path>,
         cp_root_path: impl AsRef<Path>,
-        sharding: bool,
+        split_ledger_db: bool,
     ) -> Result<()> {
         let rocksdb_configs = RocksdbConfigs {
-            enable_storage_sharding: sharding,
+            split_ledger_db,
             ..Default::default()
         };
         let ledger_db = Self::new(db_root_path, rocksdb_configs, /*readonly=*/ false)?;
         let cp_ledger_db_folder = cp_root_path.as_ref().join(LEDGER_DB_FOLDER_NAME);
 
         info!(
-            sharding = sharding,
+            split_ledger_db = split_ledger_db,
             "Creating ledger_db checkpoint at: {cp_ledger_db_folder:?}"
         );
 
         std::fs::remove_dir_all(&cp_ledger_db_folder).unwrap_or(());
-        if sharding {
+        if split_ledger_db {
             std::fs::create_dir_all(&cp_ledger_db_folder).unwrap_or(());
         }
 
         ledger_db
             .metadata_db()
-            .create_checkpoint(Self::metadata_db_path(cp_root_path.as_ref(), sharding))?;
+            .create_checkpoint(Self::metadata_db_path(
+                cp_root_path.as_ref(),
+                split_ledger_db,
+            ))?;
 
-        if sharding {
+        if split_ledger_db {
             ledger_db
                 .event_db()
                 .create_checkpoint(cp_ledger_db_folder.join(EVENT_DB_NAME))?;
@@ -336,9 +340,9 @@ impl LedgerDb {
         }
     }
 
-    fn metadata_db_path<P: AsRef<Path>>(db_root_path: P, sharding: bool) -> PathBuf {
+    fn metadata_db_path<P: AsRef<Path>>(db_root_path: P, split_ledger_db: bool) -> PathBuf {
         let ledger_db_folder = db_root_path.as_ref().join(LEDGER_DB_FOLDER_NAME);
-        if sharding {
+        if split_ledger_db {
             ledger_db_folder.join("metadata")
         } else {
             ledger_db_folder
@@ -352,10 +356,10 @@ impl LedgerDb {
             .write_schemas(schemas.transaction_info_db_batches)?;
         self.transaction_db
             .write_schemas(schemas.transaction_db_batches)?;
+        self.ledger_metadata_db
+            .write_schemas(schemas.ledger_metadata_db_batches)?;
         self.event_db.write_schemas(schemas.event_db_batches)?;
         self.transaction_accumulator_db
-            .write_schemas(schemas.transaction_accumulator_db_batches)?;
-        self.ledger_metadata_db
-            .write_schemas(schemas.ledger_metadata_db_batches)
+            .write_schemas(schemas.transaction_accumulator_db_batches)
     }
 }

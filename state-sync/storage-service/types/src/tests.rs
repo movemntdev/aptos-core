@@ -15,7 +15,6 @@ use crate::{
 };
 use aptos_config::config::AptosDataClientConfig;
 use aptos_crypto::hash::HashValue;
-use aptos_time_service::{TimeService, TimeServiceTrait};
 use aptos_types::{
     aggregate_signature::AggregateSignature,
     block_info::BlockInfo,
@@ -92,59 +91,44 @@ fn test_data_summary_service_epoch_ending_ledger_infos() {
 #[test]
 fn test_data_summary_service_optimistic_fetch() {
     // Create a data client config with the specified max optimistic fetch lag
-    let max_optimistic_fetch_lag_secs = 50;
+    let max_optimistic_fetch_version_lag = 1000;
     let data_client_config = AptosDataClientConfig {
-        max_optimistic_fetch_lag_secs,
+        max_optimistic_fetch_version_lag,
         ..Default::default()
     };
 
-    // Create a mock time service and get the current timestamp
-    let time_service = TimeService::mock();
-    let timestamp_usecs = time_service.now_unix_time().as_micros() as u64;
-
-    // Create a data summary with the specified synced ledger info
-    let highest_synced_version = 10_000;
+    // Create a data summary with the specified synced ledger info version
+    let highest_synced_version = 50_000;
     let data_summary = DataSummary {
-        synced_ledger_info: Some(create_ledger_info_at_version_and_timestamp(
-            highest_synced_version,
-            timestamp_usecs,
-        )),
+        synced_ledger_info: Some(create_ledger_info_at_version(highest_synced_version)),
         ..Default::default()
     };
 
-    // Elapse the time service by half the max optimistic fetch lag
-    time_service
-        .clone()
-        .into_mock()
-        .advance_secs(max_optimistic_fetch_lag_secs / 2);
-
-    // Verify that optimistic fetch requests can be serviced
+    // Verify the different requests that can be serviced
     for compression in [true, false] {
-        let known_versions = vec![0, 1, highest_synced_version, highest_synced_version * 2];
+        // Test the known versions that are within the optimistic fetch lag
+        let known_versions = vec![
+            highest_synced_version,
+            highest_synced_version + (max_optimistic_fetch_version_lag / 2),
+            highest_synced_version + max_optimistic_fetch_version_lag - 1,
+        ];
         verify_can_service_optimistic_fetch_requests(
             &data_client_config,
             &data_summary,
-            time_service.clone(),
             compression,
             known_versions,
             true,
         );
-    }
 
-    // Elapse the time service by the max optimistic fetch lag
-    time_service
-        .clone()
-        .into_mock()
-        .advance_secs(max_optimistic_fetch_lag_secs);
-
-    // Verify that optimistic fetch requests can no longer be serviced
-    // (as the max lag has been exceeded for the given data summary).
-    for compression in [true, false] {
-        let known_versions = vec![0, 1, highest_synced_version, highest_synced_version * 2];
+        // Test the known versions that are outside the optimistic fetch lag
+        let known_versions = vec![
+            highest_synced_version + max_optimistic_fetch_version_lag,
+            highest_synced_version + max_optimistic_fetch_version_lag + 1,
+            highest_synced_version + (max_optimistic_fetch_version_lag * 2),
+        ];
         verify_can_service_optimistic_fetch_requests(
             &data_client_config,
             &data_summary,
-            time_service.clone(),
             compression,
             known_versions,
             false,
@@ -155,59 +139,44 @@ fn test_data_summary_service_optimistic_fetch() {
 #[test]
 fn test_data_summary_service_subscription() {
     // Create a data client config with the specified max subscription lag
-    let max_subscription_lag_secs = 100;
+    let max_subscription_version_lag = 1000;
     let data_client_config = AptosDataClientConfig {
-        max_subscription_lag_secs,
+        max_subscription_version_lag,
         ..Default::default()
     };
 
-    // Create a mock time service and get the current timestamp
-    let time_service = TimeService::mock();
-    let timestamp_usecs = time_service.now_unix_time().as_micros() as u64;
-
-    // Create a data summary with the specified synced ledger info
+    // Create a data summary with the specified synced ledger info version
     let highest_synced_version = 50_000;
     let data_summary = DataSummary {
-        synced_ledger_info: Some(create_ledger_info_at_version_and_timestamp(
-            highest_synced_version,
-            timestamp_usecs,
-        )),
+        synced_ledger_info: Some(create_ledger_info_at_version(highest_synced_version)),
         ..Default::default()
     };
 
-    // Elapse the time service by half the max subscription lag
-    time_service
-        .clone()
-        .into_mock()
-        .advance_secs(max_subscription_lag_secs / 2);
-
-    // Verify that subscription requests can be serviced
+    // Verify the different requests that can be serviced
     for compression in [true, false] {
-        let known_versions = vec![0, 1, highest_synced_version, highest_synced_version * 2];
+        // Test the known versions that are within the subscription lag
+        let known_versions = vec![
+            highest_synced_version,
+            highest_synced_version + (max_subscription_version_lag / 2),
+            highest_synced_version + max_subscription_version_lag - 1,
+        ];
         verify_can_service_subscription_requests(
             &data_client_config,
             &data_summary,
-            time_service.clone(),
             compression,
             known_versions,
             true,
         );
-    }
 
-    // Elapse the time service by the max subscription lag
-    time_service
-        .clone()
-        .into_mock()
-        .advance_secs(max_subscription_lag_secs);
-
-    // Verify that subscription requests can no longer be serviced
-    // (as the max lag has been exceeded for the given data summary).
-    for compression in [true, false] {
-        let known_versions = vec![0, 1, highest_synced_version, highest_synced_version * 2];
+        // Test the known versions that are outside the subscription lag
+        let known_versions = vec![
+            highest_synced_version + max_subscription_version_lag,
+            highest_synced_version + max_subscription_version_lag + 1,
+            highest_synced_version + (max_subscription_version_lag * 2),
+        ];
         verify_can_service_subscription_requests(
             &data_client_config,
             &data_summary,
-            time_service.clone(),
             compression,
             known_versions,
             false,
@@ -521,25 +490,9 @@ fn create_epoch_ending_request(
 
 /// Creates a new ledger info at the given version
 fn create_ledger_info_at_version(version: Version) -> LedgerInfoWithSignatures {
-    create_ledger_info_at_version_and_timestamp(version, 0)
-}
-
-/// Creates a new ledger info at the given version and timestamp
-fn create_ledger_info_at_version_and_timestamp(
-    version: Version,
-    timestamp_usecs: u64,
-) -> LedgerInfoWithSignatures {
     LedgerInfoWithSignatures::new(
         LedgerInfo::new(
-            BlockInfo::new(
-                0,
-                0,
-                HashValue::zero(),
-                HashValue::zero(),
-                version,
-                timestamp_usecs,
-                None,
-            ),
+            BlockInfo::new(0, 0, HashValue::zero(), HashValue::zero(), version, 0, None),
             HashValue::zero(),
         ),
         AggregateSignature::empty(),
@@ -711,13 +664,7 @@ fn verify_can_service_epoch_ending_requests(
         let request = create_epoch_ending_request(start_epoch, end_epoch, compression);
 
         // Verify the serviceability of the request
-        verify_serviceability(
-            data_client_config,
-            data_summary,
-            None,
-            request,
-            expect_service,
-        );
+        verify_serviceability(data_client_config, data_summary, request, expect_service);
     }
 }
 
@@ -727,7 +674,6 @@ fn verify_can_service_epoch_ending_requests(
 fn verify_can_service_optimistic_fetch_requests(
     data_client_config: &AptosDataClientConfig,
     data_summary: &DataSummary,
-    time_service: TimeService,
     compression: bool,
     known_versions: Vec<Version>,
     expect_service: bool,
@@ -737,13 +683,7 @@ fn verify_can_service_optimistic_fetch_requests(
         let request = create_optimistic_fetch_request(known_version, compression);
 
         // Verify the serviceability of the request
-        verify_serviceability(
-            data_client_config,
-            data_summary,
-            Some(time_service.clone()),
-            request,
-            expect_service,
-        );
+        verify_serviceability(data_client_config, data_summary, request, expect_service);
     }
 }
 
@@ -762,13 +702,7 @@ fn verify_can_service_state_chunk_requests(
         let request = create_state_values_request_at_version(version, use_compression);
 
         // Verify the serviceability of the request
-        verify_serviceability(
-            data_client_config,
-            data_summary,
-            None,
-            request,
-            expect_service,
-        );
+        verify_serviceability(data_client_config, data_summary, request, expect_service);
     }
 }
 
@@ -778,7 +712,6 @@ fn verify_can_service_state_chunk_requests(
 fn verify_can_service_subscription_requests(
     data_client_config: &AptosDataClientConfig,
     data_summary: &DataSummary,
-    time_service: TimeService,
     compression: bool,
     known_versions: Vec<Version>,
     expect_service: bool,
@@ -788,13 +721,7 @@ fn verify_can_service_subscription_requests(
         let request = create_subscription_request(known_version, compression);
 
         // Verify the serviceability of the request
-        verify_serviceability(
-            data_client_config,
-            data_summary,
-            Some(time_service.clone()),
-            request,
-            expect_service,
-        );
+        verify_serviceability(data_client_config, data_summary, request, expect_service);
     }
 }
 
@@ -814,13 +741,7 @@ fn verify_can_service_transaction_requests(
             create_transactions_request(proof_version, start_version, end_version, use_compression);
 
         // Verify the serviceability of the request
-        verify_serviceability(
-            data_client_config,
-            data_summary,
-            None,
-            request,
-            expect_service,
-        );
+        verify_serviceability(data_client_config, data_summary, request, expect_service);
     }
 }
 
@@ -844,13 +765,7 @@ fn verify_can_service_transaction_or_output_requests(
         );
 
         // Verify the serviceability of the request
-        verify_serviceability(
-            data_client_config,
-            data_summary,
-            None,
-            request,
-            expect_service,
-        );
+        verify_serviceability(data_client_config, data_summary, request, expect_service);
     }
 }
 
@@ -870,13 +785,7 @@ fn verify_can_service_output_requests(
             create_outputs_request(proof_version, start_version, end_version, use_compression);
 
         // Verify the serviceability of the request
-        verify_serviceability(
-            data_client_config,
-            data_summary,
-            None,
-            request,
-            expect_service,
-        );
+        verify_serviceability(data_client_config, data_summary, request, expect_service);
     }
 }
 
@@ -884,12 +793,10 @@ fn verify_can_service_output_requests(
 fn verify_serviceability(
     data_client_config: &AptosDataClientConfig,
     data_summary: &DataSummary,
-    time_service: Option<TimeService>,
     request: StorageServiceRequest,
     expect_service: bool,
 ) {
-    let time_service = time_service.unwrap_or(TimeService::mock());
-    let can_service = data_summary.can_service(data_client_config, time_service, &request);
+    let can_service = data_summary.can_service(data_client_config, &request);
 
     // Assert that the serviceability matches the expectation
     if expect_service {

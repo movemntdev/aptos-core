@@ -135,7 +135,6 @@ pub(crate) struct ProofCoordinator {
     timeouts: Timeouts<BatchInfo>,
     batch_reader: Arc<dyn BatchReader>,
     batch_generator_cmd_tx: tokio::sync::mpsc::Sender<BatchGeneratorCommand>,
-    broadcast_proofs: bool,
 }
 
 //PoQS builder object - gather signed digest to form PoQS
@@ -145,7 +144,6 @@ impl ProofCoordinator {
         peer_id: PeerId,
         batch_reader: Arc<dyn BatchReader>,
         batch_generator_cmd_tx: tokio::sync::mpsc::Sender<BatchGeneratorCommand>,
-        broadcast_proofs: bool,
     ) -> Self {
         Self {
             peer_id,
@@ -155,7 +153,6 @@ impl ProofCoordinator {
             timeouts: Timeouts::new(),
             batch_reader,
             batch_generator_cmd_tx,
-            broadcast_proofs,
         }
     }
 
@@ -291,11 +288,7 @@ impl ProofCoordinator {
                                 }
                             }
                             if !proofs.is_empty() {
-                                if self.broadcast_proofs {
-                                    network_sender.broadcast_proof_of_store_msg(proofs).await;
-                                } else {
-                                    network_sender.send_proof_of_store_msg_to_self(proofs).await;
-                                }
+                                network_sender.broadcast_proof_of_store_msg(proofs).await;
                             }
                         },
                     }

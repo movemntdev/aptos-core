@@ -3,7 +3,4 @@ module <SELF> {
     private fun main<T1,T2,T3>() {
         Tuple()
     }
-    spec fun $main<T1,T2,T3>() {
-        Tuple()
-    }
 } // end <SELF>

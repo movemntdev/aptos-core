@@ -2,10 +2,7 @@
 
 use crate::transaction_bench_state::TransactionBenchState;
 use aptos_language_e2e_tests::account_universe::{AUTransactionGen, AccountPickStyle};
-use aptos_types::{
-    block_executor::partitioner::PartitionedTransactions,
-    transaction::signature_verified_transaction::SignatureVerifiedTransaction,
-};
+use aptos_types::{block_executor::partitioner::PartitionedTransactions, transaction::Transaction};
 use proptest::strategy::Strategy;
 use std::net::SocketAddr;
 
@@ -87,7 +84,7 @@ where
 pub struct PreGeneratedTxnsBenchmarkRunner<'a, S> {
     states: Vec<TransactionBenchState<&'a S>>,
     // pre-generated transactions
-    transactions: Vec<Vec<SignatureVerifiedTransaction>>,
+    transactions: Vec<Vec<Transaction>>,
     partitioned_txns: Vec<Option<PartitionedTransactions>>,
 }
 

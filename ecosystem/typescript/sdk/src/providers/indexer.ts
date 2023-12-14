@@ -22,7 +22,6 @@ import {
   GetTokenCurrentOwnerDataQuery,
   GetOwnedTokensByTokenDataQuery,
   GetAccountCoinsDataCountQuery,
-  GetCurrentObjectsQuery,
 } from "../indexer/generated/operations";
 import {
   GetAccountTokensCount,
@@ -46,7 +45,6 @@ import {
   GetTokenCurrentOwnerData,
   GetOwnedTokensByTokenData,
   GetAccountCoinsDataCount,
-  GetCurrentObjects,
 } from "../indexer/generated/queries";
 import { ClientConfig, post } from "../client";
 import { ApiError } from "./aptos_client";
@@ -60,7 +58,6 @@ import {
   InputMaybe,
   Token_Activities_V2_Order_By,
   User_Transactions_Order_By,
-  Current_Objects_Order_By,
 } from "../indexer/generated/types";
 
 /**
@@ -317,7 +314,6 @@ export class IndexerClient {
    * @param token token address (v2) or token data id (v1)
    * @returns GetTokenDataQuery response type
    */
-  // :!:>getTokenData
   async getTokenData(
     token: string,
     extraArgs?: {
@@ -346,7 +342,7 @@ export class IndexerClient {
       },
     };
     return this.queryIndexer(graphqlQuery);
-  } // <:!:getTokenData
+  }
 
   /**
    * Queries token owners data by token address (v2) or token data id (v1).
@@ -873,38 +869,6 @@ export class IndexerClient {
       },
     };
 
-    return this.queryIndexer(graphqlQuery);
-  }
-
-  /**
-   * Queries an account owned objects
-   *
-   * @param ownerAddress Owner address
-   * @returns GetCurrentObjectsQuery response type
-   */
-  async getAccountOwnedObjects(
-    ownerAddress: MaybeHexString,
-    extraArgs?: {
-      options?: IndexerPaginationArgs;
-      orderBy?: IndexerSortBy<Current_Objects_Order_By>[];
-    },
-  ): Promise<GetCurrentObjectsQuery> {
-    const address = HexString.ensure(ownerAddress).hex();
-    IndexerClient.validateAddress(address);
-
-    const whereCondition: any = {
-      owner_address: { _eq: address },
-    };
-
-    const graphqlQuery = {
-      query: GetCurrentObjects,
-      variables: {
-        where_condition: whereCondition,
-        offset: extraArgs?.options?.offset,
-        limit: extraArgs?.options?.limit,
-        order_by: extraArgs?.orderBy,
-      },
-    };
     return this.queryIndexer(graphqlQuery);
   }
 }

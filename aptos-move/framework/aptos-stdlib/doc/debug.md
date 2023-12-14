@@ -1,5 +1,5 @@
 
-<a id="0x1_debug"></a>
+<a name="0x1_debug"></a>
 
 # Module `0x1::debug`
 
@@ -25,12 +25,12 @@ Module providing debug functionality.
 
 
 
-<a id="@Constants_0"></a>
+<a name="@Constants_0"></a>
 
 ## Constants
 
 
-<a id="0x1_debug_MSG_1"></a>
+<a name="0x1_debug_MSG_1"></a>
 
 
 
@@ -39,7 +39,7 @@ Module providing debug functionality.
 
 
 
-<a id="0x1_debug_MSG_2"></a>
+<a name="0x1_debug_MSG_2"></a>
 
 
 
@@ -48,7 +48,7 @@ Module providing debug functionality.
 
 
 
-<a id="0x1_debug_print"></a>
+<a name="0x1_debug_print"></a>
 
 ## Function `print`
 
@@ -72,7 +72,7 @@ Module providing debug functionality.
 
 </details>
 
-<a id="0x1_debug_print_stack_trace"></a>
+<a name="0x1_debug_print_stack_trace"></a>
 
 ## Function `print_stack_trace`
 
@@ -96,7 +96,7 @@ Module providing debug functionality.
 
 </details>
 
-<a id="0x1_debug_format"></a>
+<a name="0x1_debug_format"></a>
 
 ## Function `format`
 
@@ -120,7 +120,7 @@ Module providing debug functionality.
 
 </details>
 
-<a id="0x1_debug_native_print"></a>
+<a name="0x1_debug_native_print"></a>
 
 ## Function `native_print`
 
@@ -142,7 +142,7 @@ Module providing debug functionality.
 
 </details>
 
-<a id="0x1_debug_native_stack_trace"></a>
+<a name="0x1_debug_native_stack_trace"></a>
 
 ## Function `native_stack_trace`
 
@@ -164,12 +164,12 @@ Module providing debug functionality.
 
 </details>
 
-<a id="@Specification_1"></a>
+<a name="@Specification_1"></a>
 
 ## Specification
 
 
-<a id="@Specification_1_print"></a>
+<a name="@Specification_1_print"></a>
 
 ### Function `print`
 
@@ -185,7 +185,7 @@ Module providing debug functionality.
 
 
 
-<a id="@Specification_1_print_stack_trace"></a>
+<a name="@Specification_1_print_stack_trace"></a>
 
 ### Function `print_stack_trace`
 
@@ -201,7 +201,7 @@ Module providing debug functionality.
 
 
 
-<a id="@Specification_1_native_print"></a>
+<a name="@Specification_1_native_print"></a>
 
 ### Function `native_print`
 
@@ -218,7 +218,7 @@ Module providing debug functionality.
 
 
 
-<a id="@Specification_1_native_stack_trace"></a>
+<a name="@Specification_1_native_stack_trace"></a>
 
 ### Function `native_stack_trace`
 

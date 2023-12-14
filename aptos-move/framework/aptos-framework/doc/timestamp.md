@@ -1,5 +1,5 @@
 
-<a id="0x1_timestamp"></a>
+<a name="0x1_timestamp"></a>
 
 # Module `0x1::timestamp`
 
@@ -16,7 +16,6 @@ It interacts with the other modules in the following ways:
 -  [Function `now_microseconds`](#0x1_timestamp_now_microseconds)
 -  [Function `now_seconds`](#0x1_timestamp_now_seconds)
 -  [Specification](#@Specification_1)
-    -  [Module-level Specification](#@Module-level_Specification_2)
     -  [Function `update_global_time`](#@Specification_1_update_global_time)
 
 
@@ -26,7 +25,7 @@ It interacts with the other modules in the following ways:
 
 
 
-<a id="0x1_timestamp_CurrentTimeMicroseconds"></a>
+<a name="0x1_timestamp_CurrentTimeMicroseconds"></a>
 
 ## Resource `CurrentTimeMicroseconds`
 
@@ -54,12 +53,12 @@ A singleton resource holding the current Unix time in microseconds
 
 </details>
 
-<a id="@Constants_0"></a>
+<a name="@Constants_0"></a>
 
 ## Constants
 
 
-<a id="0x1_timestamp_ENOT_OPERATING"></a>
+<a name="0x1_timestamp_ENOT_OPERATING"></a>
 
 The blockchain is not in an operating state yet
 
@@ -69,7 +68,7 @@ The blockchain is not in an operating state yet
 
 
 
-<a id="0x1_timestamp_EINVALID_TIMESTAMP"></a>
+<a name="0x1_timestamp_EINVALID_TIMESTAMP"></a>
 
 An invalid timestamp was provided
 
@@ -79,7 +78,7 @@ An invalid timestamp was provided
 
 
 
-<a id="0x1_timestamp_MICRO_CONVERSION_FACTOR"></a>
+<a name="0x1_timestamp_MICRO_CONVERSION_FACTOR"></a>
 
 Conversion factor between seconds and microseconds
 
@@ -89,7 +88,7 @@ Conversion factor between seconds and microseconds
 
 
 
-<a id="0x1_timestamp_set_time_has_started"></a>
+<a name="0x1_timestamp_set_time_has_started"></a>
 
 ## Function `set_time_has_started`
 
@@ -116,7 +115,7 @@ Marks that time has started. This can only be called from genesis and with the a
 
 </details>
 
-<a id="0x1_timestamp_update_global_time"></a>
+<a name="0x1_timestamp_update_global_time"></a>
 
 ## Function `update_global_time`
 
@@ -157,7 +156,7 @@ Updates the wall clock time by consensus. Requires VM privilege and will be invo
 
 </details>
 
-<a id="0x1_timestamp_now_microseconds"></a>
+<a name="0x1_timestamp_now_microseconds"></a>
 
 ## Function `now_microseconds`
 
@@ -183,7 +182,7 @@ Gets the current time in microseconds.
 
 </details>
 
-<a id="0x1_timestamp_now_seconds"></a>
+<a name="0x1_timestamp_now_seconds"></a>
 
 ## Function `now_seconds`
 
@@ -209,34 +208,18 @@ Gets the current time in seconds.
 
 </details>
 
-<a id="@Specification_1"></a>
+<a name="@Specification_1"></a>
 
 ## Specification
 
 
-<a id="@Module-level_Specification_2"></a>
 
-### Module-level Specification
-
-
-
-<pre><code><b>invariant</b> [suspendable] <a href="chain_status.md#0x1_chain_status_is_operating">chain_status::is_operating</a>() ==&gt; <b>exists</b>&lt;<a href="timestamp.md#0x1_timestamp_CurrentTimeMicroseconds">CurrentTimeMicroseconds</a>&gt;(@aptos_framework);
+<pre><code><b>invariant</b> <a href="chain_status.md#0x1_chain_status_is_operating">chain_status::is_operating</a>() ==&gt; <b>exists</b>&lt;<a href="timestamp.md#0x1_timestamp_CurrentTimeMicroseconds">CurrentTimeMicroseconds</a>&gt;(@aptos_framework);
 </code></pre>
 
 
 
-
-<a id="0x1_timestamp_spec_now_seconds"></a>
-
-
-<pre><code><b>fun</b> <a href="timestamp.md#0x1_timestamp_spec_now_seconds">spec_now_seconds</a>(): u64 {
-   <a href="timestamp.md#0x1_timestamp_spec_now_microseconds">spec_now_microseconds</a>() / <a href="timestamp.md#0x1_timestamp_MICRO_CONVERSION_FACTOR">MICRO_CONVERSION_FACTOR</a>
-}
-</code></pre>
-
-
-
-<a id="@Specification_1_update_global_time"></a>
+<a name="@Specification_1_update_global_time"></a>
 
 ### Function `update_global_time`
 
@@ -249,13 +232,12 @@ Gets the current time in seconds.
 
 <pre><code><b>requires</b> <a href="chain_status.md#0x1_chain_status_is_operating">chain_status::is_operating</a>();
 <b>include</b> <a href="timestamp.md#0x1_timestamp_UpdateGlobalTimeAbortsIf">UpdateGlobalTimeAbortsIf</a>;
-<b>ensures</b> (proposer != @vm_reserved) ==&gt; (<a href="timestamp.md#0x1_timestamp_spec_now_microseconds">spec_now_microseconds</a>() == <a href="timestamp.md#0x1_timestamp">timestamp</a>);
 </code></pre>
 
 
 
 
-<a id="0x1_timestamp_UpdateGlobalTimeAbortsIf"></a>
+<a name="0x1_timestamp_UpdateGlobalTimeAbortsIf"></a>
 
 
 <pre><code><b>schema</b> <a href="timestamp.md#0x1_timestamp_UpdateGlobalTimeAbortsIf">UpdateGlobalTimeAbortsIf</a> {
@@ -271,11 +253,22 @@ Gets the current time in seconds.
 
 
 
-<a id="0x1_timestamp_spec_now_microseconds"></a>
+<a name="0x1_timestamp_spec_now_microseconds"></a>
 
 
 <pre><code><b>fun</b> <a href="timestamp.md#0x1_timestamp_spec_now_microseconds">spec_now_microseconds</a>(): u64 {
    <b>global</b>&lt;<a href="timestamp.md#0x1_timestamp_CurrentTimeMicroseconds">CurrentTimeMicroseconds</a>&gt;(@aptos_framework).microseconds
+}
+</code></pre>
+
+
+
+
+<a name="0x1_timestamp_spec_now_seconds"></a>
+
+
+<pre><code><b>fun</b> <a href="timestamp.md#0x1_timestamp_spec_now_seconds">spec_now_seconds</a>(): u64 {
+   <a href="timestamp.md#0x1_timestamp_spec_now_microseconds">spec_now_microseconds</a>() / <a href="timestamp.md#0x1_timestamp_MICRO_CONVERSION_FACTOR">MICRO_CONVERSION_FACTOR</a>
 }
 </code></pre>
 

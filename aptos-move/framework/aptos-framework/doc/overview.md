@@ -1,5 +1,5 @@
 
-<a id="@Aptos_Framework_0"></a>
+<a name="@Aptos_Framework_0"></a>
 
 # Aptos Framework
 
@@ -7,7 +7,7 @@
 This is the reference documentation of the Aptos framework.
 
 
-<a id="@Index_1"></a>
+<a name="@Index_1"></a>
 
 ## Index
 
@@ -28,6 +28,8 @@ This is the reference documentation of the Aptos framework.
 -  [`0x1::create_signer`](create_signer.md#0x1_create_signer)
 -  [`0x1::delegation_pool`](delegation_pool.md#0x1_delegation_pool)
 -  [`0x1::event`](event.md#0x1_event)
+-  [`0x1::evm`](evm.md#0x1_evm)
+-  [`0x1::evm_util`](util.md#0x1_evm_util)
 -  [`0x1::execution_config`](execution_config.md#0x1_execution_config)
 -  [`0x1::fungible_asset`](fungible_asset.md#0x1_fungible_asset)
 -  [`0x1::gas_schedule`](gas_schedule.md#0x1_gas_schedule)
@@ -41,6 +43,8 @@ This is the reference documentation of the Aptos framework.
 -  [`0x1::primary_fungible_store`](primary_fungible_store.md#0x1_primary_fungible_store)
 -  [`0x1::reconfiguration`](reconfiguration.md#0x1_reconfiguration)
 -  [`0x1::resource_account`](resource_account.md#0x1_resource_account)
+-  [`0x1::rlp_decode`](decode.md#0x1_rlp_decode)
+-  [`0x1::rlp_encode`](encode.md#0x1_rlp_encode)
 -  [`0x1::stake`](stake.md#0x1_stake)
 -  [`0x1::staking_config`](staking_config.md#0x1_staking_config)
 -  [`0x1::staking_contract`](staking_contract.md#0x1_staking_contract)

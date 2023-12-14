@@ -1,5 +1,5 @@
 
-<a id="0x1_primary_fungible_store"></a>
+<a name="0x1_primary_fungible_store"></a>
 
 # Module `0x1::primary_fungible_store`
 
@@ -38,7 +38,6 @@ fungible asset to it. This emits an deposit event.
 -  [Function `transfer_with_ref`](#0x1_primary_fungible_store_transfer_with_ref)
 -  [Function `may_be_unburn`](#0x1_primary_fungible_store_may_be_unburn)
 -  [Specification](#@Specification_0)
-    -  [Module-level Specification](#@Module-level_Specification_1)
 
 
 <pre><code><b>use</b> <a href="fungible_asset.md#0x1_fungible_asset">0x1::fungible_asset</a>;
@@ -50,7 +49,7 @@ fungible asset to it. This emits an deposit event.
 
 
 
-<a id="0x1_primary_fungible_store_DeriveRefPod"></a>
+<a name="0x1_primary_fungible_store_DeriveRefPod"></a>
 
 ## Resource `DeriveRefPod`
 
@@ -81,7 +80,7 @@ assets.
 
 </details>
 
-<a id="0x1_primary_fungible_store_create_primary_store_enabled_fungible_asset"></a>
+<a name="0x1_primary_fungible_store_create_primary_store_enabled_fungible_asset"></a>
 
 ## Function `create_primary_store_enabled_fungible_asset`
 
@@ -128,7 +127,7 @@ so that users can easily deposit/withdraw/transfer fungible assets.
 
 </details>
 
-<a id="0x1_primary_fungible_store_ensure_primary_store_exists"></a>
+<a name="0x1_primary_fungible_store_ensure_primary_store_exists"></a>
 
 ## Function `ensure_primary_store_exists`
 
@@ -160,7 +159,7 @@ Ensure that the primary store object for the given address exists. If it doesn't
 
 </details>
 
-<a id="0x1_primary_fungible_store_create_primary_store"></a>
+<a name="0x1_primary_fungible_store_create_primary_store"></a>
 
 ## Function `create_primary_store`
 
@@ -197,7 +196,7 @@ Create a primary store object to hold fungible asset for the given address.
 
 </details>
 
-<a id="0x1_primary_fungible_store_primary_store_address"></a>
+<a name="0x1_primary_fungible_store_primary_store_address"></a>
 
 ## Function `primary_store_address`
 
@@ -224,7 +223,7 @@ Get the address of the primary store for the given account.
 
 </details>
 
-<a id="0x1_primary_fungible_store_primary_store"></a>
+<a name="0x1_primary_fungible_store_primary_store"></a>
 
 ## Function `primary_store`
 
@@ -251,7 +250,7 @@ Get the primary store object for the given account.
 
 </details>
 
-<a id="0x1_primary_fungible_store_primary_store_exists"></a>
+<a name="0x1_primary_fungible_store_primary_store_exists"></a>
 
 ## Function `primary_store_exists`
 
@@ -277,7 +276,7 @@ Return whether the given account's primary store exists.
 
 </details>
 
-<a id="0x1_primary_fungible_store_balance"></a>
+<a name="0x1_primary_fungible_store_balance"></a>
 
 ## Function `balance`
 
@@ -307,7 +306,7 @@ Get the balance of <code><a href="account.md#0x1_account">account</a></code>'s p
 
 </details>
 
-<a id="0x1_primary_fungible_store_is_frozen"></a>
+<a name="0x1_primary_fungible_store_is_frozen"></a>
 
 ## Function `is_frozen`
 
@@ -337,7 +336,7 @@ Return whether the given account's primary store is frozen.
 
 </details>
 
-<a id="0x1_primary_fungible_store_withdraw"></a>
+<a name="0x1_primary_fungible_store_withdraw"></a>
 
 ## Function `withdraw`
 
@@ -365,7 +364,7 @@ Withdraw <code>amount</code> of fungible asset from the given account's primary 
 
 </details>
 
-<a id="0x1_primary_fungible_store_deposit"></a>
+<a name="0x1_primary_fungible_store_deposit"></a>
 
 ## Function `deposit`
 
@@ -392,7 +391,7 @@ Deposit fungible asset <code>fa</code> to the given account's primary store.
 
 </details>
 
-<a id="0x1_primary_fungible_store_transfer"></a>
+<a name="0x1_primary_fungible_store_transfer"></a>
 
 ## Function `transfer`
 
@@ -426,7 +425,7 @@ Transfer <code>amount</code> of fungible asset from sender's primary store to re
 
 </details>
 
-<a id="0x1_primary_fungible_store_mint"></a>
+<a name="0x1_primary_fungible_store_mint"></a>
 
 ## Function `mint`
 
@@ -452,7 +451,7 @@ Mint to the primary store of <code>owner</code>.
 
 </details>
 
-<a id="0x1_primary_fungible_store_burn"></a>
+<a name="0x1_primary_fungible_store_burn"></a>
 
 ## Function `burn`
 
@@ -478,7 +477,7 @@ Burn from the primary store of <code>owner</code>.
 
 </details>
 
-<a id="0x1_primary_fungible_store_set_frozen_flag"></a>
+<a name="0x1_primary_fungible_store_set_frozen_flag"></a>
 
 ## Function `set_frozen_flag`
 
@@ -504,7 +503,7 @@ Freeze/Unfreeze the primary store of <code>owner</code>.
 
 </details>
 
-<a id="0x1_primary_fungible_store_withdraw_with_ref"></a>
+<a name="0x1_primary_fungible_store_withdraw_with_ref"></a>
 
 ## Function `withdraw_with_ref`
 
@@ -530,7 +529,7 @@ Withdraw from the primary store of <code>owner</code> ignoring frozen flag.
 
 </details>
 
-<a id="0x1_primary_fungible_store_deposit_with_ref"></a>
+<a name="0x1_primary_fungible_store_deposit_with_ref"></a>
 
 ## Function `deposit_with_ref`
 
@@ -559,7 +558,7 @@ Deposit from the primary store of <code>owner</code> ignoring frozen flag.
 
 </details>
 
-<a id="0x1_primary_fungible_store_transfer_with_ref"></a>
+<a name="0x1_primary_fungible_store_transfer_with_ref"></a>
 
 ## Function `transfer_with_ref`
 
@@ -591,7 +590,7 @@ Transfer <code>amount</code> of FA from the primary store of <code>from</code> t
 
 </details>
 
-<a id="0x1_primary_fungible_store_may_be_unburn"></a>
+<a name="0x1_primary_fungible_store_may_be_unburn"></a>
 
 ## Function `may_be_unburn`
 
@@ -617,14 +616,9 @@ Transfer <code>amount</code> of FA from the primary store of <code>from</code> t
 
 </details>
 
-<a id="@Specification_0"></a>
+<a name="@Specification_0"></a>
 
 ## Specification
-
-
-<a id="@Module-level_Specification_1"></a>
-
-### Module-level Specification
 
 
 

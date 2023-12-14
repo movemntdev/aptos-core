@@ -4,7 +4,7 @@
 use crate::network::ApplicationNetworkInterfaces;
 use aptos_config::config::{NodeConfig, StateSyncConfig};
 use aptos_consensus_notifications::ConsensusNotifier;
-use aptos_data_client::{client::AptosDataClient, poller};
+use aptos_data_client::client::AptosDataClient;
 use aptos_data_streaming_service::{
     streaming_client::{new_streaming_service_client_listener_pair, StreamingServiceClient},
     streaming_service::DataStreamingService,
@@ -81,7 +81,6 @@ pub fn start_state_sync_and_get_notification_handles(
     event_subscription_service: EventSubscriptionService,
     db_rw: DbReaderWriter,
 ) -> anyhow::Result<(
-    AptosDataClient,
     StateSyncRuntimes,
     MempoolNotificationListener,
     ConsensusNotifier,
@@ -137,7 +136,7 @@ pub fn start_state_sync_and_get_notification_handles(
         metadata_storage,
         consensus_listener,
         event_subscription_service,
-        aptos_data_client.clone(),
+        aptos_data_client,
         streaming_service_client,
         TimeService::real(),
     );
@@ -150,12 +149,7 @@ pub fn start_state_sync_and_get_notification_handles(
         streaming_service_runtime,
     );
 
-    Ok((
-        aptos_data_client,
-        state_sync_runtimes,
-        mempool_listener,
-        consensus_notifier,
-    ))
+    Ok((state_sync_runtimes, mempool_listener, consensus_notifier))
 }
 
 /// Sets up the data streaming service runtime
@@ -171,7 +165,6 @@ fn setup_data_streaming_service(
         state_sync_config.data_streaming_service,
         aptos_data_client,
         streaming_service_listener,
-        TimeService::real(),
     );
 
     // Start the data streaming service
@@ -202,7 +195,7 @@ fn setup_aptos_data_client(
         storage_service_client,
         Some(aptos_data_client_runtime.handle().clone()),
     );
-    aptos_data_client_runtime.spawn(poller::start_poller(data_summary_poller));
+    aptos_data_client_runtime.spawn(data_summary_poller.start_poller());
 
     Ok((aptos_data_client, aptos_data_client_runtime))
 }

@@ -24,7 +24,6 @@ use aptos_network::{
     ProtocolId,
 };
 use aptos_types::{transaction::SignedTransaction, PeerId};
-use maplit::btreemap;
 use rand::{rngs::StdRng, SeedableRng};
 use std::collections::HashMap;
 use tokio::runtime::Runtime;
@@ -377,7 +376,7 @@ impl TestHarness {
                                 102400,
                                 true,
                                 false,
-                                btreemap![],
+                                vec![],
                             );
                             for txn in transactions.iter() {
                                 assert!(block.contains(txn));
@@ -469,7 +468,7 @@ fn test_transactions_with_byte_limit(
     // Continue to add transactions to the batch until we hit the byte limit
     loop {
         let transaction = test_transaction(sequence_number);
-        let transaction_bytes = bcs::serialized_size(&transaction).unwrap();
+        let transaction_bytes = bcs::to_bytes(&transaction).unwrap().len();
         if (byte_count + transaction_bytes) < byte_limit {
             transactions.push(transaction);
             byte_count += transaction_bytes;

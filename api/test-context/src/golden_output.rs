@@ -1,8 +1,6 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-#![allow(clippy::arc_with_non_send_sync)]
-
 use goldenfile::Mint;
 use std::{
     fmt::Debug,

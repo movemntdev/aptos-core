@@ -2,18 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    common::NUM_STATE_SHARDS,
-    db::{
-        test_helper::{arb_state_kv_sets, update_store},
-        AptosDB,
-    },
-    pruner::{PrunerManager, StateKvPrunerManager, StateMerklePrunerManager},
-    schema::{
-        stale_node_index::StaleNodeIndexSchema, stale_state_value_index::StaleStateValueIndexSchema,
-    },
+    new_sharded_kv_schema_batch,
+    stale_node_index::StaleNodeIndexSchema,
+    stale_state_value_index::StaleStateValueIndexSchema,
     state_merkle_db::StateMerkleDb,
     state_store::StateStore,
-    utils::new_sharded_kv_schema_batch,
+    test_helper::{arb_state_kv_sets, update_store},
+    AptosDB, PrunerManager, StateKvPrunerManager, StateMerklePrunerManager,
 };
 use aptos_config::config::{LedgerPrunerConfig, StateMerklePrunerConfig};
 use aptos_crypto::HashValue;
@@ -69,7 +64,6 @@ fn put_value_set(
             &state_kv_metadata_batch,
             /*put_state_value_indices=*/ false,
             /*skip_usage=*/ false,
-            /*last_checkpoint_index=*/ None,
         )
         .unwrap();
     state_store
@@ -134,7 +128,7 @@ fn test_state_store_pruner() {
     // test the min_readable_version initialization logic.
     {
         let pruner =
-            create_state_merkle_pruner_manager(&aptos_db.state_merkle_db(), prune_batch_size);
+            create_state_merkle_pruner_manager(&aptos_db.state_merkle_db, prune_batch_size);
         pruner.wake_and_wait_pruner(0 /* latest_version */).unwrap();
         for i in 0..num_versions {
             verify_state_in_store(
@@ -151,7 +145,7 @@ fn test_state_store_pruner() {
     // min_readable_version initialization logic.
     {
         let pruner =
-            create_state_merkle_pruner_manager(&aptos_db.state_merkle_db(), prune_batch_size);
+            create_state_merkle_pruner_manager(&aptos_db.state_merkle_db, prune_batch_size);
         pruner
             .wake_and_wait_pruner(prune_batch_size as u64 /* latest_version */)
             .unwrap();
@@ -200,7 +194,7 @@ fn test_state_store_pruner_partial_version() {
 
     let prune_batch_size = 1;
     let tmp_dir = TempPath::new();
-    let aptos_db = AptosDB::new_for_test_with_sharding(&tmp_dir, 0);
+    let aptos_db = AptosDB::new_for_test_no_cache(&tmp_dir);
     let state_store = &aptos_db.state_store;
 
     let _root0 = put_value_set(
@@ -226,7 +220,7 @@ fn test_state_store_pruner_partial_version() {
     // to test the min_readable_version initialization logic.
     {
         let pruner =
-            create_state_merkle_pruner_manager(&aptos_db.state_merkle_db(), prune_batch_size);
+            create_state_merkle_pruner_manager(&aptos_db.state_merkle_db, prune_batch_size);
         pruner.wake_and_wait_pruner(0 /* latest_version */).unwrap();
         verify_state_in_store(state_store, key1.clone(), Some(&value1), 1);
         verify_state_in_store(state_store, key2.clone(), Some(&value2_update), 1);
@@ -238,7 +232,7 @@ fn test_state_store_pruner_partial_version() {
     // min_readable_version initialization logic.
     {
         let pruner =
-            create_state_merkle_pruner_manager(&aptos_db.state_merkle_db(), prune_batch_size);
+            create_state_merkle_pruner_manager(&aptos_db.state_merkle_db, prune_batch_size);
         assert!(pruner.wake_and_wait_pruner(1 /* latest_version */,).is_ok());
         assert!(state_store
             .get_state_value_with_proof_by_version(&key1, 0_u64)
@@ -252,7 +246,7 @@ fn test_state_store_pruner_partial_version() {
     // everytime to test the min_readable_version initialization logic.
     {
         let pruner =
-            create_state_merkle_pruner_manager(&aptos_db.state_merkle_db(), prune_batch_size);
+            create_state_merkle_pruner_manager(&aptos_db.state_merkle_db, prune_batch_size);
         assert!(pruner.wake_and_wait_pruner(2 /* latest_version */,).is_ok());
         assert!(pruner.wake_and_wait_pruner(2 /* latest_version */,).is_ok());
 
@@ -271,29 +265,16 @@ fn test_state_store_pruner_partial_version() {
 
     // Make sure all stale indices are gone.
     //
+    // TODO(grao): Support sharding here.
     assert_eq!(
         aptos_db
-            .state_merkle_db()
+            .state_merkle_db
             .metadata_db()
             .iter::<StaleNodeIndexSchema>(ReadOptions::default())
             .unwrap()
             .count(),
         0
     );
-
-    if aptos_db.state_merkle_db().sharding_enabled() {
-        for i in 0..NUM_STATE_SHARDS as u8 {
-            assert_eq!(
-                aptos_db
-                    .state_merkle_db()
-                    .db_shard(i)
-                    .iter::<StaleNodeIndexSchema>(ReadOptions::default())
-                    .unwrap()
-                    .count(),
-                0
-            );
-        }
-    }
 }
 
 #[test]

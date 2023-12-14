@@ -6,19 +6,18 @@ use crate::{
     logging::{LogEntry, LogSchema},
     metrics,
     metrics::{
-        increment_counter, LRU_CACHE_HIT, LRU_CACHE_PROBE, OPTIMISTIC_FETCH_ADD, SUBSCRIPTION_ADD,
-        SUBSCRIPTION_FAILURE, SUBSCRIPTION_NEW_STREAM,
+        increment_counter, start_timer, LRU_CACHE_HIT, LRU_CACHE_PROBE, OPTIMISTIC_FETCH_ADD,
+        SUBSCRIPTION_ADD, SUBSCRIPTION_FAILURE,
     },
     moderator::RequestModerator,
     network::ResponseSender,
     optimistic_fetch::OptimisticFetchRequest,
     storage::StorageReaderInterface,
     subscription::{SubscriptionRequest, SubscriptionStreamRequests},
-    utils,
 };
 use aptos_config::{config::StorageServiceConfig, network_id::PeerNetworkId};
+use aptos_infallible::Mutex;
 use aptos_logger::{debug, error, sample, sample::SampleRate, trace, warn};
-use aptos_network::protocols::wire::handshake::v1::ProtocolId;
 use aptos_storage_service_types::{
     requests::{
         DataRequest, EpochEndingLedgerInfoRequest, StateValuesWithProofRequest,
@@ -33,12 +32,12 @@ use aptos_storage_service_types::{
 use aptos_time_service::TimeService;
 use aptos_types::transaction::Version;
 use arc_swap::ArcSwap;
-use dashmap::{mapref::entry::Entry, DashMap};
-use mini_moka::sync::Cache;
-use std::{sync::Arc, time::Duration};
+use dashmap::DashMap;
+use lru::LruCache;
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 /// Storage server constants
-const ERROR_LOG_FREQUENCY_SECS: u64 = 5; // The frequency to log errors
+const INVALID_REQUEST_LOG_FREQUENCY_SECS: u64 = 5; // The frequency to log invalid requests (secs)
 const STORAGE_SERVER_VERSION: u64 = 1;
 const SUMMARY_LOG_FREQUENCY_SECS: u64 = 5; // The frequency to log the storage server summary (secs)
 
@@ -49,10 +48,10 @@ const SUMMARY_LOG_FREQUENCY_SECS: u64 = 5; // The frequency to log the storage s
 pub struct Handler<T> {
     cached_storage_server_summary: Arc<ArcSwap<StorageServerSummary>>,
     optimistic_fetches: Arc<DashMap<PeerNetworkId, OptimisticFetchRequest>>,
-    lru_response_cache: Cache<StorageServiceRequest, StorageServiceResponse>,
+    lru_response_cache: Arc<Mutex<LruCache<StorageServiceRequest, StorageServiceResponse>>>,
     request_moderator: Arc<RequestModerator>,
     storage: T,
-    subscriptions: Arc<DashMap<PeerNetworkId, SubscriptionStreamRequests>>,
+    subscriptions: Arc<Mutex<HashMap<PeerNetworkId, SubscriptionStreamRequests>>>,
     time_service: TimeService,
 }
 
@@ -60,10 +59,10 @@ impl<T: StorageReaderInterface> Handler<T> {
     pub fn new(
         cached_storage_server_summary: Arc<ArcSwap<StorageServerSummary>>,
         optimistic_fetches: Arc<DashMap<PeerNetworkId, OptimisticFetchRequest>>,
-        lru_response_cache: Cache<StorageServiceRequest, StorageServiceResponse>,
+        lru_response_cache: Arc<Mutex<LruCache<StorageServiceRequest, StorageServiceResponse>>>,
         request_moderator: Arc<RequestModerator>,
         storage: T,
-        subscriptions: Arc<DashMap<PeerNetworkId, SubscriptionStreamRequests>>,
+        subscriptions: Arc<Mutex<HashMap<PeerNetworkId, SubscriptionStreamRequests>>>,
         time_service: TimeService,
     ) -> Self {
         Self {
@@ -83,18 +82,9 @@ impl<T: StorageReaderInterface> Handler<T> {
         &self,
         storage_service_config: StorageServiceConfig,
         peer_network_id: PeerNetworkId,
-        protocol_id: ProtocolId,
         request: StorageServiceRequest,
         response_sender: ResponseSender,
     ) {
-        // Log the request
-        trace!(LogSchema::new(LogEntry::ReceivedStorageRequest)
-            .request(&request)
-            .message(&format!(
-                "Received storage request. Peer: {:?}, protocol: {:?}.",
-                peer_network_id, protocol_id,
-            )));
-
         // Update the request count
         increment_counter(
             &metrics::STORAGE_REQUESTS_RECEIVED,
@@ -131,61 +121,55 @@ impl<T: StorageReaderInterface> Handler<T> {
         request: StorageServiceRequest,
         optimistic_fetch_related: bool,
     ) -> aptos_storage_service_types::Result<StorageServiceResponse> {
-        // Process the request and time the operation
-        let process_request = || {
-            // Process the request and handle any errors
-            match self.validate_and_handle_request(peer_network_id, &request) {
-                Err(error) => {
-                    // Update the error counter
-                    increment_counter(
-                        &metrics::STORAGE_ERRORS_ENCOUNTERED,
-                        peer_network_id.network_id(),
-                        error.get_label().into(),
-                    );
-
-                    // Periodically log the failure
-                    sample!(
-                            SampleRate::Duration(Duration::from_secs(ERROR_LOG_FREQUENCY_SECS)),
-                            error!(LogSchema::new(LogEntry::StorageServiceError)
-                                .error(&error)
-                                .peer_network_id(peer_network_id)
-                                .request(&request)
-                                .optimistic_fetch_related(optimistic_fetch_related)
-                        );
-                    );
-
-                    // Return the error
-                    Err(error)
-                },
-                Ok(response) => {
-                    // Update the successful response counter
-                    increment_counter(
-                        &metrics::STORAGE_RESPONSES_SENT,
-                        peer_network_id.network_id(),
-                        response.get_label(),
-                    );
-
-                    // Return the response
-                    Ok(response)
-                },
-            }
-        };
-        let process_result = utils::execute_and_time_duration(
+        // Time the request processing (the timer will stop when it's dropped)
+        let _timer = start_timer(
             &metrics::STORAGE_REQUEST_PROCESSING_LATENCY,
-            Some((peer_network_id, &request)),
-            None,
-            process_request,
-            None,
+            peer_network_id.network_id(),
+            request.get_label(),
         );
 
-        // Transform the request error into a storage service error (for the client)
-        process_result.map_err(|error| match error {
-            Error::InvalidRequest(error) => StorageServiceError::InvalidRequest(error),
-            Error::TooManyInvalidRequests(error) => {
-                StorageServiceError::TooManyInvalidRequests(error)
+        // Process the request and handle any errors
+        match self.validate_and_handle_request(peer_network_id, &request) {
+            Err(error) => {
+                // Update the error counter
+                increment_counter(
+                    &metrics::STORAGE_ERRORS_ENCOUNTERED,
+                    peer_network_id.network_id(),
+                    error.get_label().into(),
+                );
+
+                // Periodically log the validation failure
+                sample!(
+                        SampleRate::Duration(Duration::from_secs(INVALID_REQUEST_LOG_FREQUENCY_SECS)),
+                        error!(LogSchema::new(LogEntry::StorageServiceError)
+                            .error(&error)
+                            .peer_network_id(peer_network_id)
+                            .request(&request)
+                            .optimistic_fetch_related(optimistic_fetch_related)
+                    );
+                );
+
+                // Return an appropriate response to the client
+                match error {
+                    Error::InvalidRequest(error) => Err(StorageServiceError::InvalidRequest(error)),
+                    Error::TooManyInvalidRequests(error) => {
+                        Err(StorageServiceError::TooManyInvalidRequests(error))
+                    },
+                    error => Err(StorageServiceError::InternalError(error.to_string())),
+                }
             },
-            error => StorageServiceError::InternalError(error.to_string()),
-        })
+            Ok(response) => {
+                // Update the successful response counter
+                increment_counter(
+                    &metrics::STORAGE_RESPONSES_SENT,
+                    peer_network_id.network_id(),
+                    response.get_label(),
+                );
+
+                // Return the response
+                Ok(response)
+            },
+        }
     }
 
     /// Validate the request and only handle it if the moderator allows
@@ -246,7 +230,7 @@ impl<T: StorageReaderInterface> Handler<T> {
             .is_some()
         {
             sample!(
-                SampleRate::Duration(Duration::from_secs(ERROR_LOG_FREQUENCY_SECS)),
+                SampleRate::Duration(Duration::from_secs(INVALID_REQUEST_LOG_FREQUENCY_SECS)),
                 warn!(LogSchema::new(LogEntry::OptimisticFetchRequest)
                     .error(&Error::InvalidRequest(
                         "An active optimistic fetch was already found for the peer!".into()
@@ -274,94 +258,67 @@ impl<T: StorageReaderInterface> Handler<T> {
         request: StorageServiceRequest,
         response_sender: ResponseSender,
     ) {
-        // Create a new subscription request and get the stream ID
+        // Create a new subscription request
         let subscription_request =
             SubscriptionRequest::new(request.clone(), response_sender, self.time_service.clone());
+
+        // Grab the lock on the active subscriptions map
+        let mut subscriptions = self.subscriptions.lock();
+
+        // Get the existing stream ID and the request stream ID
+        let existing_stream_id =
+            subscriptions
+                .get_mut(&peer_network_id)
+                .map(|subscription_stream_requests| {
+                    subscription_stream_requests.subscription_stream_id()
+                });
         let request_stream_id = subscription_request.subscription_stream_id();
 
-        // Update the subscription metrics with the new request
-        update_new_subscription_metrics(peer_network_id);
-
-        // Get the subscription stream entry for the peer. Internally, this will
-        // lock the entry, to prevent other requests (for the same peer) from
-        // modifying the subscription stream entry.
-        let subscription_stream_entry = self.subscriptions.entry(peer_network_id);
-
-        // If the entry is empty, or the stream ID does not match the request ID,
-        // create a new subscription stream for the peer. Otherwise, add the
-        // request to the existing stream (the stream IDs match!).
-        match subscription_stream_entry {
-            Entry::Occupied(mut occupied_entry) => {
-                // If the stream has a different ID than the request, replace the stream.
-                // Otherwise, add the request to the existing stream.
-                let existing_stream_id = occupied_entry.get().subscription_stream_id();
-                if existing_stream_id != request_stream_id {
-                    // Create a new subscription stream for the peer
-                    let subscription_stream = SubscriptionStreamRequests::new(
-                        subscription_request,
-                        self.time_service.clone(),
+        // If the stream already exists, add the request to the stream. Otherwise, create a new one.
+        if existing_stream_id == Some(request_stream_id) {
+            // Add the request to the existing stream (the stream IDs match)
+            if let Some(existing_stream) = subscriptions.get_mut(&peer_network_id) {
+                if let Err((error, subscription_request)) = existing_stream
+                    .add_subscription_request(storage_service_config, subscription_request)
+                {
+                    // Something went wrong when adding the request to the stream
+                    sample!(
+                        SampleRate::Duration(Duration::from_secs(INVALID_REQUEST_LOG_FREQUENCY_SECS)),
+                        warn!(LogSchema::new(LogEntry::SubscriptionRequest)
+                            .error(&error)
+                            .peer_network_id(&peer_network_id)
+                            .request(&request)
+                        );
                     );
-                    occupied_entry.replace_entry(subscription_stream);
 
                     // Update the subscription metrics
-                    update_created_stream_metrics(&peer_network_id);
-                } else {
-                    // Add the request to the existing stream
-                    if let Err((error, subscription_request)) = occupied_entry
-                        .get_mut()
-                        .add_subscription_request(storage_service_config, subscription_request)
-                    {
-                        // Handle the subscription failure
-                        self.handle_subscription_request_failure(
-                            peer_network_id,
-                            request,
-                            error,
-                            subscription_request,
-                        );
-                    }
+                    increment_counter(
+                        &metrics::SUBSCRIPTION_EVENTS,
+                        peer_network_id.network_id(),
+                        SUBSCRIPTION_FAILURE.into(),
+                    );
+
+                    // Notify the client of the failure
+                    self.send_response(
+                        request,
+                        Err(StorageServiceError::InvalidRequest(error.to_string())),
+                        subscription_request.take_response_sender(),
+                    );
+                    return;
                 }
-            },
-            Entry::Vacant(vacant_entry) => {
-                // Create a new subscription stream for the peer
-                let subscription_stream = SubscriptionStreamRequests::new(
-                    subscription_request,
-                    self.time_service.clone(),
-                );
-                vacant_entry.insert(subscription_stream);
-
-                // Update the subscription metrics
-                update_created_stream_metrics(&peer_network_id);
-            },
+            }
+        } else {
+            // Create a new stream (either no stream exists, or we have a new stream ID)
+            let subscription_stream_requests =
+                SubscriptionStreamRequests::new(subscription_request, self.time_service.clone());
+            subscriptions.insert(peer_network_id, subscription_stream_requests);
         }
-    }
-
-    /// Handles a subscription request failure by logging the error,
-    /// updating the subscription metrics, and notifying the client.
-    fn handle_subscription_request_failure(
-        &self,
-        peer_network_id: PeerNetworkId,
-        request: StorageServiceRequest,
-        error: Error,
-        subscription_request: SubscriptionRequest,
-    ) {
-        // Something went wrong when adding the request to the stream
-        sample!(
-            SampleRate::Duration(Duration::from_secs(ERROR_LOG_FREQUENCY_SECS)),
-            warn!(LogSchema::new(LogEntry::SubscriptionRequest)
-                .error(&error)
-                .peer_network_id(&peer_network_id)
-                .request(&request)
-            );
-        );
 
         // Update the subscription metrics
-        update_failed_subscription_metrics(peer_network_id);
-
-        // Notify the client of the failure
-        self.send_response(
-            request,
-            Err(StorageServiceError::InvalidRequest(error.to_string())),
-            subscription_request.take_response_sender(),
+        increment_counter(
+            &metrics::SUBSCRIPTION_EVENTS,
+            peer_network_id.network_id(),
+            SUBSCRIPTION_ADD.into(),
         );
     }
 
@@ -372,7 +329,6 @@ impl<T: StorageReaderInterface> Handler<T> {
         peer_network_id: &PeerNetworkId,
         request: &StorageServiceRequest,
     ) -> aptos_storage_service_types::Result<StorageServiceResponse, Error> {
-        // Increment the LRU cache probe counter
         increment_counter(
             &metrics::LRU_CACHE_EVENT,
             peer_network_id.network_id(),
@@ -380,7 +336,7 @@ impl<T: StorageReaderInterface> Handler<T> {
         );
 
         // Check if the response is already in the cache
-        if let Some(response) = self.lru_response_cache.get(request) {
+        if let Some(response) = self.lru_response_cache.lock().get(request) {
             increment_counter(
                 &metrics::LRU_CACHE_EVENT,
                 peer_network_id.network_id(),
@@ -389,8 +345,8 @@ impl<T: StorageReaderInterface> Handler<T> {
             return Ok(response.clone());
         }
 
-        // Otherwise, fetch the data from storage and time the operation
-        let fetch_data_response = || match &request.data_request {
+        // Fetch the data response from storage
+        let data_response = match &request.data_request {
             DataRequest::GetStateValuesWithProof(request) => {
                 self.get_state_value_chunk_with_proof(request)
             },
@@ -413,33 +369,15 @@ impl<T: StorageReaderInterface> Handler<T> {
                 "Received an unexpected request: {:?}",
                 request
             ))),
-        };
-        let data_response = utils::execute_and_time_duration(
-            &metrics::STORAGE_FETCH_PROCESSING_LATENCY,
-            Some((peer_network_id, request)),
-            None,
-            fetch_data_response,
-            None,
-        )?;
+        }?;
+        let storage_response = StorageServiceResponse::new(data_response, request.use_compression)?;
 
-        // Create the storage response and time the operation
-        let create_storage_response = || {
-            StorageServiceResponse::new(data_response, request.use_compression)
-                .map_err(|error| error.into())
-        };
-        let storage_response = utils::execute_and_time_duration(
-            &metrics::STORAGE_RESPONSE_CREATION_LATENCY,
-            Some((peer_network_id, request)),
-            None,
-            create_storage_response,
-            None,
-        )?;
+        // Cache the response before returning
+        let _ = self
+            .lru_response_cache
+            .lock()
+            .put(request.clone(), storage_response.clone());
 
-        // Create and cache the storage response
-        self.lru_response_cache
-            .insert(request.clone(), storage_response.clone());
-
-        // Return the storage response
         Ok(storage_response)
     }
 
@@ -537,33 +475,6 @@ impl<T: StorageReaderInterface> Handler<T> {
             outputs_with_proof,
         )))
     }
-}
-
-/// Updates the subscription metrics with a created subscription stream event
-fn update_created_stream_metrics(peer_network_id: &PeerNetworkId) {
-    increment_counter(
-        &metrics::SUBSCRIPTION_EVENTS,
-        peer_network_id.network_id(),
-        SUBSCRIPTION_NEW_STREAM.into(),
-    );
-}
-
-/// Updates the subscription metrics with a failed stream request
-fn update_failed_subscription_metrics(peer_network_id: PeerNetworkId) {
-    increment_counter(
-        &metrics::SUBSCRIPTION_EVENTS,
-        peer_network_id.network_id(),
-        SUBSCRIPTION_FAILURE.into(),
-    );
-}
-
-/// Updates the subscription metrics with a new stream request
-fn update_new_subscription_metrics(peer_network_id: PeerNetworkId) {
-    increment_counter(
-        &metrics::SUBSCRIPTION_EVENTS,
-        peer_network_id.network_id(),
-        SUBSCRIPTION_ADD.into(),
-    );
 }
 
 /// Logs the response sent by storage for a peer request

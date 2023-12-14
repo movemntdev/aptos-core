@@ -191,7 +191,7 @@ impl MintFunder {
 
         info!(
             "Successfully configured MintFunder to use delegated account: {}",
-            delegated_account.address()
+            delegated_account.address().to_hex_literal()
         );
 
         self.faucet_account = RwLock::new(delegated_account);

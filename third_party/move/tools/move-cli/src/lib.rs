@@ -4,7 +4,8 @@
 
 use base::{
     build::Build, coverage::Coverage, disassemble::Disassemble, docgen::Docgen, errmap::Errmap,
-    movey_login::MoveyLogin, movey_upload::MoveyUpload, new::New, prove::Prove, test::Test,
+    info::Info, movey_login::MoveyLogin, movey_upload::MoveyUpload, new::New, prove::Prove,
+    test::Test,
 };
 use move_package::BuildConfig;
 
@@ -67,6 +68,7 @@ pub enum Command {
     Disassemble(Disassemble),
     Docgen(Docgen),
     Errmap(Errmap),
+    Info(Info),
     MoveyUpload(MoveyUpload),
     New(New),
     Prove(Prove),
@@ -101,6 +103,7 @@ pub fn run_cli(
         Command::Disassemble(c) => c.execute(move_args.package_path, move_args.build_config),
         Command::Docgen(c) => c.execute(move_args.package_path, move_args.build_config),
         Command::Errmap(c) => c.execute(move_args.package_path, move_args.build_config),
+        Command::Info(c) => c.execute(move_args.package_path, move_args.build_config),
         Command::MoveyUpload(c) => c.execute(move_args.package_path),
         Command::New(c) => c.execute_with_defaults(move_args.package_path),
         Command::Prove(c) => c.execute(move_args.package_path, move_args.build_config),

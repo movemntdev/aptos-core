@@ -1,5 +1,5 @@
 
-<a id="0x42_N"></a>
+<a name="0x42_N"></a>
 
 # Module `0x42::N`
 
@@ -17,7 +17,7 @@
 
 
 
-<a id="0x42_N_bar"></a>
+<a name="0x42_N_bar"></a>
 
 ## Function `bar`
 
@@ -42,7 +42,7 @@
 
 
 
-<a id="0x42_M"></a>
+<a name="0x42_M"></a>
 
 # Module `0x42::M`
 
@@ -65,7 +65,7 @@
 
 
 
-<a id="0x42_M_S"></a>
+<a name="0x42_M_S"></a>
 
 ## Struct `S`
 
@@ -93,7 +93,7 @@
 
 </details>
 
-<a id="0x42_M_T"></a>
+<a name="0x42_M_T"></a>
 
 ## Struct `T`
 
@@ -122,12 +122,12 @@
 
 </details>
 
-<a id="@Constants_0"></a>
+<a name="@Constants_0"></a>
 
 ## Constants
 
 
-<a id="0x42_M_C"></a>
+<a name="0x42_M_C"></a>
 
 
 
@@ -136,7 +136,7 @@
 
 
 
-<a id="0x42_M_foo"></a>
+<a name="0x42_M_foo"></a>
 
 ## Function `foo`
 
@@ -169,7 +169,7 @@
 
 
 
-<a id="0x1_main"></a>
+<a name="0x1_main"></a>
 
 # Module `0x1::main`
 
@@ -189,12 +189,12 @@
 
 
 
-<a id="@Constants_0"></a>
+<a name="@Constants_0"></a>
 
 ## Constants
 
 
-<a id="0x1_main_C"></a>
+<a name="0x1_main_C"></a>
 
 
 
@@ -203,7 +203,7 @@
 
 
 
-<a id="0x1_main_main"></a>
+<a name="0x1_main_main"></a>
 
 ## Function `main`
 

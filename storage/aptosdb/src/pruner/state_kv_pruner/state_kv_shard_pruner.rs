@@ -69,8 +69,4 @@ impl StateKvShardPruner {
 
         self.db_shard.write_schemas(batch)
     }
-
-    pub(in crate::pruner) fn shard_id(&self) -> u8 {
-        self.shard_id
-    }
 }

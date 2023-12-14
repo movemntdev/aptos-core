@@ -9,7 +9,7 @@ mod state_merkle_shard_pruner;
 mod test;
 
 use crate::{
-    metrics::{OTHER_TIMERS_SECONDS, PRUNER_VERSIONS},
+    metrics::PRUNER_VERSIONS,
     pruner::{
         db_pruner::DBPruner,
         state_merkle_pruner::{
@@ -19,18 +19,26 @@ use crate::{
         },
     },
     state_merkle_db::StateMerkleDb,
+    OTHER_TIMERS_SECONDS,
 };
-use anyhow::{anyhow, Result};
-use aptos_experimental_runtimes::thread_manager::THREAD_MANAGER;
+use anyhow::Result;
 use aptos_jellyfish_merkle::{node_type::NodeKey, StaleNodeIndex};
 use aptos_logger::info;
 use aptos_schemadb::{schema::KeyCodec, ReadOptions, DB};
 use aptos_types::transaction::{AtomicVersion, Version};
-use rayon::prelude::*;
+use once_cell::sync::Lazy;
 use std::{
     marker::PhantomData,
     sync::{atomic::Ordering, Arc},
 };
+
+static TREE_PRUNER_WORKER_POOL: Lazy<rayon::ThreadPool> = Lazy::new(|| {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(16)
+        .thread_name(|index| format!("tree_pruner_worker_{}", index))
+        .build()
+        .unwrap()
+});
 
 /// Responsible for pruning the state tree.
 pub struct StateMerklePruner<S> {
@@ -165,18 +173,22 @@ where
     }
 
     fn prune_shards(&self, current_progress: Version, target_version: Version) -> Result<()> {
-        THREAD_MANAGER.get_background_pool().install(|| {
-            self.shard_pruners.par_iter().try_for_each(|shard_pruner| {
-                shard_pruner
-                    .prune(current_progress, target_version)
-                    .map_err(|err| {
-                        anyhow!(
-                            "Failed to prune state merkle shard {}: {err}",
-                            shard_pruner.shard_id(),
-                        )
-                    })
-            })
-        })
+        TREE_PRUNER_WORKER_POOL.scope(|s| {
+            for shard_pruner in &self.shard_pruners {
+                s.spawn(move |_| {
+                    shard_pruner
+                        .prune(current_progress, target_version)
+                        .unwrap_or_else(|_| {
+                            panic!(
+                                "Failed to prune state merkle shard {}.",
+                                shard_pruner.shard_id()
+                            )
+                        });
+                });
+            }
+        });
+
+        Ok(())
     }
 
     pub(in crate::pruner::state_merkle_pruner) fn get_stale_node_indices(

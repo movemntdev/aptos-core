@@ -1,27 +1,105 @@
-<a href="https://aptos.dev">
-	<img width="100%" src="./.assets/aptos_banner.png" alt="Aptos Banner" />
-</a>
+## Movement Subnet
+Currently deployed on the Avalanche Fuji network, you can access it through the following script
 
----
+### Subnet and Move EVM Explorer
 
-[![License](https://img.shields.io/badge/license-Apache-green.svg)](LICENSE)
-[![Lint+Test](https://github.com/aptos-labs/aptos-core/actions/workflows/lint-test.yaml/badge.svg)](https://github.com/aptos-labs/aptos-core/actions/workflows/lint-test.yaml)
-[![codecov](https://codecov.io/gh/aptos-labs/aptos-core/branch/main/graph/badge.svg?token=X01RKXSGDE)](https://codecov.io/gh/aptos-labs/aptos-core)
-[![Discord chat](https://img.shields.io/discord/945856774056083548?style=flat-square)](https://discord.gg/aptosnetwork)
+```bash
+https://explorer.devnet.m1.movementlabs.xyz
+```
 
-Aptos is a layer 1 blockchain bringing a paradigm shift to Web3 through better technology and user experience. Built with Move to create a home for developers building next-gen applications.
+### Subnet Native Token Faucet and Birdge
 
-## Getting Started
+```bash
+https://faucet.devnet.m1.movementlabs.xyz
+```
 
-* [Aptos Foundation](https://aptosfoundation.org/)
-* [Aptos Developer Network](https://aptos.dev)
-* [Guide - Setup Your Environment](https://aptos.dev/category/environment)
-* [Tutorials](https://aptos.dev/tutorials)
-* Follow us on [Twitter](https://twitter.com/aptos_network).
-* Join us on the [Aptos Discord](https://discord.gg/aptosnetwork).
+### Subnet Chain ID
+```
+2vUTKYZBbLtXnfCL2RF5XEChZf1wxVYQqxZQQCShMmseSKSiee
+```
+### Subnet JSON-RPC Endpoint
+```
+https://subnet.devnet.m1.movementlabs.xyz/v1
+```
 
-## Contributing
+```bash
+curl -X POST --data '{
+  "jsonrpc": "2.0",
+  "id"     : 1,
+  "method" : "getTransactionByHash",
+  "params" : [{"data":"1f073fce3c2390d68a95289dc81df9dad1d0fa07541da5da4e1b46241f4bd24e"}]
+}' -H 'content-type:application/json;'  https://subnet.devnet.m1.movementlabs.xyz/v1/ext/bc/2vUTKYZBbLtXnfCL2RF5XEChZf1wxVYQqxZQQCShMmseSKSiee/rpc
 
-You can learn more about contributing to the Aptos project by reading our [Contribution Guide](https://github.com/aptos-labs/aptos-core/blob/main/CONTRIBUTING.md) and by viewing our [Code of Conduct](https://github.com/aptos-labs/aptos-core/blob/main/CODE_OF_CONDUCT.md).
+```
 
-Aptos Core is licensed under [Apache 2.0](https://github.com/aptos-labs/aptos-core/blob/main/LICENSE).
+### Subnet Restful Endpoint
+
+```
+https://devnet.m1.movementlabs.xyz/v1
+```
+
+```javascript
+const { AptosClient } = require("aptos");
+const NODE_URL = "https://devnet.m1.movementlabs.xyz/v1";
+const client = new AptosClient(NODE_URL);
+
+getLedgerInfo();
+
+async function getLedgerInfo() {
+    let info = await client.getLedgerInfo();
+    console.log(info);
+}
+
+```
+```
+{
+  chain_id: 4,
+  epoch: '35',
+  ledger_version: '1375',
+  oldest_ledger_version: '0',
+  ledger_timestamp: '1702359642904612',
+  node_role: 'validator',
+  oldest_block_height: '0',
+  block_height: '481',
+  git_hash: '656c604422eb6d3ef21831adc0c18bf77ddf8767'
+}
+```
+
+### Move Evm JSON-RPC Endpoint
+> chainId 336 (0x150)
+
+```bash
+https://mevm.devnet.m1.movementlabs.xyz/v1
+```
+
+```javascript
+const { Web3 } = require("web3");
+
+getTransactionReceipt();
+
+async function getTransactionReceipt() {
+    const web3 = new Web3(new Web3.providers.HttpProvider("https://mevm.devnet.m1.movementlabs.xyz/v1"));
+    const res = await web3.eth.getTransactionReceipt(
+        "0x43465b887a3f4655f80b1b241ce08164f77a29ea704b6bcfd5004031c1982ff9"
+    );
+    console.log(res);
+}
+```
+
+```
+{
+  blockHash: '0xc10eda86c48a12b2c8dcbe61c786409a3b1602df03458167a531a59f580cb0bc',
+  blockNumber: 458n,
+  cumulativeGasUsed: 0n,
+  effectiveGasPrice: 0n,
+  from: '0xedd3bce148f5acffd4ae7589d12cf51f7e4788c6',
+  gasUsed: 919n,
+  logs: [],
+  to: '0x3dc950aceda4cafb74d38530e839cca58dda527d',
+  logsBloom: '0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+  status: 1n,
+  transactionHash: '0x43465b887a3f4655f80b1b241ce08164f77a29ea704b6bcfd5004031c1982ff9',
+  transactionIndex: 0n,
+  type: 0n
+}
+```

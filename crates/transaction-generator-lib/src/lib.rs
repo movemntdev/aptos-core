@@ -30,7 +30,7 @@ mod call_custom_modules;
 mod entry_points;
 mod p2p_transaction_generator;
 pub mod publish_modules;
-pub mod publishing;
+mod publishing;
 mod transaction_mix_generator;
 use self::{
     account_generator::AccountGeneratorCreator,
@@ -92,7 +92,7 @@ pub trait TransactionGenerator: Sync + Send {
 
 #[async_trait]
 pub trait TransactionGeneratorCreator: Sync + Send {
-    fn create_transaction_generator(&self) -> Box<dyn TransactionGenerator>;
+    fn create_transaction_generator(&mut self) -> Box<dyn TransactionGenerator>;
 }
 
 pub struct CounterState {

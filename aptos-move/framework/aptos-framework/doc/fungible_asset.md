@@ -1,5 +1,5 @@
 
-<a id="0x1_fungible_asset"></a>
+<a name="0x1_fungible_asset"></a>
 
 # Module `0x1::fungible_asset`
 
@@ -8,7 +8,6 @@ metadata object can be any object that equipped with <code><a href="fungible_ass
 
 
 -  [Resource `Supply`](#0x1_fungible_asset_Supply)
--  [Resource `ConcurrentSupply`](#0x1_fungible_asset_ConcurrentSupply)
 -  [Resource `Metadata`](#0x1_fungible_asset_Metadata)
 -  [Resource `FungibleStore`](#0x1_fungible_asset_FungibleStore)
 -  [Resource `FungibleAssetEvents`](#0x1_fungible_asset_FungibleAssetEvents)
@@ -63,15 +62,11 @@ metadata object can be any object that equipped with <code><a href="fungible_ass
 -  [Function `borrow_fungible_metadata`](#0x1_fungible_asset_borrow_fungible_metadata)
 -  [Function `borrow_fungible_metadata_mut`](#0x1_fungible_asset_borrow_fungible_metadata_mut)
 -  [Function `borrow_store_resource`](#0x1_fungible_asset_borrow_store_resource)
--  [Function `upgrade_to_concurrent`](#0x1_fungible_asset_upgrade_to_concurrent)
 -  [Specification](#@Specification_1)
-    -  [Module-level Specification](#@Module-level_Specification_2)
 
 
-<pre><code><b>use</b> <a href="aggregator_v2.md#0x1_aggregator_v2">0x1::aggregator_v2</a>;
-<b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error">0x1::error</a>;
+<pre><code><b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error">0x1::error</a>;
 <b>use</b> <a href="event.md#0x1_event">0x1::event</a>;
-<b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features">0x1::features</a>;
 <b>use</b> <a href="object.md#0x1_object">0x1::object</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option">0x1::option</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">0x1::signer</a>;
@@ -80,7 +75,7 @@ metadata object can be any object that equipped with <code><a href="fungible_ass
 
 
 
-<a id="0x1_fungible_asset_Supply"></a>
+<a name="0x1_fungible_asset_Supply"></a>
 
 ## Resource `Supply`
 
@@ -114,35 +109,7 @@ metadata object can be any object that equipped with <code><a href="fungible_ass
 
 </details>
 
-<a id="0x1_fungible_asset_ConcurrentSupply"></a>
-
-## Resource `ConcurrentSupply`
-
-
-
-<pre><code>#[resource_group_member(#[group = <a href="object.md#0x1_object_ObjectGroup">0x1::object::ObjectGroup</a>])]
-<b>struct</b> <a href="fungible_asset.md#0x1_fungible_asset_ConcurrentSupply">ConcurrentSupply</a> <b>has</b> key
-</code></pre>
-
-
-
-<details>
-<summary>Fields</summary>
-
-
-<dl>
-<dt>
-<code>current: <a href="aggregator_v2.md#0x1_aggregator_v2_Aggregator">aggregator_v2::Aggregator</a>&lt;u128&gt;</code>
-</dt>
-<dd>
-
-</dd>
-</dl>
-
-
-</details>
-
-<a id="0x1_fungible_asset_Metadata"></a>
+<a name="0x1_fungible_asset_Metadata"></a>
 
 ## Resource `Metadata`
 
@@ -199,7 +166,7 @@ Metadata of a Fungible asset
 
 </details>
 
-<a id="0x1_fungible_asset_FungibleStore"></a>
+<a name="0x1_fungible_asset_FungibleStore"></a>
 
 ## Resource `FungibleStore`
 
@@ -240,7 +207,7 @@ The store object that holds fungible assets of a specific type associated with a
 
 </details>
 
-<a id="0x1_fungible_asset_FungibleAssetEvents"></a>
+<a name="0x1_fungible_asset_FungibleAssetEvents"></a>
 
 ## Resource `FungibleAssetEvents`
 
@@ -280,7 +247,7 @@ The store object that holds fungible assets of a specific type associated with a
 
 </details>
 
-<a id="0x1_fungible_asset_FungibleAsset"></a>
+<a name="0x1_fungible_asset_FungibleAsset"></a>
 
 ## Struct `FungibleAsset`
 
@@ -315,7 +282,7 @@ FungibleAsset is ephemeral and cannot be stored directly. It must be deposited b
 
 </details>
 
-<a id="0x1_fungible_asset_MintRef"></a>
+<a name="0x1_fungible_asset_MintRef"></a>
 
 ## Struct `MintRef`
 
@@ -343,7 +310,7 @@ MintRef can be used to mint the fungible asset into an account's store.
 
 </details>
 
-<a id="0x1_fungible_asset_TransferRef"></a>
+<a name="0x1_fungible_asset_TransferRef"></a>
 
 ## Struct `TransferRef`
 
@@ -372,7 +339,7 @@ and allow the holder of TransferRef to transfer fungible assets from any account
 
 </details>
 
-<a id="0x1_fungible_asset_BurnRef"></a>
+<a name="0x1_fungible_asset_BurnRef"></a>
 
 ## Struct `BurnRef`
 
@@ -400,7 +367,7 @@ BurnRef can be used to burn fungible assets from a given holder account.
 
 </details>
 
-<a id="0x1_fungible_asset_DepositEvent"></a>
+<a name="0x1_fungible_asset_DepositEvent"></a>
 
 ## Struct `DepositEvent`
 
@@ -428,7 +395,7 @@ Emitted when fungible assets are deposited into a store.
 
 </details>
 
-<a id="0x1_fungible_asset_WithdrawEvent"></a>
+<a name="0x1_fungible_asset_WithdrawEvent"></a>
 
 ## Struct `WithdrawEvent`
 
@@ -456,7 +423,7 @@ Emitted when fungible assets are withdrawn from a store.
 
 </details>
 
-<a id="0x1_fungible_asset_FrozenEvent"></a>
+<a name="0x1_fungible_asset_FrozenEvent"></a>
 
 ## Struct `FrozenEvent`
 
@@ -484,12 +451,12 @@ Emitted when a store's frozen status is updated.
 
 </details>
 
-<a id="@Constants_0"></a>
+<a name="@Constants_0"></a>
 
 ## Constants
 
 
-<a id="0x1_fungible_asset_MAX_U128"></a>
+<a name="0x1_fungible_asset_MAX_U128"></a>
 
 Maximum possible coin supply.
 
@@ -499,7 +466,7 @@ Maximum possible coin supply.
 
 
 
-<a id="0x1_fungible_asset_EINSUFFICIENT_BALANCE"></a>
+<a name="0x1_fungible_asset_EINSUFFICIENT_BALANCE"></a>
 
 Insufficient balance to withdraw or transfer.
 
@@ -509,7 +476,7 @@ Insufficient balance to withdraw or transfer.
 
 
 
-<a id="0x1_fungible_asset_EAMOUNT_CANNOT_BE_ZERO"></a>
+<a name="0x1_fungible_asset_EAMOUNT_CANNOT_BE_ZERO"></a>
 
 Amount cannot be zero.
 
@@ -519,7 +486,7 @@ Amount cannot be zero.
 
 
 
-<a id="0x1_fungible_asset_EAMOUNT_IS_NOT_ZERO"></a>
+<a name="0x1_fungible_asset_EAMOUNT_IS_NOT_ZERO"></a>
 
 Cannot destroy non-empty fungible assets.
 
@@ -529,7 +496,7 @@ Cannot destroy non-empty fungible assets.
 
 
 
-<a id="0x1_fungible_asset_EBALANCE_IS_NOT_ZERO"></a>
+<a name="0x1_fungible_asset_EBALANCE_IS_NOT_ZERO"></a>
 
 Cannot destroy fungible stores with a non-zero balance.
 
@@ -539,7 +506,7 @@ Cannot destroy fungible stores with a non-zero balance.
 
 
 
-<a id="0x1_fungible_asset_EBURN_REF_AND_FUNGIBLE_ASSET_MISMATCH"></a>
+<a name="0x1_fungible_asset_EBURN_REF_AND_FUNGIBLE_ASSET_MISMATCH"></a>
 
 Burn ref and fungible asset do not match.
 
@@ -549,7 +516,7 @@ Burn ref and fungible asset do not match.
 
 
 
-<a id="0x1_fungible_asset_EBURN_REF_AND_STORE_MISMATCH"></a>
+<a name="0x1_fungible_asset_EBURN_REF_AND_STORE_MISMATCH"></a>
 
 Burn ref and store do not match.
 
@@ -559,17 +526,7 @@ Burn ref and store do not match.
 
 
 
-<a id="0x1_fungible_asset_ECONCURRENT_SUPPLY_NOT_ENABLED"></a>
-
-Flag for Concurrent Supply not enabled
-
-
-<pre><code><b>const</b> <a href="fungible_asset.md#0x1_fungible_asset_ECONCURRENT_SUPPLY_NOT_ENABLED">ECONCURRENT_SUPPLY_NOT_ENABLED</a>: u64 = 22;
-</code></pre>
-
-
-
-<a id="0x1_fungible_asset_EDECIMALS_TOO_LARGE"></a>
+<a name="0x1_fungible_asset_EDECIMALS_TOO_LARGE"></a>
 
 Decimals is over the maximum of 32
 
@@ -579,7 +536,7 @@ Decimals is over the maximum of 32
 
 
 
-<a id="0x1_fungible_asset_EFUNGIBLE_ASSET_AND_STORE_MISMATCH"></a>
+<a name="0x1_fungible_asset_EFUNGIBLE_ASSET_AND_STORE_MISMATCH"></a>
 
 Fungible asset and store do not match.
 
@@ -589,7 +546,7 @@ Fungible asset and store do not match.
 
 
 
-<a id="0x1_fungible_asset_EFUNGIBLE_ASSET_MISMATCH"></a>
+<a name="0x1_fungible_asset_EFUNGIBLE_ASSET_MISMATCH"></a>
 
 Fungible asset do not match when merging.
 
@@ -599,7 +556,7 @@ Fungible asset do not match when merging.
 
 
 
-<a id="0x1_fungible_asset_EMAX_SUPPLY_EXCEEDED"></a>
+<a name="0x1_fungible_asset_EMAX_SUPPLY_EXCEEDED"></a>
 
 The fungible asset's supply has exceeded maximum.
 
@@ -609,7 +566,7 @@ The fungible asset's supply has exceeded maximum.
 
 
 
-<a id="0x1_fungible_asset_EMINT_REF_AND_STORE_MISMATCH"></a>
+<a name="0x1_fungible_asset_EMINT_REF_AND_STORE_MISMATCH"></a>
 
 The mint ref and the the store do not match.
 
@@ -619,7 +576,7 @@ The mint ref and the the store do not match.
 
 
 
-<a id="0x1_fungible_asset_ENAME_TOO_LONG"></a>
+<a name="0x1_fungible_asset_ENAME_TOO_LONG"></a>
 
 Name of the fungible asset metadata is too long
 
@@ -629,7 +586,7 @@ Name of the fungible asset metadata is too long
 
 
 
-<a id="0x1_fungible_asset_ENOT_STORE_OWNER"></a>
+<a name="0x1_fungible_asset_ENOT_STORE_OWNER"></a>
 
 Account is not the store's owner.
 
@@ -639,7 +596,7 @@ Account is not the store's owner.
 
 
 
-<a id="0x1_fungible_asset_EOBJECT_IS_DELETABLE"></a>
+<a name="0x1_fungible_asset_EOBJECT_IS_DELETABLE"></a>
 
 Fungibility is only available for non-deletable objects.
 
@@ -649,7 +606,7 @@ Fungibility is only available for non-deletable objects.
 
 
 
-<a id="0x1_fungible_asset_ESTORE_IS_FROZEN"></a>
+<a name="0x1_fungible_asset_ESTORE_IS_FROZEN"></a>
 
 Store is disabled from sending and receiving this fungible asset.
 
@@ -659,7 +616,7 @@ Store is disabled from sending and receiving this fungible asset.
 
 
 
-<a id="0x1_fungible_asset_ESUPPLY_NOT_FOUND"></a>
+<a name="0x1_fungible_asset_ESUPPLY_NOT_FOUND"></a>
 
 Supply resource is not found for a metadata object.
 
@@ -669,7 +626,7 @@ Supply resource is not found for a metadata object.
 
 
 
-<a id="0x1_fungible_asset_ESUPPLY_UNDERFLOW"></a>
+<a name="0x1_fungible_asset_ESUPPLY_UNDERFLOW"></a>
 
 The fungible asset's supply will be negative which should be impossible.
 
@@ -679,7 +636,7 @@ The fungible asset's supply will be negative which should be impossible.
 
 
 
-<a id="0x1_fungible_asset_ESYMBOL_TOO_LONG"></a>
+<a name="0x1_fungible_asset_ESYMBOL_TOO_LONG"></a>
 
 Symbol of the fungible asset metadata is too long
 
@@ -689,7 +646,7 @@ Symbol of the fungible asset metadata is too long
 
 
 
-<a id="0x1_fungible_asset_ETRANSFER_REF_AND_FUNGIBLE_ASSET_MISMATCH"></a>
+<a name="0x1_fungible_asset_ETRANSFER_REF_AND_FUNGIBLE_ASSET_MISMATCH"></a>
 
 The transfer ref and the fungible asset do not match.
 
@@ -699,7 +656,7 @@ The transfer ref and the fungible asset do not match.
 
 
 
-<a id="0x1_fungible_asset_ETRANSFER_REF_AND_STORE_MISMATCH"></a>
+<a name="0x1_fungible_asset_ETRANSFER_REF_AND_STORE_MISMATCH"></a>
 
 Transfer ref and store do not match.
 
@@ -709,7 +666,7 @@ Transfer ref and store do not match.
 
 
 
-<a id="0x1_fungible_asset_EURI_TOO_LONG"></a>
+<a name="0x1_fungible_asset_EURI_TOO_LONG"></a>
 
 URI for the icon of the fungible asset metadata is too long
 
@@ -719,7 +676,7 @@ URI for the icon of the fungible asset metadata is too long
 
 
 
-<a id="0x1_fungible_asset_MAX_DECIMALS"></a>
+<a name="0x1_fungible_asset_MAX_DECIMALS"></a>
 
 
 
@@ -728,7 +685,7 @@ URI for the icon of the fungible asset metadata is too long
 
 
 
-<a id="0x1_fungible_asset_MAX_NAME_LENGTH"></a>
+<a name="0x1_fungible_asset_MAX_NAME_LENGTH"></a>
 
 
 
@@ -737,7 +694,7 @@ URI for the icon of the fungible asset metadata is too long
 
 
 
-<a id="0x1_fungible_asset_MAX_SYMBOL_LENGTH"></a>
+<a name="0x1_fungible_asset_MAX_SYMBOL_LENGTH"></a>
 
 
 
@@ -746,7 +703,7 @@ URI for the icon of the fungible asset metadata is too long
 
 
 
-<a id="0x1_fungible_asset_MAX_URI_LENGTH"></a>
+<a name="0x1_fungible_asset_MAX_URI_LENGTH"></a>
 
 
 
@@ -755,7 +712,7 @@ URI for the icon of the fungible asset metadata is too long
 
 
 
-<a id="0x1_fungible_asset_add_fungibility"></a>
+<a name="0x1_fungible_asset_add_fungibility"></a>
 
 ## Function `add_fungibility`
 
@@ -763,8 +720,6 @@ Make an existing object fungible by adding the Metadata resource.
 This returns the capabilities to mint, burn, and transfer.
 maximum_supply defines the behavior of maximum supply when monitoring:
 - option::none(): Monitoring unlimited supply
-(width of the field - MAX_U128 is the implicit maximum supply)
-if option::some(MAX_U128) is used, it is treated as unlimited supply.
 - option::some(max): Monitoring fixed supply with <code>max</code> as the maximum supply.
 
 
@@ -802,23 +757,10 @@ if option::some(MAX_U128) is used, it is treated as unlimited supply.
             project_uri,
         }
     );
-
-    <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_concurrent_assets_enabled">features::concurrent_assets_enabled</a>()) {
-        <b>let</b> unlimited = <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_is_none">option::is_none</a>(&maximum_supply);
-        <b>move_to</b>(metadata_object_signer, <a href="fungible_asset.md#0x1_fungible_asset_ConcurrentSupply">ConcurrentSupply</a> {
-            current: <b>if</b> (unlimited) {
-                <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator">aggregator_v2::create_unbounded_aggregator</a>()
-            } <b>else</b> {
-                <a href="aggregator_v2.md#0x1_aggregator_v2_create_aggregator">aggregator_v2::create_aggregator</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_extract">option::extract</a>(&<b>mut</b> maximum_supply))
-            },
-        });
-    } <b>else</b> {
-        <b>move_to</b>(metadata_object_signer, <a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a> {
-            current: 0,
-            maximum: maximum_supply
-        });
-    };
-
+    <b>move_to</b>(metadata_object_signer, <a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a> {
+        current: 0,
+        maximum: maximum_supply
+    });
     <a href="object.md#0x1_object_object_from_constructor_ref">object::object_from_constructor_ref</a>&lt;<a href="fungible_asset.md#0x1_fungible_asset_Metadata">Metadata</a>&gt;(constructor_ref)
 }
 </code></pre>
@@ -827,7 +769,7 @@ if option::some(MAX_U128) is used, it is treated as unlimited supply.
 
 </details>
 
-<a id="0x1_fungible_asset_generate_mint_ref"></a>
+<a name="0x1_fungible_asset_generate_mint_ref"></a>
 
 ## Function `generate_mint_ref`
 
@@ -854,7 +796,7 @@ This can only be called at object creation time as constructor_ref is only avail
 
 </details>
 
-<a id="0x1_fungible_asset_generate_burn_ref"></a>
+<a name="0x1_fungible_asset_generate_burn_ref"></a>
 
 ## Function `generate_burn_ref`
 
@@ -881,7 +823,7 @@ This can only be called at object creation time as constructor_ref is only avail
 
 </details>
 
-<a id="0x1_fungible_asset_generate_transfer_ref"></a>
+<a name="0x1_fungible_asset_generate_transfer_ref"></a>
 
 ## Function `generate_transfer_ref`
 
@@ -909,7 +851,7 @@ This can only be called at object creation time as constructor_ref is only avail
 
 </details>
 
-<a id="0x1_fungible_asset_supply"></a>
+<a name="0x1_fungible_asset_supply"></a>
 
 ## Function `supply`
 
@@ -926,12 +868,9 @@ Get the current supply from the <code>metadata</code> object.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="fungible_asset.md#0x1_fungible_asset_supply">supply</a>&lt;T: key&gt;(metadata: Object&lt;T&gt;): Option&lt;u128&gt; <b>acquires</b> <a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>, <a href="fungible_asset.md#0x1_fungible_asset_ConcurrentSupply">ConcurrentSupply</a> {
+<pre><code><b>public</b> <b>fun</b> <a href="fungible_asset.md#0x1_fungible_asset_supply">supply</a>&lt;T: key&gt;(metadata: Object&lt;T&gt;): Option&lt;u128&gt; <b>acquires</b> <a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a> {
     <b>let</b> metadata_address = <a href="object.md#0x1_object_object_address">object::object_address</a>(&metadata);
-    <b>if</b> (<b>exists</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_ConcurrentSupply">ConcurrentSupply</a>&gt;(metadata_address)) {
-        <b>let</b> supply = <b>borrow_global</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_ConcurrentSupply">ConcurrentSupply</a>&gt;(metadata_address);
-        <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_some">option::some</a>(<a href="aggregator_v2.md#0x1_aggregator_v2_read">aggregator_v2::read</a>(&supply.current))
-    } <b>else</b> <b>if</b> (<b>exists</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>&gt;(metadata_address)) {
+    <b>if</b> (<b>exists</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>&gt;(metadata_address)) {
         <b>let</b> supply = <b>borrow_global</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>&gt;(metadata_address);
         <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_some">option::some</a>(supply.current)
     } <b>else</b> {
@@ -944,12 +883,11 @@ Get the current supply from the <code>metadata</code> object.
 
 </details>
 
-<a id="0x1_fungible_asset_maximum"></a>
+<a name="0x1_fungible_asset_maximum"></a>
 
 ## Function `maximum`
 
 Get the maximum supply from the <code>metadata</code> object.
-If supply is unlimited (or set explicitly to MAX_U128), none is returned
 
 
 <pre><code>#[view]
@@ -962,17 +900,9 @@ If supply is unlimited (or set explicitly to MAX_U128), none is returned
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="fungible_asset.md#0x1_fungible_asset_maximum">maximum</a>&lt;T: key&gt;(metadata: Object&lt;T&gt;): Option&lt;u128&gt; <b>acquires</b> <a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>, <a href="fungible_asset.md#0x1_fungible_asset_ConcurrentSupply">ConcurrentSupply</a> {
+<pre><code><b>public</b> <b>fun</b> <a href="fungible_asset.md#0x1_fungible_asset_maximum">maximum</a>&lt;T: key&gt;(metadata: Object&lt;T&gt;): Option&lt;u128&gt; <b>acquires</b> <a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a> {
     <b>let</b> metadata_address = <a href="object.md#0x1_object_object_address">object::object_address</a>(&metadata);
-    <b>if</b> (<b>exists</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_ConcurrentSupply">ConcurrentSupply</a>&gt;(metadata_address)) {
-        <b>let</b> supply = <b>borrow_global</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_ConcurrentSupply">ConcurrentSupply</a>&gt;(metadata_address);
-        <b>let</b> max_value = <a href="aggregator_v2.md#0x1_aggregator_v2_max_value">aggregator_v2::max_value</a>(&supply.current);
-        <b>if</b> (max_value == <a href="fungible_asset.md#0x1_fungible_asset_MAX_U128">MAX_U128</a>) {
-            <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_none">option::none</a>()
-        } <b>else</b> {
-            <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_some">option::some</a>(max_value)
-        }
-    } <b>else</b> <b>if</b> (<b>exists</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>&gt;(metadata_address)) {
+    <b>if</b> (<b>exists</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>&gt;(metadata_address)) {
         <b>let</b> supply = <b>borrow_global</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>&gt;(metadata_address);
         supply.maximum
     } <b>else</b> {
@@ -985,7 +915,7 @@ If supply is unlimited (or set explicitly to MAX_U128), none is returned
 
 </details>
 
-<a id="0x1_fungible_asset_name"></a>
+<a name="0x1_fungible_asset_name"></a>
 
 ## Function `name`
 
@@ -1011,7 +941,7 @@ Get the name of the fungible asset from the <code>metadata</code> object.
 
 </details>
 
-<a id="0x1_fungible_asset_symbol"></a>
+<a name="0x1_fungible_asset_symbol"></a>
 
 ## Function `symbol`
 
@@ -1037,7 +967,7 @@ Get the symbol of the fungible asset from the <code>metadata</code> object.
 
 </details>
 
-<a id="0x1_fungible_asset_decimals"></a>
+<a name="0x1_fungible_asset_decimals"></a>
 
 ## Function `decimals`
 
@@ -1063,7 +993,7 @@ Get the decimals from the <code>metadata</code> object.
 
 </details>
 
-<a id="0x1_fungible_asset_store_exists"></a>
+<a name="0x1_fungible_asset_store_exists"></a>
 
 ## Function `store_exists`
 
@@ -1089,7 +1019,7 @@ Return whether the provided address has a store initialized.
 
 </details>
 
-<a id="0x1_fungible_asset_metadata_from_asset"></a>
+<a name="0x1_fungible_asset_metadata_from_asset"></a>
 
 ## Function `metadata_from_asset`
 
@@ -1114,7 +1044,7 @@ Return the underlying metadata object
 
 </details>
 
-<a id="0x1_fungible_asset_store_metadata"></a>
+<a name="0x1_fungible_asset_store_metadata"></a>
 
 ## Function `store_metadata`
 
@@ -1140,7 +1070,7 @@ Return the underlying metadata object.
 
 </details>
 
-<a id="0x1_fungible_asset_amount"></a>
+<a name="0x1_fungible_asset_amount"></a>
 
 ## Function `amount`
 
@@ -1165,7 +1095,7 @@ Return the <code>amount</code> of a given fungible asset.
 
 </details>
 
-<a id="0x1_fungible_asset_balance"></a>
+<a name="0x1_fungible_asset_balance"></a>
 
 ## Function `balance`
 
@@ -1195,7 +1125,7 @@ Get the balance of a given store.
 
 </details>
 
-<a id="0x1_fungible_asset_is_frozen"></a>
+<a name="0x1_fungible_asset_is_frozen"></a>
 
 ## Function `is_frozen`
 
@@ -1223,7 +1153,7 @@ If the store has not been created, we default to returning false so deposits can
 
 </details>
 
-<a id="0x1_fungible_asset_asset_metadata"></a>
+<a name="0x1_fungible_asset_asset_metadata"></a>
 
 ## Function `asset_metadata`
 
@@ -1247,7 +1177,7 @@ If the store has not been created, we default to returning false so deposits can
 
 </details>
 
-<a id="0x1_fungible_asset_mint_ref_metadata"></a>
+<a name="0x1_fungible_asset_mint_ref_metadata"></a>
 
 ## Function `mint_ref_metadata`
 
@@ -1272,7 +1202,7 @@ Get the underlying metadata object from the <code><a href="fungible_asset.md#0x1
 
 </details>
 
-<a id="0x1_fungible_asset_transfer_ref_metadata"></a>
+<a name="0x1_fungible_asset_transfer_ref_metadata"></a>
 
 ## Function `transfer_ref_metadata`
 
@@ -1297,7 +1227,7 @@ Get the underlying metadata object from the <code><a href="fungible_asset.md#0x1
 
 </details>
 
-<a id="0x1_fungible_asset_burn_ref_metadata"></a>
+<a name="0x1_fungible_asset_burn_ref_metadata"></a>
 
 ## Function `burn_ref_metadata`
 
@@ -1322,7 +1252,7 @@ Get the underlying metadata object from the <code><a href="fungible_asset.md#0x1
 
 </details>
 
-<a id="0x1_fungible_asset_transfer"></a>
+<a name="0x1_fungible_asset_transfer"></a>
 
 ## Function `transfer`
 
@@ -1354,7 +1284,7 @@ Note: it does not move the underlying object.
 
 </details>
 
-<a id="0x1_fungible_asset_create_store"></a>
+<a name="0x1_fungible_asset_create_store"></a>
 
 ## Function `create_store`
 
@@ -1397,7 +1327,7 @@ Applications can use this to create multiple stores for isolating fungible asset
 
 </details>
 
-<a id="0x1_fungible_asset_remove_store"></a>
+<a name="0x1_fungible_asset_remove_store"></a>
 
 ## Function `remove_store`
 
@@ -1434,7 +1364,7 @@ Used to delete a store.  Requires the store to be completely empty prior to remo
 
 </details>
 
-<a id="0x1_fungible_asset_withdraw"></a>
+<a name="0x1_fungible_asset_withdraw"></a>
 
 ## Function `withdraw`
 
@@ -1465,7 +1395,7 @@ Withdraw <code>amount</code> of the fungible asset from <code>store</code> by th
 
 </details>
 
-<a id="0x1_fungible_asset_deposit"></a>
+<a name="0x1_fungible_asset_deposit"></a>
 
 ## Function `deposit`
 
@@ -1491,7 +1421,7 @@ Deposit <code>amount</code> of the fungible asset to <code>store</code>.
 
 </details>
 
-<a id="0x1_fungible_asset_mint"></a>
+<a name="0x1_fungible_asset_mint"></a>
 
 ## Function `mint`
 
@@ -1507,7 +1437,7 @@ Mint the specified <code>amount</code> of the fungible asset.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="fungible_asset.md#0x1_fungible_asset_mint">mint</a>(ref: &<a href="fungible_asset.md#0x1_fungible_asset_MintRef">MintRef</a>, amount: u64): <a href="fungible_asset.md#0x1_fungible_asset_FungibleAsset">FungibleAsset</a> <b>acquires</b> <a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>, <a href="fungible_asset.md#0x1_fungible_asset_ConcurrentSupply">ConcurrentSupply</a> {
+<pre><code><b>public</b> <b>fun</b> <a href="fungible_asset.md#0x1_fungible_asset_mint">mint</a>(ref: &<a href="fungible_asset.md#0x1_fungible_asset_MintRef">MintRef</a>, amount: u64): <a href="fungible_asset.md#0x1_fungible_asset_FungibleAsset">FungibleAsset</a> <b>acquires</b> <a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a> {
     <b>assert</b>!(amount &gt; 0, <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="fungible_asset.md#0x1_fungible_asset_EAMOUNT_CANNOT_BE_ZERO">EAMOUNT_CANNOT_BE_ZERO</a>));
     <b>let</b> metadata = ref.metadata;
     <a href="fungible_asset.md#0x1_fungible_asset_increase_supply">increase_supply</a>(&metadata, amount);
@@ -1523,7 +1453,7 @@ Mint the specified <code>amount</code> of the fungible asset.
 
 </details>
 
-<a id="0x1_fungible_asset_mint_to"></a>
+<a name="0x1_fungible_asset_mint_to"></a>
 
 ## Function `mint_to`
 
@@ -1540,7 +1470,7 @@ Mint the specified <code>amount</code> of the fungible asset to a destination st
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="fungible_asset.md#0x1_fungible_asset_mint_to">mint_to</a>&lt;T: key&gt;(ref: &<a href="fungible_asset.md#0x1_fungible_asset_MintRef">MintRef</a>, store: Object&lt;T&gt;, amount: u64)
-<b>acquires</b> <a href="fungible_asset.md#0x1_fungible_asset_FungibleStore">FungibleStore</a>, <a href="fungible_asset.md#0x1_fungible_asset_FungibleAssetEvents">FungibleAssetEvents</a>, <a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>, <a href="fungible_asset.md#0x1_fungible_asset_ConcurrentSupply">ConcurrentSupply</a> {
+<b>acquires</b> <a href="fungible_asset.md#0x1_fungible_asset_FungibleStore">FungibleStore</a>, <a href="fungible_asset.md#0x1_fungible_asset_FungibleAssetEvents">FungibleAssetEvents</a>, <a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a> {
     <a href="fungible_asset.md#0x1_fungible_asset_deposit">deposit</a>(store, <a href="fungible_asset.md#0x1_fungible_asset_mint">mint</a>(ref, amount));
 }
 </code></pre>
@@ -1549,7 +1479,7 @@ Mint the specified <code>amount</code> of the fungible asset to a destination st
 
 </details>
 
-<a id="0x1_fungible_asset_set_frozen_flag"></a>
+<a name="0x1_fungible_asset_set_frozen_flag"></a>
 
 ## Function `set_frozen_flag`
 
@@ -1586,7 +1516,7 @@ Enable/disable a store's ability to do direct transfers of the fungible asset.
 
 </details>
 
-<a id="0x1_fungible_asset_burn"></a>
+<a name="0x1_fungible_asset_burn"></a>
 
 ## Function `burn`
 
@@ -1602,7 +1532,7 @@ Burns a fungible asset
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b> <b>fun</b> <a href="fungible_asset.md#0x1_fungible_asset_burn">burn</a>(ref: &<a href="fungible_asset.md#0x1_fungible_asset_BurnRef">BurnRef</a>, fa: <a href="fungible_asset.md#0x1_fungible_asset_FungibleAsset">FungibleAsset</a>) <b>acquires</b> <a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>, <a href="fungible_asset.md#0x1_fungible_asset_ConcurrentSupply">ConcurrentSupply</a> {
+<pre><code><b>public</b> <b>fun</b> <a href="fungible_asset.md#0x1_fungible_asset_burn">burn</a>(ref: &<a href="fungible_asset.md#0x1_fungible_asset_BurnRef">BurnRef</a>, fa: <a href="fungible_asset.md#0x1_fungible_asset_FungibleAsset">FungibleAsset</a>) <b>acquires</b> <a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a> {
     <b>let</b> <a href="fungible_asset.md#0x1_fungible_asset_FungibleAsset">FungibleAsset</a> {
         metadata,
         amount,
@@ -1616,7 +1546,7 @@ Burns a fungible asset
 
 </details>
 
-<a id="0x1_fungible_asset_burn_from"></a>
+<a name="0x1_fungible_asset_burn_from"></a>
 
 ## Function `burn_from`
 
@@ -1636,7 +1566,7 @@ Burn the <code>amount</code> of the fungible asset from the given store.
     ref: &<a href="fungible_asset.md#0x1_fungible_asset_BurnRef">BurnRef</a>,
     store: Object&lt;T&gt;,
     amount: u64
-) <b>acquires</b> <a href="fungible_asset.md#0x1_fungible_asset_FungibleStore">FungibleStore</a>, <a href="fungible_asset.md#0x1_fungible_asset_FungibleAssetEvents">FungibleAssetEvents</a>, <a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>, <a href="fungible_asset.md#0x1_fungible_asset_ConcurrentSupply">ConcurrentSupply</a> {
+) <b>acquires</b> <a href="fungible_asset.md#0x1_fungible_asset_FungibleStore">FungibleStore</a>, <a href="fungible_asset.md#0x1_fungible_asset_FungibleAssetEvents">FungibleAssetEvents</a>, <a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a> {
     <b>let</b> metadata = ref.metadata;
     <b>assert</b>!(metadata == <a href="fungible_asset.md#0x1_fungible_asset_store_metadata">store_metadata</a>(store), <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="fungible_asset.md#0x1_fungible_asset_EBURN_REF_AND_STORE_MISMATCH">EBURN_REF_AND_STORE_MISMATCH</a>));
     <b>let</b> store_addr = <a href="object.md#0x1_object_object_address">object::object_address</a>(&store);
@@ -1648,7 +1578,7 @@ Burn the <code>amount</code> of the fungible asset from the given store.
 
 </details>
 
-<a id="0x1_fungible_asset_withdraw_with_ref"></a>
+<a name="0x1_fungible_asset_withdraw_with_ref"></a>
 
 ## Function `withdraw_with_ref`
 
@@ -1681,7 +1611,7 @@ Withdraw <code>amount</code> of the fungible asset from the <code>store</code> i
 
 </details>
 
-<a id="0x1_fungible_asset_deposit_with_ref"></a>
+<a name="0x1_fungible_asset_deposit_with_ref"></a>
 
 ## Function `deposit_with_ref`
 
@@ -1714,7 +1644,7 @@ Deposit the fungible asset into the <code>store</code> ignoring <code>frozen</co
 
 </details>
 
-<a id="0x1_fungible_asset_transfer_with_ref"></a>
+<a name="0x1_fungible_asset_transfer_with_ref"></a>
 
 ## Function `transfer_with_ref`
 
@@ -1745,7 +1675,7 @@ Transfer <code>amount</code> of the fungible asset with <code><a href="fungible_
 
 </details>
 
-<a id="0x1_fungible_asset_zero"></a>
+<a name="0x1_fungible_asset_zero"></a>
 
 ## Function `zero`
 
@@ -1774,7 +1704,7 @@ This can be useful when starting a series of computations where the initial valu
 
 </details>
 
-<a id="0x1_fungible_asset_extract"></a>
+<a name="0x1_fungible_asset_extract"></a>
 
 ## Function `extract`
 
@@ -1804,7 +1734,7 @@ Extract a given amount from the given fungible asset and return a new one.
 
 </details>
 
-<a id="0x1_fungible_asset_merge"></a>
+<a name="0x1_fungible_asset_merge"></a>
 
 ## Function `merge`
 
@@ -1832,7 +1762,7 @@ equal to the sum of the two (<code>dst_fungible_asset</code> and <code>src_fungi
 
 </details>
 
-<a id="0x1_fungible_asset_destroy_zero"></a>
+<a name="0x1_fungible_asset_destroy_zero"></a>
 
 ## Function `destroy_zero`
 
@@ -1858,7 +1788,7 @@ Destroy an empty fungible asset.
 
 </details>
 
-<a id="0x1_fungible_asset_deposit_internal"></a>
+<a name="0x1_fungible_asset_deposit_internal"></a>
 
 ## Function `deposit_internal`
 
@@ -1892,7 +1822,7 @@ Destroy an empty fungible asset.
 
 </details>
 
-<a id="0x1_fungible_asset_withdraw_internal"></a>
+<a name="0x1_fungible_asset_withdraw_internal"></a>
 
 ## Function `withdraw_internal`
 
@@ -1929,7 +1859,7 @@ Extract <code>amount</code> of the fungible asset from <code>store</code>.
 
 </details>
 
-<a id="0x1_fungible_asset_increase_supply"></a>
+<a name="0x1_fungible_asset_increase_supply"></a>
 
 ## Function `increase_supply`
 
@@ -1945,29 +1875,19 @@ Increase the supply of a fungible asset by minting.
 <summary>Implementation</summary>
 
 
-<pre><code><b>fun</b> <a href="fungible_asset.md#0x1_fungible_asset_increase_supply">increase_supply</a>&lt;T: key&gt;(metadata: &Object&lt;T&gt;, amount: u64) <b>acquires</b> <a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>, <a href="fungible_asset.md#0x1_fungible_asset_ConcurrentSupply">ConcurrentSupply</a> {
+<pre><code><b>fun</b> <a href="fungible_asset.md#0x1_fungible_asset_increase_supply">increase_supply</a>&lt;T: key&gt;(metadata: &Object&lt;T&gt;, amount: u64) <b>acquires</b> <a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a> {
     <b>assert</b>!(amount != 0, <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="fungible_asset.md#0x1_fungible_asset_EAMOUNT_CANNOT_BE_ZERO">EAMOUNT_CANNOT_BE_ZERO</a>));
     <b>let</b> metadata_address = <a href="object.md#0x1_object_object_address">object::object_address</a>(metadata);
-
-    <b>if</b> (<b>exists</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_ConcurrentSupply">ConcurrentSupply</a>&gt;(metadata_address)) {
-        <b>let</b> supply = <b>borrow_global_mut</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_ConcurrentSupply">ConcurrentSupply</a>&gt;(metadata_address);
+    <b>assert</b>!(<b>exists</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>&gt;(metadata_address), <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_found">error::not_found</a>(<a href="fungible_asset.md#0x1_fungible_asset_ESUPPLY_NOT_FOUND">ESUPPLY_NOT_FOUND</a>));
+    <b>let</b> supply = <b>borrow_global_mut</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>&gt;(metadata_address);
+    <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_is_some">option::is_some</a>(&supply.maximum)) {
+        <b>let</b> max = *<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_borrow_mut">option::borrow_mut</a>(&<b>mut</b> supply.maximum);
         <b>assert</b>!(
-            <a href="aggregator_v2.md#0x1_aggregator_v2_try_add">aggregator_v2::try_add</a>(&<b>mut</b> supply.current, (amount <b>as</b> u128)),
+            max - supply.current &gt;= (amount <b>as</b> u128),
             <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_out_of_range">error::out_of_range</a>(<a href="fungible_asset.md#0x1_fungible_asset_EMAX_SUPPLY_EXCEEDED">EMAX_SUPPLY_EXCEEDED</a>)
-        );
-    } <b>else</b> <b>if</b> (<b>exists</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>&gt;(metadata_address)) {
-        <b>let</b> supply = <b>borrow_global_mut</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>&gt;(metadata_address);
-        <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_is_some">option::is_some</a>(&supply.maximum)) {
-            <b>let</b> max = *<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_borrow_mut">option::borrow_mut</a>(&<b>mut</b> supply.maximum);
-            <b>assert</b>!(
-                max - supply.current &gt;= (amount <b>as</b> u128),
-                <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_out_of_range">error::out_of_range</a>(<a href="fungible_asset.md#0x1_fungible_asset_EMAX_SUPPLY_EXCEEDED">EMAX_SUPPLY_EXCEEDED</a>)
-            )
-        };
-        supply.current = supply.current + (amount <b>as</b> u128);
-    } <b>else</b> {
-        <b>assert</b>!(<b>false</b>, <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_found">error::not_found</a>(<a href="fungible_asset.md#0x1_fungible_asset_ESUPPLY_NOT_FOUND">ESUPPLY_NOT_FOUND</a>));
-    }
+        )
+    };
+    supply.current = supply.current + (amount <b>as</b> u128);
 }
 </code></pre>
 
@@ -1975,7 +1895,7 @@ Increase the supply of a fungible asset by minting.
 
 </details>
 
-<a id="0x1_fungible_asset_decrease_supply"></a>
+<a name="0x1_fungible_asset_decrease_supply"></a>
 
 ## Function `decrease_supply`
 
@@ -1991,28 +1911,16 @@ Decrease the supply of a fungible asset by burning.
 <summary>Implementation</summary>
 
 
-<pre><code><b>fun</b> <a href="fungible_asset.md#0x1_fungible_asset_decrease_supply">decrease_supply</a>&lt;T: key&gt;(metadata: &Object&lt;T&gt;, amount: u64) <b>acquires</b> <a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>, <a href="fungible_asset.md#0x1_fungible_asset_ConcurrentSupply">ConcurrentSupply</a> {
+<pre><code><b>fun</b> <a href="fungible_asset.md#0x1_fungible_asset_decrease_supply">decrease_supply</a>&lt;T: key&gt;(metadata: &Object&lt;T&gt;, amount: u64) <b>acquires</b> <a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a> {
     <b>assert</b>!(amount != 0, <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="fungible_asset.md#0x1_fungible_asset_EAMOUNT_CANNOT_BE_ZERO">EAMOUNT_CANNOT_BE_ZERO</a>));
     <b>let</b> metadata_address = <a href="object.md#0x1_object_object_address">object::object_address</a>(metadata);
-
-    <b>if</b> (<b>exists</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_ConcurrentSupply">ConcurrentSupply</a>&gt;(metadata_address)) {
-        <b>let</b> supply = <b>borrow_global_mut</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_ConcurrentSupply">ConcurrentSupply</a>&gt;(metadata_address);
-
-        <b>assert</b>!(
-            <a href="aggregator_v2.md#0x1_aggregator_v2_try_sub">aggregator_v2::try_sub</a>(&<b>mut</b> supply.current, (amount <b>as</b> u128)),
-            <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_out_of_range">error::out_of_range</a>(<a href="fungible_asset.md#0x1_fungible_asset_ESUPPLY_UNDERFLOW">ESUPPLY_UNDERFLOW</a>)
-        );
-    } <b>else</b> <b>if</b> (<b>exists</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>&gt;(metadata_address)) {
-        <b>assert</b>!(<b>exists</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>&gt;(metadata_address), <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_found">error::not_found</a>(<a href="fungible_asset.md#0x1_fungible_asset_ESUPPLY_NOT_FOUND">ESUPPLY_NOT_FOUND</a>));
-        <b>let</b> supply = <b>borrow_global_mut</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>&gt;(metadata_address);
-        <b>assert</b>!(
-            supply.current &gt;= (amount <b>as</b> u128),
-            <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="fungible_asset.md#0x1_fungible_asset_ESUPPLY_UNDERFLOW">ESUPPLY_UNDERFLOW</a>)
-        );
-        supply.current = supply.current - (amount <b>as</b> u128);
-    } <b>else</b> {
-        <b>assert</b>!(<b>false</b>, <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_found">error::not_found</a>(<a href="fungible_asset.md#0x1_fungible_asset_ESUPPLY_NOT_FOUND">ESUPPLY_NOT_FOUND</a>));
-    }
+    <b>assert</b>!(<b>exists</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>&gt;(metadata_address), <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_found">error::not_found</a>(<a href="fungible_asset.md#0x1_fungible_asset_ESUPPLY_NOT_FOUND">ESUPPLY_NOT_FOUND</a>));
+    <b>let</b> supply = <b>borrow_global_mut</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>&gt;(metadata_address);
+    <b>assert</b>!(
+        supply.current &gt;= (amount <b>as</b> u128),
+        <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_state">error::invalid_state</a>(<a href="fungible_asset.md#0x1_fungible_asset_ESUPPLY_UNDERFLOW">ESUPPLY_UNDERFLOW</a>)
+    );
+    supply.current = supply.current - (amount <b>as</b> u128);
 }
 </code></pre>
 
@@ -2020,7 +1928,7 @@ Decrease the supply of a fungible asset by burning.
 
 </details>
 
-<a id="0x1_fungible_asset_borrow_fungible_metadata"></a>
+<a name="0x1_fungible_asset_borrow_fungible_metadata"></a>
 
 ## Function `borrow_fungible_metadata`
 
@@ -2047,7 +1955,7 @@ Decrease the supply of a fungible asset by burning.
 
 </details>
 
-<a id="0x1_fungible_asset_borrow_fungible_metadata_mut"></a>
+<a name="0x1_fungible_asset_borrow_fungible_metadata_mut"></a>
 
 ## Function `borrow_fungible_metadata_mut`
 
@@ -2074,7 +1982,7 @@ Decrease the supply of a fungible asset by burning.
 
 </details>
 
-<a id="0x1_fungible_asset_borrow_store_resource"></a>
+<a name="0x1_fungible_asset_borrow_store_resource"></a>
 
 ## Function `borrow_store_resource`
 
@@ -2098,60 +2006,9 @@ Decrease the supply of a fungible asset by burning.
 
 </details>
 
-<a id="0x1_fungible_asset_upgrade_to_concurrent"></a>
-
-## Function `upgrade_to_concurrent`
-
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="fungible_asset.md#0x1_fungible_asset_upgrade_to_concurrent">upgrade_to_concurrent</a>(ref: &<a href="object.md#0x1_object_ExtendRef">object::ExtendRef</a>)
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="fungible_asset.md#0x1_fungible_asset_upgrade_to_concurrent">upgrade_to_concurrent</a>(
-    ref: &ExtendRef,
-) <b>acquires</b> <a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a> {
-    <b>let</b> metadata_object_address = <a href="object.md#0x1_object_address_from_extend_ref">object::address_from_extend_ref</a>(ref);
-    <b>let</b> metadata_object_signer = <a href="object.md#0x1_object_generate_signer_for_extending">object::generate_signer_for_extending</a>(ref);
-    <b>assert</b>!(<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_concurrent_assets_enabled">features::concurrent_assets_enabled</a>(), <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="fungible_asset.md#0x1_fungible_asset_ECONCURRENT_SUPPLY_NOT_ENABLED">ECONCURRENT_SUPPLY_NOT_ENABLED</a>));
-    <b>assert</b>!(<b>exists</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>&gt;(metadata_object_address), <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error_not_found">error::not_found</a>(<a href="fungible_asset.md#0x1_fungible_asset_ESUPPLY_NOT_FOUND">ESUPPLY_NOT_FOUND</a>));
-    <b>let</b> <a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a> {
-        current,
-        maximum,
-    } = <b>move_from</b>&lt;<a href="fungible_asset.md#0x1_fungible_asset_Supply">Supply</a>&gt;(metadata_object_address);
-
-    <b>let</b> unlimited = <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_is_none">option::is_none</a>(&maximum);
-    <b>let</b> supply = <a href="fungible_asset.md#0x1_fungible_asset_ConcurrentSupply">ConcurrentSupply</a> {
-        current: <b>if</b> (unlimited) {
-            <a href="aggregator_v2.md#0x1_aggregator_v2_create_unbounded_aggregator">aggregator_v2::create_unbounded_aggregator</a>()
-        }
-        <b>else</b> {
-            <a href="aggregator_v2.md#0x1_aggregator_v2_create_aggregator">aggregator_v2::create_aggregator</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_extract">option::extract</a>(&<b>mut</b> maximum))
-        },
-    };
-    // <b>update</b> current state:
-    <a href="aggregator_v2.md#0x1_aggregator_v2_add">aggregator_v2::add</a>(&<b>mut</b> supply.current, current);
-    <b>move_to</b>(&metadata_object_signer, supply);
-}
-</code></pre>
-
-
-
-</details>
-
-<a id="@Specification_1"></a>
+<a name="@Specification_1"></a>
 
 ## Specification
-
-
-<a id="@Module-level_Specification_2"></a>
-
-### Module-level Specification
 
 
 

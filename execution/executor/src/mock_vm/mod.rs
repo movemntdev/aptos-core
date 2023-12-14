@@ -14,11 +14,7 @@ use aptos_types::{
     access_path::AccessPath,
     account_address::AccountAddress,
     account_config::CORE_CODE_ADDRESS,
-    block_executor::{
-        config::BlockExecutorConfigFromOnchain,
-        partitioner::{ExecutableTransactions, PartitionedTransactions},
-    },
-    bytes::NumToBytes,
+    block_executor::partitioner::{ExecutableTransactions, PartitionedTransactions},
     chain_id::ChainId,
     contract_event::ContractEvent,
     event::EventKey,
@@ -28,9 +24,9 @@ use aptos_types::{
     },
     state_store::state_key::StateKey,
     transaction::{
-        signature_verified_transaction::SignatureVerifiedTransaction, ChangeSet, ExecutionStatus,
-        RawTransaction, Script, SignedTransaction, Transaction, TransactionArgument,
-        TransactionOutput, TransactionPayload, TransactionStatus, WriteSetPayload,
+        ChangeSet, ExecutionStatus, RawTransaction, Script, SignedTransaction, Transaction,
+        TransactionArgument, TransactionOutput, TransactionPayload, TransactionStatus,
+        WriteSetPayload,
     },
     vm_status::{StatusCode, VMStatus},
     write_set::{WriteOp, WriteSet, WriteSetMut},
@@ -69,17 +65,21 @@ impl TransactionBlockExecutor for MockVM {
     fn execute_transaction_block(
         transactions: ExecutableTransactions,
         state_view: CachedStateView,
-        onchain_config: BlockExecutorConfigFromOnchain,
+        maybe_block_gas_limit: Option<u64>,
     ) -> Result<ChunkOutput> {
-        ChunkOutput::by_transaction_execution::<MockVM>(transactions, state_view, onchain_config)
+        ChunkOutput::by_transaction_execution::<MockVM>(
+            transactions,
+            state_view,
+            maybe_block_gas_limit,
+        )
     }
 }
 
 impl VMExecutor for MockVM {
     fn execute_block(
-        transactions: &[SignatureVerifiedTransaction],
+        transactions: Vec<Transaction>,
         state_view: &impl StateView,
-        _onchain_config: BlockExecutorConfigFromOnchain,
+        _maybe_block_gas_limit: Option<u64>,
     ) -> Result<Vec<TransactionOutput>, VMStatus> {
         // output_cache is used to store the output of transactions so they are visible to later
         // transactions.
@@ -87,7 +87,6 @@ impl VMExecutor for MockVM {
         let mut outputs = vec![];
 
         for txn in transactions {
-            let txn = txn.expect_valid();
             if matches!(txn, Transaction::StateCheckpoint(_)) {
                 outputs.push(TransactionOutput::new(
                     WriteSet::default(),
@@ -194,7 +193,7 @@ impl VMExecutor for MockVM {
         _sharded_block_executor: &ShardedBlockExecutor<S, E>,
         _transactions: PartitionedTransactions,
         _state_view: Arc<S>,
-        _onchain_config: BlockExecutorConfigFromOnchain,
+        _maybe_block_gas_limit: Option<u64>,
     ) -> std::result::Result<Vec<TransactionOutput>, VMStatus> {
         todo!()
     }
@@ -246,7 +245,6 @@ fn read_state_value_from_storage(
     state_view
         .get_state_value_bytes(&StateKey::access_path(access_path.clone()))
         .expect("Failed to query storage.")
-        .map(|bytes| bytes.to_vec())
 }
 
 fn decode_bytes(bytes: &[u8]) -> u64 {
@@ -269,18 +267,14 @@ fn gen_genesis_writeset() -> WriteSet {
         access_path_for_config(ValidatorSet::CONFIG_ID).expect("access path in test");
     write_set.insert((
         StateKey::access_path(validator_set_ap),
-        WriteOp::Modification(bcs::to_bytes(&ValidatorSet::new(vec![])).unwrap().into()),
+        WriteOp::Modification(bcs::to_bytes(&ValidatorSet::new(vec![])).unwrap()),
     ));
     write_set.insert((
         StateKey::access_path(AccessPath::new(
             CORE_CODE_ADDRESS,
             ConfigurationResource::resource_path(),
         )),
-        WriteOp::Modification(
-            bcs::to_bytes(&ConfigurationResource::default())
-                .unwrap()
-                .into(),
-        ),
+        WriteOp::Modification(bcs::to_bytes(&ConfigurationResource::default()).unwrap()),
     ));
     write_set
         .freeze()
@@ -291,11 +285,11 @@ fn gen_mint_writeset(sender: AccountAddress, balance: u64, seqnum: u64) -> Write
     let mut write_set = WriteSetMut::default();
     write_set.insert((
         StateKey::access_path(balance_ap(sender)),
-        WriteOp::Modification(balance.le_bytes()),
+        WriteOp::Modification(balance.to_le_bytes().to_vec()),
     ));
     write_set.insert((
         StateKey::access_path(seqnum_ap(sender)),
-        WriteOp::Modification(seqnum.le_bytes()),
+        WriteOp::Modification(seqnum.to_le_bytes().to_vec()),
     ));
     write_set.freeze().expect("mint writeset should be valid")
 }
@@ -310,15 +304,15 @@ fn gen_payment_writeset(
     let mut write_set = WriteSetMut::default();
     write_set.insert((
         StateKey::access_path(balance_ap(sender)),
-        WriteOp::Modification(sender_balance.le_bytes()),
+        WriteOp::Modification(sender_balance.to_le_bytes().to_vec()),
     ));
     write_set.insert((
         StateKey::access_path(seqnum_ap(sender)),
-        WriteOp::Modification(sender_seqnum.le_bytes()),
+        WriteOp::Modification(sender_seqnum.to_le_bytes().to_vec()),
     ));
     write_set.insert((
         StateKey::access_path(balance_ap(recipient)),
-        WriteOp::Modification(recipient_balance.le_bytes()),
+        WriteOp::Modification(recipient_balance.to_le_bytes().to_vec()),
     ));
     write_set
         .freeze()

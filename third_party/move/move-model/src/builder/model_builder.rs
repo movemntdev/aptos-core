@@ -12,11 +12,11 @@ use crate::{
     builder::builtins,
     intrinsics::IntrinsicDecl,
     model::{
-        FunId, FunctionKind, GlobalEnv, Loc, ModuleId, Parameter, QualifiedId, QualifiedInstId,
-        SpecFunId, SpecVarId, StructId, TypeParameter,
+        FunId, FunctionKind, GlobalEnv, Loc, ModuleId, Parameter, QualifiedId, SpecFunId,
+        SpecVarId, StructId, TypeParameter,
     },
     symbol::Symbol,
-    ty::{Constraint, Type},
+    ty::Type,
 };
 use codespan_reporting::diagnostic::Severity;
 #[allow(unused_imports)]
@@ -57,8 +57,6 @@ pub(crate) struct ModelBuilder<'env> {
     pub move_fun_call_graph: BTreeMap<QualifiedId<SpecFunId>, BTreeSet<QualifiedId<SpecFunId>>>,
     /// A list of intrinsic declarations
     pub intrinsics: Vec<IntrinsicDecl>,
-    /// A module lookup table from names to their ids.
-    pub module_table: BTreeMap<ModuleName, ModuleId>,
 }
 
 /// A declaration of a specification function or operator in the builders state.
@@ -69,7 +67,6 @@ pub(crate) struct SpecOrBuiltinFunEntry {
     pub loc: Loc,
     pub oper: Operation,
     pub type_params: Vec<TypeParameter>,
-    pub type_param_constraints: BTreeMap<usize, Constraint>,
     pub params: Vec<Parameter>,
     pub result_type: Type,
     pub visibility: EntryVisibility,
@@ -119,7 +116,7 @@ pub(crate) struct StructEntry {
     pub struct_id: StructId,
     pub type_params: Vec<TypeParameter>,
     pub abilities: AbilitySet,
-    pub fields: Option<BTreeMap<Symbol, (Loc, usize, Type)>>,
+    pub fields: Option<BTreeMap<Symbol, (usize, Type)>>,
     pub attributes: Vec<Attribute>,
 }
 
@@ -196,8 +193,7 @@ impl<'env> ModelBuilder<'env> {
             fun_table: BTreeMap::new(),
             const_table: BTreeMap::new(),
             move_fun_call_graph: BTreeMap::new(),
-            intrinsics: Vec::new(),
-            module_table: BTreeMap::new(),
+            intrinsics: Default::default(),
         };
         builtins::declare_builtins(&mut translator);
         translator
@@ -298,7 +294,7 @@ impl<'env> ModelBuilder<'env> {
         struct_id: StructId,
         abilities: AbilitySet,
         type_params: Vec<TypeParameter>,
-        fields: Option<BTreeMap<Symbol, (Loc, usize, Type)>>,
+        fields: Option<BTreeMap<Symbol, (usize, Type)>>,
     ) {
         let entry = StructEntry {
             loc,
@@ -353,38 +349,6 @@ impl<'env> ModelBuilder<'env> {
                 );
                 Type::Error
             })
-    }
-
-    /// Looks up the fields of a structure, with instantiated field types.
-    pub fn lookup_struct_fields(&self, id: QualifiedInstId<StructId>) -> BTreeMap<Symbol, Type> {
-        let entry = self.lookup_struct_entry(id.to_qualified_id());
-        entry
-            .fields
-            .as_ref()
-            .map(|f| {
-                f.iter()
-                    .map(|(n, (_, _, field_ty))| (*n, field_ty.instantiate(&id.inst)))
-                    .collect::<BTreeMap<_, _>>()
-            })
-            .unwrap_or_default()
-    }
-
-    /// Get all the structs which have been build so far.
-    pub fn get_struct_ids(&self) -> impl Iterator<Item = QualifiedId<StructId>> + '_ {
-        self.struct_table
-            .values()
-            .map(|e| e.module_id.qualified(e.struct_id))
-    }
-
-    /// Looks up the StructEntry for a qualified id.
-    pub fn lookup_struct_entry(&self, id: QualifiedId<StructId>) -> &StructEntry {
-        let struct_name = self
-            .reverse_struct_table
-            .get(&(id.module_id, id.id))
-            .expect("invalid Type::Struct");
-        self.struct_table
-            .get(struct_name)
-            .expect("invalid Type::Struct")
     }
 
     // Generate warnings about unused schemas.

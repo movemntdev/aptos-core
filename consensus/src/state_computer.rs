@@ -3,16 +3,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    block_preparer::BlockPreparer,
     block_storage::tracing::{observe_block, BlockStage},
     counters,
     error::StateSyncError,
-    execution_pipeline::ExecutionPipeline,
     monitor,
     payload_manager::PayloadManager,
     state_replication::{StateComputer, StateComputerCommitCallBackType},
     transaction_deduper::TransactionDeduper,
-    transaction_filter::TransactionFilter,
     transaction_shuffler::TransactionShuffler,
     txn_notifier::TxnNotifier,
 };
@@ -20,43 +17,17 @@ use anyhow::Result;
 use aptos_consensus_notifications::ConsensusNotificationSender;
 use aptos_consensus_types::{block::Block, common::Round, executed_block::ExecutedBlock};
 use aptos_crypto::HashValue;
-use aptos_executor_types::{BlockExecutorTrait, ExecutorResult, StateComputeResult};
+use aptos_executor_types::{BlockExecutorTrait, Error as ExecutionError, StateComputeResult};
 use aptos_infallible::Mutex;
 use aptos_logger::prelude::*;
 use aptos_types::{
-    account_address::AccountAddress,
-    block_executor::config::BlockExecutorConfigFromOnchain,
-    contract_event::ContractEvent,
-    epoch_state::EpochState,
-    ledger_info::LedgerInfoWithSignatures,
-    on_chain_config::OnChainExecutionConfig,
-    transaction::{SignedTransaction, Transaction},
+    account_address::AccountAddress, contract_event::ContractEvent, epoch_state::EpochState,
+    ledger_info::LedgerInfoWithSignatures, transaction::Transaction,
 };
 use fail::fail_point;
-use futures::{future::BoxFuture, SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt};
 use std::{boxed::Box, sync::Arc};
 use tokio::sync::Mutex as AsyncMutex;
-
-pub type StateComputeResultFut = BoxFuture<'static, ExecutorResult<PipelineExecutionResult>>;
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct PipelineExecutionResult {
-    pub input_txns: Vec<SignedTransaction>,
-    pub result: StateComputeResult,
-}
-
-impl PipelineExecutionResult {
-    pub fn new(input_txns: Vec<SignedTransaction>, result: StateComputeResult) -> Self {
-        Self { input_txns, result }
-    }
-
-    pub fn new_dummy() -> Self {
-        Self {
-            input_txns: vec![],
-            result: StateComputeResult::new_dummy(),
-        }
-    }
-}
 
 type NotificationType = (
     Box<dyn FnOnce() + Send + Sync>,
@@ -87,10 +58,8 @@ pub struct ExecutionProxy {
     write_mutex: AsyncMutex<LogicalTime>,
     payload_manager: Mutex<Option<Arc<PayloadManager>>>,
     transaction_shuffler: Mutex<Option<Arc<dyn TransactionShuffler>>>,
-    block_executor_onchain_config: Mutex<BlockExecutorConfigFromOnchain>,
+    maybe_block_gas_limit: Mutex<Option<u64>>,
     transaction_deduper: Mutex<Option<Arc<dyn TransactionDeduper>>>,
-    transaction_filter: Arc<TransactionFilter>,
-    execution_pipeline: ExecutionPipeline,
 }
 
 impl ExecutionProxy {
@@ -99,7 +68,6 @@ impl ExecutionProxy {
         txn_notifier: Arc<dyn TxnNotifier>,
         state_sync_notifier: Arc<dyn ConsensusNotificationSender>,
         handle: &tokio::runtime::Handle,
-        txn_filter: TransactionFilter,
     ) -> Self {
         let (tx, mut rx) =
             aptos_channels::new::<NotificationType>(10, &counters::PENDING_STATE_SYNC_NOTIFICATION);
@@ -116,7 +84,6 @@ impl ExecutionProxy {
                 callback();
             }
         });
-        let execution_pipeline = ExecutionPipeline::spawn(executor.clone(), handle);
         Self {
             executor,
             txn_notifier,
@@ -126,25 +93,27 @@ impl ExecutionProxy {
             write_mutex: AsyncMutex::new(LogicalTime::new(0, 0)),
             payload_manager: Mutex::new(None),
             transaction_shuffler: Mutex::new(None),
-            block_executor_onchain_config: Mutex::new(
-                OnChainExecutionConfig::default_if_missing().block_executor_onchain_config(),
-            ),
+            maybe_block_gas_limit: Mutex::new(None),
             transaction_deduper: Mutex::new(None),
-            transaction_filter: Arc::new(txn_filter),
-            execution_pipeline,
         }
     }
 }
 
+// TODO: filter duplicated transaction before executing
 #[async_trait::async_trait]
 impl StateComputer for ExecutionProxy {
-    async fn schedule_compute(
+    async fn compute(
         &self,
         // The block to be executed.
         block: &Block,
         // The parent block id.
         parent_block_id: HashValue,
-    ) -> StateComputeResultFut {
+    ) -> Result<StateComputeResult, ExecutionError> {
+        fail_point!("consensus::compute", |_| {
+            Err(ExecutionError::InternalError {
+                error: "Injected error in compute".into(),
+            })
+        });
         let block_id = block.id();
         debug!(
             block = %block,
@@ -152,52 +121,51 @@ impl StateComputer for ExecutionProxy {
             "Executing block",
         );
 
-        let txn_notifier = self.txn_notifier.clone();
-        let transaction_generator = BlockPreparer::new(
-            self.payload_manager.lock().as_ref().unwrap().clone(),
-            self.transaction_filter.clone(),
-            self.transaction_deduper.lock().as_ref().unwrap().clone(),
-            self.transaction_shuffler.lock().as_ref().unwrap().clone(),
+        let payload_manager = self.payload_manager.lock().as_ref().unwrap().clone();
+        let txn_deduper = self.transaction_deduper.lock().as_ref().unwrap().clone();
+        let txn_shuffler = self.transaction_shuffler.lock().as_ref().unwrap().clone();
+        let txns = payload_manager.get_transactions(block).await?;
+
+        let deduped_txns = txn_deduper.dedup(txns);
+        let shuffled_txns = txn_shuffler.shuffle(deduped_txns);
+
+        let block_gas_limit = *self.maybe_block_gas_limit.lock();
+
+        // TODO: figure out error handling for the prologue txn
+        let executor = self.executor.clone();
+
+        let transactions_to_execute = block.transactions_to_execute(
+            &self.validators.lock(),
+            shuffled_txns.clone(),
+            block_gas_limit,
         );
 
-        let block_executor_onchain_config = self.block_executor_onchain_config.lock().clone();
-        let block_gas_limit_enabled = block_executor_onchain_config.has_any_block_gas_limit();
+        let compute_result = monitor!(
+            "execute_block",
+            tokio::task::spawn_blocking(move || {
+                executor.execute_block(
+                    (block_id, transactions_to_execute).into(),
+                    parent_block_id,
+                    block_gas_limit,
+                )
+            })
+            .await
+        )
+        .expect("spawn_blocking failed")?;
 
-        let timestamp = block.timestamp_usecs();
-        let metadata = block.new_block_metadata(&self.validators.lock());
-        let fut = self
-            .execution_pipeline
-            .queue(
-                block.clone(),
-                metadata,
-                parent_block_id,
-                transaction_generator,
-                block_executor_onchain_config,
-            )
-            .await;
+        observe_block(block.timestamp_usecs(), BlockStage::EXECUTED);
 
-        Box::pin(async move {
-            debug!(
-                block_id = block_id,
-                "Got state compute result, post processing."
+        // notify mempool about failed transaction
+        if let Err(e) = self
+            .txn_notifier
+            .notify_failed_txn(shuffled_txns, &compute_result)
+            .await
+        {
+            error!(
+                error = ?e, "Failed to notify mempool of rejected txns",
             );
-            let pipeline_execution_result = fut.await?;
-            let input_txns = pipeline_execution_result.input_txns.clone();
-            let result = &pipeline_execution_result.result;
-
-            observe_block(timestamp, BlockStage::EXECUTED);
-
-            // notify mempool about failed transaction
-            if let Err(e) = txn_notifier
-                .notify_failed_txn(input_txns, result, block_gas_limit_enabled)
-                .await
-            {
-                error!(
-                    error = ?e, "Failed to notify mempool of rejected txns",
-                );
-            }
-            Ok(pipeline_execution_result)
-        })
+        }
+        Ok(compute_result)
     }
 
     /// Send a successful commit. A future is fulfilled when the state is finalized.
@@ -206,7 +174,7 @@ impl StateComputer for ExecutionProxy {
         blocks: &[Arc<ExecutedBlock>],
         finality_proof: LedgerInfoWithSignatures,
         callback: StateComputerCommitCallBackType,
-    ) -> ExecutorResult<()> {
+    ) -> Result<(), ExecutionError> {
         let mut latest_logical_time = self.write_mutex.lock().await;
 
         let mut block_ids = Vec::new();
@@ -218,9 +186,12 @@ impl StateComputer for ExecutionProxy {
             finality_proof.ledger_info().round(),
         );
         let block_timestamp = finality_proof.commit_info().timestamp_usecs();
+
         let payload_manager = self.payload_manager.lock().as_ref().unwrap().clone();
-        let block_executor_onchain_config = self.block_executor_onchain_config.lock().clone();
-        let is_block_gas_limit = block_executor_onchain_config.has_any_block_gas_limit();
+        let txn_deduper = self.transaction_deduper.lock().as_ref().unwrap().clone();
+        let txn_shuffler = self.transaction_shuffler.lock().as_ref().unwrap().clone();
+
+        let block_gas_limit = *self.maybe_block_gas_limit.lock();
 
         for block in blocks {
             block_ids.push(block.id());
@@ -229,12 +200,14 @@ impl StateComputer for ExecutionProxy {
                 payloads.push(payload.clone());
             }
 
-            let input_txns = block.input_transactions().clone();
+            let signed_txns = payload_manager.get_transactions(block.block()).await?;
+            let deduped_txns = txn_deduper.dedup(signed_txns);
+            let shuffled_txns = txn_shuffler.shuffle(deduped_txns);
+
             txns.extend(block.transactions_to_commit(
                 &self.validators.lock(),
-                block.validator_txns().cloned().unwrap_or_default(),
-                input_txns,
-                is_block_gas_limit,
+                shuffled_txns,
+                block_gas_limit,
             ));
             reconfig_events.extend(block.reconfig_event());
         }
@@ -263,7 +236,9 @@ impl StateComputer for ExecutionProxy {
             .expect("Failed to send async state sync notification");
 
         *latest_logical_time = logical_time;
-        payload_manager.notify_commit(block_timestamp, payloads);
+        payload_manager
+            .notify_commit(block_timestamp, payloads)
+            .await;
         Ok(())
     }
 
@@ -292,7 +267,9 @@ impl StateComputer for ExecutionProxy {
         // Might be none if called in the recovery path, or between epoch stop and start.
         let maybe_payload_manager = self.payload_manager.lock().as_ref().cloned();
         if let Some(payload_manager) = maybe_payload_manager {
-            payload_manager.notify_commit(block_timestamp, Vec::new());
+            payload_manager
+                .notify_commit(block_timestamp, Vec::new())
+                .await;
         }
 
         fail_point!("consensus::sync_to", |_| {
@@ -324,7 +301,7 @@ impl StateComputer for ExecutionProxy {
         epoch_state: &EpochState,
         payload_manager: Arc<PayloadManager>,
         transaction_shuffler: Arc<dyn TransactionShuffler>,
-        block_executor_onchain_config: BlockExecutorConfigFromOnchain,
+        block_gas_limit: Option<u64>,
         transaction_deduper: Arc<dyn TransactionDeduper>,
     ) {
         *self.validators.lock() = epoch_state
@@ -335,7 +312,7 @@ impl StateComputer for ExecutionProxy {
         self.transaction_shuffler
             .lock()
             .replace(transaction_shuffler);
-        *self.block_executor_onchain_config.lock() = block_executor_onchain_config;
+        *self.maybe_block_gas_limit.lock() = block_gas_limit;
         self.transaction_deduper.lock().replace(transaction_deduper);
     }
 
@@ -353,7 +330,6 @@ async fn test_commit_sync_race() {
         error::MempoolError, transaction_deduper::create_transaction_deduper,
         transaction_shuffler::create_transaction_shuffler,
     };
-    use aptos_config::config::transaction_filter_type::Filter;
     use aptos_consensus_notifications::Error;
     use aptos_executor_types::state_checkpoint_output::StateCheckpointOutput;
     use aptos_types::{
@@ -382,8 +358,8 @@ async fn test_commit_sync_race() {
             &self,
             _block: ExecutableBlock,
             _parent_block_id: HashValue,
-            _onchain_config: BlockExecutorConfigFromOnchain,
-        ) -> ExecutorResult<StateComputeResult> {
+            _maybe_block_gas_limit: Option<u64>,
+        ) -> Result<StateComputeResult, ExecutionError> {
             Ok(StateComputeResult::new_dummy())
         }
 
@@ -391,8 +367,8 @@ async fn test_commit_sync_race() {
             &self,
             _block: ExecutableBlock,
             _parent_block_id: HashValue,
-            _onchain_config: BlockExecutorConfigFromOnchain,
-        ) -> ExecutorResult<StateCheckpointOutput> {
+            _maybe_block_gas_limit: Option<u64>,
+        ) -> Result<StateCheckpointOutput, ExecutionError> {
             todo!()
         }
 
@@ -401,7 +377,7 @@ async fn test_commit_sync_race() {
             _block_id: HashValue,
             _parent_block_id: HashValue,
             _state_checkpoint_output: StateCheckpointOutput,
-        ) -> ExecutorResult<StateComputeResult> {
+        ) -> Result<StateComputeResult, ExecutionError> {
             todo!()
         }
 
@@ -410,7 +386,7 @@ async fn test_commit_sync_race() {
             _block_ids: Vec<HashValue>,
             ledger_info_with_sigs: LedgerInfoWithSignatures,
             _save_state_snapshots: bool,
-        ) -> ExecutorResult<()> {
+        ) -> Result<(), ExecutionError> {
             *self.time.lock() = LogicalTime::new(
                 ledger_info_with_sigs.ledger_info().epoch(),
                 ledger_info_with_sigs.ledger_info().round(),
@@ -427,7 +403,6 @@ async fn test_commit_sync_race() {
             &self,
             _txns: Vec<SignedTransaction>,
             _compute_results: &StateComputeResult,
-            _block_gas_limit_enabled: bool,
         ) -> Result<(), MempoolError> {
             Ok(())
         }
@@ -477,13 +452,12 @@ async fn test_commit_sync_race() {
         recorded_commit.clone(),
         recorded_commit.clone(),
         &tokio::runtime::Handle::current(),
-        TransactionFilter::new(Filter::empty()),
     );
     executor.new_epoch(
         &EpochState::empty(),
         Arc::new(PayloadManager::DirectMempool),
         create_transaction_shuffler(TransactionShufflerType::NoShuffling),
-        BlockExecutorConfigFromOnchain::new_no_block_limit(),
+        None,
         create_transaction_deduper(TransactionDeduperType::NoDedup),
     );
     executor

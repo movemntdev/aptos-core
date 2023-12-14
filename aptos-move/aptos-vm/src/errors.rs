@@ -4,9 +4,7 @@
 
 use crate::transaction_validation::APTOS_TRANSACTION_VALIDATION;
 use aptos_logger::{enabled, Level};
-use aptos_types::transaction::TransactionStatus;
 use aptos_vm_logging::{log_schema::AdapterLogSchema, prelude::*};
-use aptos_vm_types::output::VMOutput;
 use move_binary_format::errors::VMError;
 use move_core_types::vm_status::{StatusCode, VMStatus};
 
@@ -90,7 +88,7 @@ pub fn convert_prologue_error(
                     location, code, category, reason);
                     speculative_error!(log_context, err_msg.clone());
                     return Err(VMStatus::error(
-                        StatusCode::UNEXPECTED_ERROR_FROM_KNOWN_MOVE_FUNCTION,
+                        StatusCode::REJECTED_WRITE_SET,
                         Some(err_msg),
                     ));
                 },
@@ -128,7 +126,7 @@ pub fn convert_prologue_error(
                     location, code, category, reason);
                     speculative_error!(log_context, err_msg.clone());
                     return Err(VMStatus::Error {
-                        status_code: StatusCode::UNEXPECTED_ERROR_FROM_KNOWN_MOVE_FUNCTION,
+                        status_code: StatusCode::REJECTED_WRITE_SET,
                         sub_status: None,
                         message: Some(err_msg),
                     });
@@ -142,7 +140,7 @@ pub fn convert_prologue_error(
                 format!("[aptos_vm] Unexpected prologue error: {:?}", status),
             );
             VMStatus::Error {
-                status_code: StatusCode::UNEXPECTED_ERROR_FROM_KNOWN_MOVE_FUNCTION,
+                status_code: StatusCode::REJECTED_WRITE_SET,
                 sub_status: status.sub_status(),
                 message: None,
             }
@@ -168,7 +166,7 @@ pub fn convert_epilogue_error(
 			location, code, category, reason);
             speculative_error!(log_context, err_msg.clone());
             VMStatus::error(
-                StatusCode::UNEXPECTED_ERROR_FROM_KNOWN_MOVE_FUNCTION,
+                StatusCode::REJECTED_WRITE_SET,
                 Some(err_msg),
             )
         },
@@ -180,7 +178,7 @@ pub fn convert_epilogue_error(
 			    location, code, category, reason);
                 speculative_error!(log_context, err_msg.clone());
                 VMStatus::error(
-                    StatusCode::UNEXPECTED_ERROR_FROM_KNOWN_MOVE_FUNCTION,
+                    StatusCode::REJECTED_WRITE_SET,
                     Some(err_msg),
                 )
             },
@@ -189,7 +187,7 @@ pub fn convert_epilogue_error(
             let err_msg = format!("[aptos_vm] Unexpected success epilogue error: {:?}", status);
             speculative_error!(log_context, err_msg.clone());
             VMStatus::Error {
-                status_code: StatusCode::UNEXPECTED_ERROR_FROM_KNOWN_MOVE_FUNCTION,
+                status_code: StatusCode::REJECTED_WRITE_SET,
                 sub_status: status.sub_status(),
                 message: Some(err_msg),
             }
@@ -208,13 +206,9 @@ pub fn expect_only_successful_execution(
     let status = error.into_vm_status();
     Err(match status {
         VMStatus::Executed => VMStatus::Executed,
-        // Speculative errors are returned for caller to handle.
+        // Storage error can be a result of speculation failure so throw the error back for caller to handle.
         e @ VMStatus::Error {
-            status_code:
-                StatusCode::SPECULATIVE_EXECUTION_ABORT_ERROR
-                | StatusCode::DELAYED_FIELDS_CODE_INVARIANT_ERROR
-                // TODO[agg_v2](fix) remove special handling of storage errors here
-                | StatusCode::STORAGE_ERROR,
+            status_code: StatusCode::STORAGE_ERROR,
             ..
         } => e,
         status => {
@@ -226,14 +220,10 @@ pub fn expect_only_successful_execution(
             );
             speculative_warn!(log_context, err_msg.clone());
             VMStatus::Error {
-                status_code: StatusCode::UNEXPECTED_ERROR_FROM_KNOWN_MOVE_FUNCTION,
+                status_code: StatusCode::REJECTED_WRITE_SET,
                 sub_status: status.sub_status(),
                 message: Some(err_msg),
             }
         },
     })
-}
-
-pub(crate) fn discarded_output(status_code: StatusCode) -> VMOutput {
-    VMOutput::empty_with_status(TransactionStatus::Discard(status_code))
 }
