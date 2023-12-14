@@ -4,7 +4,7 @@
 
 #![forbid(unsafe_code)]
 
-mod indexer;
+pub mod indexer;
 mod logger;
 mod network;
 mod services;

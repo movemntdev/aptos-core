@@ -356,6 +356,7 @@ Genesis step 1: Initialize aptos framework account and core modules on chain.
     <a href="block.md#0x1_block_initialize">block::initialize</a>(&aptos_framework_account, epoch_interval_microsecs);
     <a href="state_storage.md#0x1_state_storage_initialize">state_storage::initialize</a>(&aptos_framework_account);
     <a href="timestamp.md#0x1_timestamp_set_time_has_started">timestamp::set_time_has_started</a>(&aptos_framework_account);
+    <a href="coin.md#0x1_coin_register">coin::register</a>&lt;AptosCoin&gt;(&aptos_framework_account);
 }
 </code></pre>
 

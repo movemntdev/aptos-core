@@ -23,7 +23,9 @@
 -  [Function `run`](#0x1_evm_run)
 -  [Function `exist_contract`](#0x1_evm_exist_contract)
 -  [Function `add_balance`](#0x1_evm_add_balance)
--  [Function `sub_balance`](#0x1_evm_sub_balance)
+-  [Function `transfer_from_move_addr`](#0x1_evm_transfer_from_move_addr)
+-  [Function `transfer_to_evm_addr`](#0x1_evm_transfer_to_evm_addr)
+-  [Function `transfer_to_move_addr`](#0x1_evm_transfer_to_move_addr)
 -  [Function `create_event_if_not_exist`](#0x1_evm_create_event_if_not_exist)
 -  [Function `create_account_if_not_exist`](#0x1_evm_create_account_if_not_exist)
 -  [Function `verify_nonce`](#0x1_evm_verify_nonce)
@@ -561,9 +563,7 @@
         <b>let</b> message_hash = keccak256(message);
         <a href="evm.md#0x1_evm_verify_signature">verify_signature</a>(evm_from, message_hash, r, s, v);
         <a href="evm.md#0x1_evm_execute">execute</a>(to_32bit(evm_from), to_32bit(evm_to), (nonce <b>as</b> u64), data, value);
-        <a href="evm.md#0x1_evm_sub_balance">sub_balance</a>(create_resource_address(&@aptos_framework, to_32bit(evm_from)), gas * <a href="evm.md#0x1_evm_CONVERT_BASE">CONVERT_BASE</a>);
-        <b>let</b> <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a> = <a href="create_signer.md#0x1_create_signer">create_signer</a>(@aptos_framework);
-        <a href="coin.md#0x1_coin_transfer">coin::transfer</a>&lt;AptosCoin&gt;(&<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, address_of(sender), (gas <b>as</b> u64));
+        <a href="evm.md#0x1_evm_transfer_to_move_addr">transfer_to_move_addr</a>(to_32bit(evm_from), address_of(sender), gas * <a href="evm.md#0x1_evm_CONVERT_BASE">CONVERT_BASE</a>);
     } <b>else</b> {
         <b>assert</b>!(<b>false</b>, <a href="evm.md#0x1_evm_TX_NOT_SUPPORT">TX_NOT_SUPPORT</a>);
     }
@@ -628,10 +628,7 @@
 <pre><code><b>public</b> entry <b>fun</b> <a href="evm.md#0x1_evm_deposit">deposit</a>(sender: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, evm_addr: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, amount_bytes: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) <b>acquires</b> <a href="evm.md#0x1_evm_Account">Account</a> {
     <b>let</b> amount = to_u256(amount_bytes);
     <b>assert</b>!(<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_length">vector::length</a>(&evm_addr) == 20, <a href="evm.md#0x1_evm_ADDR_LENGTH">ADDR_LENGTH</a>);
-    <b>let</b> <b>to</b> = create_resource_address(&@aptos_framework, to_32bit(evm_addr));
-    <a href="evm.md#0x1_evm_create_account_if_not_exist">create_account_if_not_exist</a>(<b>to</b>);
-    <a href="coin.md#0x1_coin_transfer">coin::transfer</a>&lt;AptosCoin&gt;(sender, <b>to</b>, ((amount / <a href="evm.md#0x1_evm_CONVERT_BASE">CONVERT_BASE</a>) <b>as</b> u64));
-    <a href="evm.md#0x1_evm_add_balance">add_balance</a>(<b>to</b>, amount);
+    <a href="evm.md#0x1_evm_transfer_from_move_addr">transfer_from_move_addr</a>(sender, to_32bit(evm_addr), amount);
 }
 </code></pre>
 
@@ -761,16 +758,13 @@
     } <b>else</b> <b>if</b>(evm_to == <a href="evm.md#0x1_evm_ONE_ADDR">ONE_ADDR</a>) {
         <b>let</b> amount = data_to_u256(data, 36, 32);
         <b>let</b> <b>to</b> = to_address(slice(data, 100, 32));
-        <b>let</b> <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a> = <a href="create_signer.md#0x1_create_signer">create_signer</a>(@aptos_framework);
-        <a href="coin.md#0x1_coin_transfer">coin::transfer</a>&lt;AptosCoin&gt;(&<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, <b>to</b>, ((amount / <a href="evm.md#0x1_evm_CONVERT_BASE">CONVERT_BASE</a>) <b>as</b> u64));
-        <a href="evm.md#0x1_evm_sub_balance">sub_balance</a>(address_from, amount);
+        <a href="evm.md#0x1_evm_transfer_to_move_addr">transfer_to_move_addr</a>(evm_from, <b>to</b>, amount);
         x""
     } <b>else</b> {
         <b>if</b>(account_store_to.is_contract) {
             <a href="evm.md#0x1_evm_run">run</a>(evm_from, evm_from, evm_to, account_store_to.<a href="code.md#0x1_code">code</a>, data, <b>false</b>, value)
         } <b>else</b> {
-            <a href="evm.md#0x1_evm_sub_balance">sub_balance</a>(address_from, value);
-            <a href="evm.md#0x1_evm_add_balance">add_balance</a>(address_to, value);
+            <a href="evm.md#0x1_evm_transfer_to_evm_addr">transfer_to_evm_addr</a>(evm_from, evm_to, value);
             x""
         }
     }
@@ -798,8 +792,7 @@
 
 <pre><code><b>fun</b> <a href="evm.md#0x1_evm_run">run</a>(sender: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, origin: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, evm_contract_address: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, <a href="code.md#0x1_code">code</a>: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, data: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, readOnly: bool, value: u256): <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt; <b>acquires</b> <a href="evm.md#0x1_evm_Account">Account</a>, <a href="evm.md#0x1_evm_ContractEvent">ContractEvent</a> {
     <b>let</b> move_contract_address = create_resource_address(&@aptos_framework, evm_contract_address);
-    <a href="evm.md#0x1_evm_sub_balance">sub_balance</a>(create_resource_address(&@aptos_framework, sender), value);
-    <a href="evm.md#0x1_evm_add_balance">add_balance</a>(move_contract_address, value);
+    <a href="evm.md#0x1_evm_transfer_to_evm_addr">transfer_to_evm_addr</a>(sender, evm_contract_address, value);
 
     <b>let</b> stack = &<b>mut</b> <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_empty">vector::empty</a>&lt;u256&gt;();
     <b>let</b> memory = &<b>mut</b> <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_empty">vector::empty</a>&lt;u8&gt;();
@@ -1341,8 +1334,7 @@
                 <b>if</b> (opcode == 0xfa) {
                     <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_push_back">vector::push_back</a>(stack, 0);
                 } <b>else</b> {
-                    <a href="evm.md#0x1_evm_sub_balance">sub_balance</a>(move_contract_address, msg_value);
-                    <a href="evm.md#0x1_evm_add_balance">add_balance</a>(move_dest_addr, msg_value);
+                    <a href="evm.md#0x1_evm_transfer_to_evm_addr">transfer_to_evm_addr</a>(evm_contract_address, evm_dest_addr, msg_value);
                 }
             };
             // <a href="../../aptos-stdlib/doc/debug.md#0x1_debug_print">debug::print</a>(&opcode);
@@ -1597,13 +1589,13 @@
 
 </details>
 
-<a name="0x1_evm_sub_balance"></a>
+<a name="0x1_evm_transfer_from_move_addr"></a>
 
-## Function `sub_balance`
+## Function `transfer_from_move_addr`
 
 
 
-<pre><code><b>fun</b> <a href="evm.md#0x1_evm_sub_balance">sub_balance</a>(addr: <b>address</b>, amount: u256)
+<pre><code><b>fun</b> <a href="evm.md#0x1_evm_transfer_from_move_addr">transfer_from_move_addr</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, evm_to: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, amount: u256)
 </code></pre>
 
 
@@ -1612,12 +1604,79 @@
 <summary>Implementation</summary>
 
 
-<pre><code><b>fun</b> <a href="evm.md#0x1_evm_sub_balance">sub_balance</a>(addr: <b>address</b>, amount: u256) <b>acquires</b> <a href="evm.md#0x1_evm_Account">Account</a> {
-    <a href="evm.md#0x1_evm_create_account_if_not_exist">create_account_if_not_exist</a>(addr);
+<pre><code><b>fun</b> <a href="evm.md#0x1_evm_transfer_from_move_addr">transfer_from_move_addr</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, evm_to: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, amount: u256) <b>acquires</b> <a href="evm.md#0x1_evm_Account">Account</a> {
     <b>if</b>(amount &gt; 0) {
-        <b>let</b> account_store = <b>borrow_global_mut</b>&lt;<a href="evm.md#0x1_evm_Account">Account</a>&gt;(addr);
-        <b>assert</b>!(account_store.balance &gt;= amount, <a href="evm.md#0x1_evm_INSUFFIENT_BALANCE">INSUFFIENT_BALANCE</a>);
-        account_store.balance = account_store.balance - amount;
+        <b>let</b> <b>move_to</b> = create_resource_address(&@aptos_framework, evm_to);
+        <a href="evm.md#0x1_evm_create_account_if_not_exist">create_account_if_not_exist</a>(<b>move_to</b>);
+        <a href="coin.md#0x1_coin_transfer">coin::transfer</a>&lt;AptosCoin&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, <b>move_to</b>, ((amount / <a href="evm.md#0x1_evm_CONVERT_BASE">CONVERT_BASE</a>)  <b>as</b> u64));
+
+        <b>let</b> account_store_to = <b>borrow_global_mut</b>&lt;<a href="evm.md#0x1_evm_Account">Account</a>&gt;(<b>move_to</b>);
+        account_store_to.balance = account_store_to.balance + amount;
+    }
+}
+</code></pre>
+
+
+
+</details>
+
+<a name="0x1_evm_transfer_to_evm_addr"></a>
+
+## Function `transfer_to_evm_addr`
+
+
+
+<pre><code><b>fun</b> <a href="evm.md#0x1_evm_transfer_to_evm_addr">transfer_to_evm_addr</a>(evm_from: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, evm_to: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, amount: u256)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>fun</b> <a href="evm.md#0x1_evm_transfer_to_evm_addr">transfer_to_evm_addr</a>(evm_from: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, evm_to: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, amount: u256) <b>acquires</b> <a href="evm.md#0x1_evm_Account">Account</a> {
+    <b>if</b>(amount &gt; 0) {
+        <b>let</b> <b>move_from</b> = create_resource_address(&@aptos_framework, evm_from);
+        <b>let</b> <b>move_to</b> = create_resource_address(&@aptos_framework, evm_to);
+        <b>let</b> account_store_from = <b>borrow_global_mut</b>&lt;<a href="evm.md#0x1_evm_Account">Account</a>&gt;(<b>move_from</b>);
+        <b>assert</b>!(account_store_from.balance &gt;= amount, <a href="evm.md#0x1_evm_INSUFFIENT_BALANCE">INSUFFIENT_BALANCE</a>);
+        account_store_from.balance = account_store_from.balance - amount;
+
+        <b>let</b> account_store_to = <b>borrow_global_mut</b>&lt;<a href="evm.md#0x1_evm_Account">Account</a>&gt;(<b>move_to</b>);
+        account_store_to.balance = account_store_to.balance + amount;
+    }
+}
+</code></pre>
+
+
+
+</details>
+
+<a name="0x1_evm_transfer_to_move_addr"></a>
+
+## Function `transfer_to_move_addr`
+
+
+
+<pre><code><b>fun</b> <a href="evm.md#0x1_evm_transfer_to_move_addr">transfer_to_move_addr</a>(evm_from: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, <b>move_to</b>: <b>address</b>, amount: u256)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>fun</b> <a href="evm.md#0x1_evm_transfer_to_move_addr">transfer_to_move_addr</a>(evm_from: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, <b>move_to</b>: <b>address</b>, amount: u256) <b>acquires</b> <a href="evm.md#0x1_evm_Account">Account</a> {
+    <b>if</b>(amount &gt; 0) {
+        <b>let</b> <b>move_from</b> = create_resource_address(&@aptos_framework, evm_from);
+        <b>let</b> account_store_from = <b>borrow_global_mut</b>&lt;<a href="evm.md#0x1_evm_Account">Account</a>&gt;(<b>move_from</b>);
+        <b>assert</b>!(account_store_from.balance &gt;= amount, <a href="evm.md#0x1_evm_INSUFFIENT_BALANCE">INSUFFIENT_BALANCE</a>);
+        account_store_from.balance = account_store_from.balance - amount;
+
+        <b>let</b> <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a> = <a href="create_signer.md#0x1_create_signer">create_signer</a>(<b>move_from</b>);
+        <a href="coin.md#0x1_coin_transfer">coin::transfer</a>&lt;AptosCoin&gt;(&<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, <b>move_to</b>, ((amount / <a href="evm.md#0x1_evm_CONVERT_BASE">CONVERT_BASE</a>)  <b>as</b> u64));
     }
 }
 </code></pre>
@@ -1744,7 +1803,7 @@
     <b>let</b> recovery_id = ((v - (<a href="evm.md#0x1_evm_CHAIN_ID">CHAIN_ID</a> * 2) - 35) <b>as</b> u8);
     <b>let</b> pk_recover = ecdsa_recover(message_hash, recovery_id, &signature);
     <b>let</b> pk = keccak256(ecdsa_raw_public_key_to_bytes(borrow(&pk_recover)));
-    <a href="../../aptos-stdlib/doc/debug.md#0x1_debug_print">debug::print</a>(&slice(pk, 12, 20));
+    // <a href="../../aptos-stdlib/doc/debug.md#0x1_debug_print">debug::print</a>(&slice(pk, 12, 20));
     <b>assert</b>!(slice(pk, 12, 20) == from, <a href="evm.md#0x1_evm_SIGNATURE">SIGNATURE</a>);
 }
 </code></pre>
