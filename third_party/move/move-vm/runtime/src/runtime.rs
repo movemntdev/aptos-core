@@ -245,7 +245,9 @@ impl VMRuntime {
                     )?;
                     dummy_locals.borrow_loc(idx)
                 },
-                _ => self.deserialize_value(&arg_ty, arg_bytes),
+                _ => {
+                    self.deserialize_value(&arg_ty, arg_bytes)
+                },
             })
             .collect::<PartialVMResult<Vec<_>>>()?;
         Ok((dummy_locals, deserialized_args))
@@ -388,6 +390,7 @@ impl VMRuntime {
         extensions: &mut NativeContextExtensions,
         bypass_declared_entry_check: bool,
     ) -> VMResult<SerializedReturnValues> {
+
         // load the function
         let (module, function, instantiation) =
             self.loader
