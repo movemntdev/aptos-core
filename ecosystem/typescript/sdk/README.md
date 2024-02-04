@@ -1,5 +1,8 @@
 # SDK for Aptos Node API
 
+> **_NOTE:_**
+> This is the `legacy TypeScript SDK`, aka the npm package `aptos`. For a more robust SDK and better support, we recommend upgrading to the `new TypeScript SDK` [@aptos-labs/ts-sdk](https://github.com/aptos-labs/aptos-ts-sdk). Take a look at the [documentation](https://aptos.dev/sdks/new-ts-sdk/) and the [migration guide](https://aptos.dev/sdks/new-ts-sdk/migration-guide).
+
 [![Discord][discord-image]][discord-url]
 [![NPM Package Version][npm-image-version]][npm-url]
 [![NPM Package Downloads][npm-image-downloads]][npm-url]
@@ -73,7 +76,7 @@ To develop in a local environment, you need to use the SDK from the [main](https
 Run a local node (run from the root of the [repo](https://github.com/aptos-labs/aptos-core/)):
 
 ```ts
-cargo run -p aptos -- node run-local-testnet --with-faucet --faucet-port 8081 --force-restart --assume-yes
+cargo run -p aptos -- node run-local-testnet --force-restart --assume-yes
 ```
 
 ## Contributing

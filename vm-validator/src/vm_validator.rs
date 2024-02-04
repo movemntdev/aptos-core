@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::Result;
-use aptos_state_view::account_with_state_view::AsAccountWithStateView;
+use aptos_logger::info;
 use aptos_storage_interface::{
     cached_state_view::CachedDbStateView,
     state_view::{DbStateView, LatestDbStateCheckpointView},
@@ -12,10 +12,11 @@ use aptos_storage_interface::{
 use aptos_types::{
     account_address::AccountAddress,
     account_view::AccountView,
-    on_chain_config::OnChainConfigPayload,
+    state_store::{account_with_state_view::AsAccountWithStateView, StateView},
     transaction::{SignedTransaction, VMValidatorResult},
 };
-use aptos_vm::AptosVM;
+use aptos_vm::{data_cache::AsMoveResolver, AptosVM};
+use aptos_vm_logging::log_schema::AdapterLogSchema;
 use fail::fail_point;
 use std::sync::Arc;
 
@@ -30,7 +31,7 @@ pub trait TransactionValidation: Send + Sync + Clone {
     fn validate_transaction(&self, _txn: SignedTransaction) -> Result<VMValidatorResult>;
 
     /// Restart the transaction validation instance
-    fn restart(&mut self, config: OnChainConfigPayload) -> Result<()>;
+    fn restart(&mut self) -> Result<()>;
 
     /// Notify about new commit
     fn notify_commit(&mut self);
@@ -49,12 +50,20 @@ impl Clone for VMValidator {
 }
 
 impl VMValidator {
+    fn new_vm_for_validation(state_view: &impl StateView) -> AptosVM {
+        info!(
+            AdapterLogSchema::new(state_view.id(), 0),
+            "AptosVM created for Validation"
+        );
+        AptosVM::new(&state_view.as_move_resolver())
+    }
+
     pub fn new(db_reader: Arc<dyn DbReader>) -> Self {
         let db_state_view = db_reader
             .latest_state_checkpoint_view()
             .expect("Get db view cannot fail");
 
-        let vm = AptosVM::new_for_validation(&db_state_view);
+        let vm = Self::new_vm_for_validation(&db_state_view);
         VMValidator {
             db_reader,
             state_view: db_state_view.into(),
@@ -77,10 +86,10 @@ impl TransactionValidation for VMValidator {
         Ok(self.vm.validate_transaction(txn, &self.state_view))
     }
 
-    fn restart(&mut self, _config: OnChainConfigPayload) -> Result<()> {
+    fn restart(&mut self) -> Result<()> {
         self.notify_commit();
 
-        self.vm = AptosVM::new_for_validation(&self.state_view);
+        self.vm = Self::new_vm_for_validation(&self.state_view);
         Ok(())
     }
 

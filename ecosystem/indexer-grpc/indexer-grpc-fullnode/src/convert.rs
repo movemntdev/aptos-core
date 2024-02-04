@@ -6,12 +6,19 @@ use aptos_api_types::{
     EntryFunctionPayload, Event, GenesisPayload, MoveAbility, MoveFunction,
     MoveFunctionGenericTypeParam, MoveFunctionVisibility, MoveModule, MoveModuleBytecode,
     MoveModuleId, MoveScriptBytecode, MoveStruct, MoveStructField, MoveStructTag, MoveType,
-    MultiEd25519Signature, MultisigPayload, MultisigTransactionPayload, ScriptPayload, Transaction,
-    TransactionInfo, TransactionPayload, TransactionSignature, WriteSet, WriteSetChange,
+    MultiEd25519Signature, MultiKeySignature, MultisigPayload, MultisigTransactionPayload,
+    PublicKey, ScriptPayload, Signature, SingleKeySignature, Transaction, TransactionInfo,
+    TransactionPayload, TransactionSignature, WriteSet, WriteSetChange,
 };
 use aptos_bitvec::BitVec;
 use aptos_logger::warn;
-use aptos_protos::{transaction::v1 as transaction, util::timestamp};
+use aptos_protos::{
+    transaction::{
+        v1 as transaction,
+        v1::{any_signature, Ed25519, Secp256k1Ecdsa, WebAuthn},
+    },
+    util::timestamp,
+};
 use hex;
 use move_binary_format::file_format::Ability;
 use std::time::Duration;
@@ -336,8 +343,9 @@ pub fn convert_write_set_change(change: &WriteSetChange) -> transaction::WriteSe
         WriteSetChange::DeleteTableItem(delete_table_item) => {
             let data = delete_table_item.data.as_ref().unwrap_or_else(|| {
                 panic!(
-                    "Could not extract data from DeletedTableItem '{:?}'",
-                    delete_table_item
+                    "Could not extract data from DeletedTableItem '{:?}' with handle '{:?}'",
+                    delete_table_item,
+                    delete_table_item.handle.to_string()
                 )
             });
 
@@ -388,8 +396,9 @@ pub fn convert_write_set_change(change: &WriteSetChange) -> transaction::WriteSe
         WriteSetChange::WriteTableItem(write_table_item) => {
             let data = write_table_item.data.as_ref().unwrap_or_else(|| {
                 panic!(
-                    "Could not extract data from DecodedTableData '{:?}'",
-                    write_table_item
+                    "Could not extract data from DecodedTableData '{:?}' with handle '{:?}'",
+                    write_table_item,
+                    write_table_item.handle.to_string(),
                 )
             });
             transaction::WriteSetChange {
@@ -556,25 +565,96 @@ pub fn convert_multi_ed25519_signature(
     }
 }
 
+pub fn convert_single_key_signature(sig: &SingleKeySignature) -> transaction::SingleKeySignature {
+    transaction::SingleKeySignature {
+        public_key: Some(convert_public_key(&sig.public_key)),
+        signature: Some(convert_signature(&sig.signature)),
+    }
+}
+
+pub fn convert_multi_key_signature(sig: &MultiKeySignature) -> transaction::MultiKeySignature {
+    transaction::MultiKeySignature {
+        public_keys: sig.public_keys.iter().map(convert_public_key).collect(),
+        signatures: sig
+            .signatures
+            .iter()
+            .map(|signature| transaction::IndexedSignature {
+                index: signature.index as u32,
+                signature: Some(convert_signature(&signature.signature)),
+            })
+            .collect(),
+        signatures_required: sig.signatures_required as u32,
+    }
+}
+
+fn convert_signature(signature: &Signature) -> transaction::AnySignature {
+    match signature {
+        Signature::Ed25519(s) => transaction::AnySignature {
+            r#type: transaction::any_signature::Type::Ed25519 as i32,
+            signature: Some(any_signature::Signature::Ed25519(Ed25519 {
+                signature: s.0.clone(),
+            })),
+        },
+        Signature::Secp256k1Ecdsa(s) => transaction::AnySignature {
+            r#type: transaction::any_signature::Type::Secp256k1Ecdsa as i32,
+            signature: Some(any_signature::Signature::Secp256k1Ecdsa(Secp256k1Ecdsa {
+                signature: s.0.clone(),
+            })),
+        },
+        Signature::WebAuthn(s) => transaction::AnySignature {
+            r#type: transaction::any_signature::Type::Webauthn as i32,
+            signature: Some(any_signature::Signature::Webauthn(WebAuthn {
+                signature: s.0.clone(),
+            })),
+        },
+    }
+}
+
+fn convert_public_key(public_key: &PublicKey) -> transaction::AnyPublicKey {
+    match public_key {
+        PublicKey::Ed25519(p) => transaction::AnyPublicKey {
+            r#type: transaction::any_public_key::Type::Ed25519 as i32,
+            public_key: p.0.clone(),
+        },
+        PublicKey::Secp256k1Ecdsa(p) => transaction::AnyPublicKey {
+            r#type: transaction::any_public_key::Type::Secp256k1Ecdsa as i32,
+            public_key: p.0.clone(),
+        },
+        PublicKey::Secp256r1Ecdsa(p) => transaction::AnyPublicKey {
+            r#type: transaction::any_public_key::Type::Secp256r1Ecdsa as i32,
+            public_key: p.0.clone(),
+        },
+    }
+}
+
 pub fn convert_account_signature(
     account_signature: &AccountSignature,
 ) -> transaction::AccountSignature {
-    let r#type = match account_signature {
-        AccountSignature::Ed25519Signature(_) => transaction::account_signature::Type::Ed25519,
-        AccountSignature::MultiEd25519Signature(_) => {
-            transaction::account_signature::Type::MultiEd25519
-        },
-    };
-    let signature = match account_signature {
-        AccountSignature::Ed25519Signature(s) => {
-            transaction::account_signature::Signature::Ed25519(convert_ed25519_signature(s))
-        },
-        AccountSignature::MultiEd25519Signature(s) => {
+    let (r#type, signature) = match account_signature {
+        AccountSignature::Ed25519Signature(s) => (
+            transaction::account_signature::Type::Ed25519,
+            transaction::account_signature::Signature::Ed25519(convert_ed25519_signature(s)),
+        ),
+        AccountSignature::MultiEd25519Signature(s) => (
+            transaction::account_signature::Type::MultiEd25519,
             transaction::account_signature::Signature::MultiEd25519(
                 convert_multi_ed25519_signature(s),
-            )
-        },
+            ),
+        ),
+        AccountSignature::SingleKeySignature(s) => (
+            transaction::account_signature::Type::SingleKey,
+            transaction::account_signature::Signature::SingleKeySignature(
+                convert_single_key_signature(s),
+            ),
+        ),
+        AccountSignature::MultiKeySignature(s) => (
+            transaction::account_signature::Type::MultiKey,
+            transaction::account_signature::Signature::MultiKeySignature(
+                convert_multi_key_signature(s),
+            ),
+        ),
     };
+
     transaction::AccountSignature {
         r#type: r#type as i32,
         signature: Some(signature),
@@ -595,6 +675,7 @@ pub fn convert_transaction_signature(
         },
         TransactionSignature::MultiAgentSignature(_) => transaction::signature::Type::MultiAgent,
         TransactionSignature::FeePayerSignature(_) => transaction::signature::Type::FeePayer,
+        TransactionSignature::SingleSender(_) => transaction::signature::Type::SingleSender,
     };
 
     let signature = match signature {
@@ -636,6 +717,11 @@ pub fn convert_transaction_signature(
                 fee_payer_signer: Some(convert_account_signature(&s.fee_payer_signer)),
             })
         },
+        TransactionSignature::SingleSender(s) => {
+            transaction::signature::Signature::SingleSender(transaction::SingleSender {
+                sender: Some(convert_account_signature(s)),
+            })
+        },
     };
 
     Some(transaction::Signature {
@@ -661,6 +747,9 @@ pub fn convert_transaction(
             transaction::transaction::TransactionType::StateCheckpoint
         },
         Transaction::PendingTransaction(_) => panic!("PendingTransaction is not supported"),
+        Transaction::ValidatorTransaction(_) => {
+            transaction::transaction::TransactionType::Validator
+        },
     };
 
     let txn_data = match &transaction {
@@ -711,6 +800,9 @@ pub fn convert_transaction(
             )
         },
         Transaction::PendingTransaction(_) => panic!("PendingTransaction not supported"),
+        Transaction::ValidatorTransaction(_) => {
+            transaction::transaction::TxnData::Validator(transaction::ValidatorTransaction {})
+        },
     };
 
     transaction::Transaction {

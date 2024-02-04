@@ -19,7 +19,7 @@ pub struct ApiConfig {
     /// Enables the REST API endpoint
     #[serde(default = "default_enabled")]
     pub enabled: bool,
-    /// Address for the REST API to listen on. Set to 0.0.0.0:<port> to allow all inbound connections.
+    /// Address for the REST API to listen on. Set to 0.0.0.0:port to allow all inbound connections.
     pub address: SocketAddr,
     /// Path to a local TLS certificate to enable HTTPS
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -72,6 +72,8 @@ pub struct ApiConfig {
     pub runtime_worker_multiplier: usize,
     /// Configs for computing unit gas price estimation
     pub gas_estimation: GasEstimationConfig,
+    /// Periodically call gas estimation
+    pub periodic_gas_estimation_ms: Option<u64>,
 }
 
 const DEFAULT_ADDRESS: &str = "127.0.0.1";
@@ -116,6 +118,7 @@ impl Default for ApiConfig {
             max_runtime_workers: None,
             runtime_worker_multiplier: 2,
             gas_estimation: GasEstimationConfig::default(),
+            periodic_gas_estimation_ms: Some(30_000),
         }
     }
 }
@@ -135,9 +138,9 @@ impl ApiConfig {
 
 impl ConfigSanitizer for ApiConfig {
     fn sanitize(
-        node_config: &mut NodeConfig,
+        node_config: &NodeConfig,
         node_type: NodeType,
-        chain_id: ChainId,
+        chain_id: Option<ChainId>,
     ) -> Result<(), Error> {
         let sanitizer_name = Self::get_sanitizer_name();
         let api_config = &node_config.api;
@@ -148,11 +151,13 @@ impl ConfigSanitizer for ApiConfig {
         }
 
         // Verify that failpoints are not enabled in mainnet
-        if chain_id.is_mainnet() && api_config.failpoints_enabled {
-            return Err(Error::ConfigSanitizerFailed(
-                sanitizer_name,
-                "Failpoints are not supported on mainnet nodes!".into(),
-            ));
+        if let Some(chain_id) = chain_id {
+            if chain_id.is_mainnet() && api_config.failpoints_enabled {
+                return Err(Error::ConfigSanitizerFailed(
+                    sanitizer_name,
+                    "Failpoints are not supported on mainnet nodes!".into(),
+                ));
+            }
         }
 
         // Validate basic runtime properties
@@ -163,6 +168,7 @@ impl ConfigSanitizer for ApiConfig {
             ));
         }
 
+        // Sanitize the gas estimation config
         GasEstimationConfig::sanitize(node_config, node_type, chain_id)?;
 
         Ok(())
@@ -176,7 +182,7 @@ mod tests {
     #[test]
     fn test_sanitize_disabled_api() {
         // Create a node config with the API disabled
-        let mut node_config = NodeConfig {
+        let node_config = NodeConfig {
             api: ApiConfig {
                 enabled: false,
                 failpoints_enabled: true,
@@ -186,13 +192,13 @@ mod tests {
         };
 
         // Sanitize the config and verify that it succeeds
-        ApiConfig::sanitize(&mut node_config, NodeType::Validator, ChainId::mainnet()).unwrap();
+        ApiConfig::sanitize(&node_config, NodeType::Validator, Some(ChainId::mainnet())).unwrap();
     }
 
     #[test]
     fn test_sanitize_failpoints_on_mainnet() {
         // Create a node config with failpoints enabled
-        let mut node_config = NodeConfig {
+        let node_config = NodeConfig {
             api: ApiConfig {
                 enabled: true,
                 failpoints_enabled: true,
@@ -203,15 +209,22 @@ mod tests {
 
         // Sanitize the config and verify that it fails because
         // failpoints are not supported on mainnet.
-        let error = ApiConfig::sanitize(&mut node_config, NodeType::Validator, ChainId::mainnet())
-            .unwrap_err();
+        let error =
+            ApiConfig::sanitize(&node_config, NodeType::Validator, Some(ChainId::mainnet()))
+                .unwrap_err();
         assert!(matches!(error, Error::ConfigSanitizerFailed(_, _)));
+
+        // Sanitize the config for a different network and verify that it succeeds
+        ApiConfig::sanitize(&node_config, NodeType::Validator, Some(ChainId::testnet())).unwrap();
+
+        // Sanitize the config for an unknown network and verify that it succeeds
+        ApiConfig::sanitize(&node_config, NodeType::Validator, None).unwrap();
     }
 
     #[test]
     fn test_sanitize_invalid_workers() {
         // Create a node config with failpoints enabled
-        let mut node_config = NodeConfig {
+        let node_config = NodeConfig {
             api: ApiConfig {
                 enabled: true,
                 max_runtime_workers: None,
@@ -223,8 +236,9 @@ mod tests {
 
         // Sanitize the config and verify that it fails because
         // the runtime worker multiplier is invalid.
-        let error = ApiConfig::sanitize(&mut node_config, NodeType::Validator, ChainId::mainnet())
-            .unwrap_err();
+        let error =
+            ApiConfig::sanitize(&node_config, NodeType::Validator, Some(ChainId::mainnet()))
+                .unwrap_err();
         assert!(matches!(error, Error::ConfigSanitizerFailed(_, _)));
     }
 }

@@ -14,12 +14,12 @@ rust-version = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
-aptos-gas = { workspace = true }
-aptos-scratchpad = { workspace = true }
-aptos-state-view = { workspace = true }
+aptos-event-notifications = { workspace = true }
+aptos-logger = { workspace = true }
 aptos-storage-interface = { workspace = true }
 aptos-types = { workspace = true }
 aptos-vm = { workspace = true }
+aptos-vm-logging = { workspace = true }
 fail = { workspace = true }
 
 [dev-dependencies]
@@ -27,10 +27,9 @@ aptos-cached-packages = { workspace = true }
 aptos-crypto = { workspace = true }
 aptos-db = { workspace = true }
 aptos-executor-test-helpers = { workspace = true }
-aptos-gas = { workspace = true, features = ["testing"] }
+aptos-gas-schedule = { workspace = true, features = ["testing"] } 
 aptos-temppath = { workspace = true }
 aptos-types = { workspace = true }
-aptos-vm = { workspace = true }
 aptos-vm-genesis = { workspace = true }
 move-core-types = { workspace = true }
 rand = { workspace = true }

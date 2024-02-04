@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
+    db_debugger::ShardingConfig,
     schema::{
         db_metadata::{DbMetadataKey, DbMetadataSchema},
-        event_accumulator::EventAccumulatorSchema,
         ledger_info::LedgerInfoSchema,
         transaction::TransactionSchema,
         transaction_accumulator::TransactionAccumulatorSchema,
@@ -19,9 +19,9 @@ use crate::{
     },
     AptosDB,
 };
-use anyhow::Result;
-use aptos_config::config::RocksdbConfigs;
+use aptos_config::config::{RocksdbConfigs, StorageDirPaths};
 use aptos_schemadb::{schema::Schema, ReadOptions, DB};
+use aptos_storage_interface::Result;
 use aptos_types::transaction::Version;
 use clap::Parser;
 use std::path::PathBuf;
@@ -32,18 +32,18 @@ pub struct Cmd {
     #[clap(long, value_parser)]
     db_dir: PathBuf,
 
-    #[clap(long)]
-    split_ledger_db: bool,
+    #[clap(flatten)]
+    sharding_config: ShardingConfig,
 }
 
 impl Cmd {
     pub fn run(self) -> Result<()> {
         let rocksdb_config = RocksdbConfigs {
-            split_ledger_db: self.split_ledger_db,
+            enable_storage_sharding: self.sharding_config.enable_storage_sharding,
             ..Default::default()
         };
         let (ledger_db, state_merkle_db, state_kv_db) = AptosDB::open_dbs(
-            &self.db_dir,
+            &StorageDirPaths::from_path(&self.db_dir),
             rocksdb_config,
             /*readonly=*/ true,
             /*max_num_nodes_per_lru_cache_shard=*/ 0,
@@ -123,7 +123,9 @@ impl Cmd {
 
         println!(
             "Max Transaction version: {:?}",
-            Self::get_latest_version_for_schema::<TransactionSchema>(ledger_db.transaction_db())?,
+            Self::get_latest_version_for_schema::<TransactionSchema>(
+                ledger_db.transaction_db_raw()
+            )?,
         );
 
         println!(
@@ -147,16 +149,6 @@ impl Cmd {
                 "# of frozen nodes in TransactionAccumulator: {:?}",
                 num_frozen_nodes
             );
-        }
-
-        {
-            let mut iter = ledger_db
-                .event_db()
-                .iter::<EventAccumulatorSchema>(ReadOptions::default())?;
-            iter.seek_to_last();
-            let key = iter.next().transpose()?.map(|kv| kv.0);
-            let version = key.map(|k| k.0);
-            println!("Max EventAccumulator version: {:?}", version)
         }
 
         Ok(())

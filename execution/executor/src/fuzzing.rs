@@ -9,18 +9,31 @@ use crate::{
 use anyhow::Result;
 use aptos_crypto::{hash::SPARSE_MERKLE_PLACEHOLDER_HASH, HashValue};
 use aptos_executor_types::BlockExecutorTrait;
-use aptos_state_view::StateView;
 use aptos_storage_interface::{
-    cached_state_view::CachedStateView, state_delta::StateDelta, DbReader, DbReaderWriter, DbWriter,
+    cached_state_view::{CachedStateView, ShardedStateCache},
+    state_delta::StateDelta,
+    DbReader, DbReaderWriter, DbWriter,
 };
 use aptos_types::{
-    block_executor::partitioner::{ExecutableTransactions, SubBlocksForShard},
+    block_executor::{
+        config::BlockExecutorConfigFromOnchain,
+        partitioner::{ExecutableTransactions, PartitionedTransactions},
+    },
     ledger_info::LedgerInfoWithSignatures,
-    test_helpers::transaction_test_helpers::BLOCK_GAS_LIMIT,
-    transaction::{Transaction, TransactionOutput, TransactionToCommit, Version},
+    state_store::{ShardedStateUpdates, StateView},
+    test_helpers::transaction_test_helpers::TEST_BLOCK_EXECUTOR_ONCHAIN_CONFIG,
+    transaction::{
+        signature_verified_transaction::{
+            into_signature_verified_block, SignatureVerifiedTransaction,
+        },
+        BlockOutput, Transaction, TransactionOutput, TransactionToCommit, Version,
+    },
     vm_status::VMStatus,
 };
-use aptos_vm::{sharded_block_executor::ShardedBlockExecutor, VMExecutor};
+use aptos_vm::{
+    sharded_block_executor::{executor_client::ExecutorClient, ShardedBlockExecutor},
+    VMExecutor,
+};
 use std::sync::Arc;
 
 fn create_test_executor() -> BlockExecutor<FakeVM> {
@@ -40,8 +53,12 @@ pub fn fuzz_execute_and_commit_blocks(
     let mut block_ids = vec![];
     for block in blocks {
         let block_id = block.0;
-        let _execution_results =
-            executor.execute_block(block.into(), parent_block_id, BLOCK_GAS_LIMIT);
+        let sig_verified_block = into_signature_verified_block(block.1);
+        let _execution_results = executor.execute_block(
+            (block_id, sig_verified_block).into(),
+            parent_block_id,
+            TEST_BLOCK_EXECUTOR_ONCHAIN_CONFIG,
+        );
         parent_block_id = block_id;
         block_ids.push(block_id);
     }
@@ -53,34 +70,30 @@ pub struct FakeVM;
 
 impl TransactionBlockExecutor for FakeVM {
     fn execute_transaction_block(
-        transactions: ExecutableTransactions<Transaction>,
+        transactions: ExecutableTransactions,
         state_view: CachedStateView,
-        maybe_block_gas_limit: Option<u64>,
+        onchain_config: BlockExecutorConfigFromOnchain,
     ) -> Result<ChunkOutput> {
-        ChunkOutput::by_transaction_execution::<FakeVM>(
-            transactions,
-            state_view,
-            maybe_block_gas_limit,
-        )
+        ChunkOutput::by_transaction_execution::<FakeVM>(transactions, state_view, onchain_config)
     }
 }
 
 impl VMExecutor for FakeVM {
-    fn execute_block_sharded<S: StateView + Send + Sync>(
-        _sharded_block_executor: &ShardedBlockExecutor<S>,
-        _block: Vec<SubBlocksForShard<Transaction>>,
+    fn execute_block_sharded<S: StateView + Send + Sync, E: ExecutorClient<S>>(
+        _sharded_block_executor: &ShardedBlockExecutor<S, E>,
+        _transactions: PartitionedTransactions,
         _state_view: Arc<S>,
-        _maybe_block_gas_limit: Option<u64>,
+        _onchain_config: BlockExecutorConfigFromOnchain,
     ) -> Result<Vec<TransactionOutput>, VMStatus> {
         Ok(Vec::new())
     }
 
     fn execute_block(
-        _transactions: Vec<Transaction>,
+        _transactions: &[SignatureVerifiedTransaction],
         _state_view: &impl StateView,
-        _maybe_block_gas_limit: Option<u64>,
-    ) -> Result<Vec<TransactionOutput>, VMStatus> {
-        Ok(Vec::new())
+        _onchain_config: BlockExecutorConfigFromOnchain,
+    ) -> Result<BlockOutput<TransactionOutput>, VMStatus> {
+        Ok(BlockOutput::new(vec![]))
     }
 }
 
@@ -88,11 +101,11 @@ impl VMExecutor for FakeVM {
 pub struct FakeDb;
 
 impl DbReader for FakeDb {
-    fn get_latest_version(&self) -> Result<Version> {
+    fn get_latest_version(&self) -> aptos_storage_interface::Result<Version> {
         Ok(self.get_latest_ledger_info()?.ledger_info().version())
     }
 
-    fn get_latest_commit_metadata(&self) -> Result<(Version, u64)> {
+    fn get_latest_commit_metadata(&self) -> aptos_storage_interface::Result<(Version, u64)> {
         let ledger_info_with_sig = self.get_latest_ledger_info()?;
         let ledger_info = ledger_info_with_sig.ledger_info();
         Ok((ledger_info.version(), ledger_info.timestamp_usecs()))
@@ -108,7 +121,9 @@ impl DbWriter for FakeDb {
         _ledger_info_with_sigs: Option<&LedgerInfoWithSignatures>,
         _sync_commit: bool,
         _in_memory_state: StateDelta,
-    ) -> Result<()> {
+        _block_state_updates: Option<ShardedStateUpdates>,
+        _sharded_state_cache: Option<&ShardedStateCache>,
+    ) -> aptos_storage_interface::Result<()> {
         Ok(())
     }
 }

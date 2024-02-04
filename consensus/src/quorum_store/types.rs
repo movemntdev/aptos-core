@@ -8,10 +8,13 @@ use aptos_crypto::{
     HashValue,
 };
 use aptos_crypto_derive::CryptoHasher;
-use aptos_types::{transaction::SignedTransaction, PeerId};
+use aptos_types::{ledger_info::LedgerInfoWithSignatures, transaction::SignedTransaction, PeerId};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
-use std::ops::Deref;
+use std::{
+    fmt::{Display, Formatter},
+    ops::Deref,
+};
 
 #[derive(Clone, Eq, Deserialize, Serialize, PartialEq, Debug)]
 pub struct PersistedValue {
@@ -50,6 +53,10 @@ impl PersistedValue {
 
     pub fn batch_info(&self) -> &BatchInfo {
         &self.info
+    }
+
+    pub fn payload(&self) -> &Option<Vec<SignedTransaction>> {
+        &self.maybe_payload
     }
 }
 
@@ -122,6 +129,22 @@ impl BatchPayload {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use aptos_config::config;
+
+    #[test]
+    fn test_batch_payload_padding() {
+        use super::*;
+        let empty_batch_payload = BatchPayload::new(PeerId::random(), vec![]);
+        // We overestimate the ULEB128 encoding of the number of transactions as 128 bytes.
+        assert_eq!(
+            empty_batch_payload.num_bytes() + 127,
+            config::BATCH_PADDING_BYTES
+        );
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Batch {
     batch_info: BatchInfo,
@@ -180,6 +203,16 @@ impl Batch {
         Ok(())
     }
 
+    /// Verify the batch, and that it matches the requested digest
+    pub fn verify_with_digest(&self, requested_digest: HashValue) -> anyhow::Result<()> {
+        ensure!(
+            requested_digest == *self.digest(),
+            "Response digest doesn't match the request"
+        );
+        self.verify()?;
+        Ok(())
+    }
+
     pub fn into_transactions(self) -> Vec<SignedTransaction> {
         self.payload.txns
     }
@@ -202,6 +235,16 @@ pub struct BatchRequest {
     epoch: u64,
     source: PeerId,
     digest: HashValue,
+}
+
+impl Display for BatchRequest {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "BatchRequest: epoch: {}, source: {}, digest {}",
+            self.epoch, self.source, self.digest
+        )
+    }
 }
 
 impl BatchRequest {
@@ -246,6 +289,12 @@ impl From<Batch> for PersistedValue {
         } = value;
         PersistedValue::new(batch_info, Some(payload.into_transactions()))
     }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum BatchResponse {
+    Batch(Batch),
+    NotFound(LedgerInfoWithSignatures),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -70,32 +70,36 @@
 // See https://play.rust-lang.org/?version=stable&mode=debug&edition=2018&gist=795cd4f459f1d4a0005a99650726834b
 #![allow(clippy::while_let_loop)]
 
+pub mod ancestors;
+mod dropper;
 mod metrics;
 mod node;
-mod updater;
-mod utils;
-
 #[cfg(test)]
 mod sparse_merkle_test;
 #[cfg(any(test, feature = "bench", feature = "fuzzing"))]
 pub mod test_utils;
+mod updater;
+pub mod utils;
 
 use crate::sparse_merkle::{
-    metrics::{LATEST_GENERATION, OLDEST_GENERATION, TIMER},
+    dropper::SUBTREE_DROPPER,
+    metrics::{GENERATION, TIMER},
     node::{NodeInner, SubTree},
     updater::SubTreeUpdater,
+    utils::get_state_shard_id,
 };
 use aptos_crypto::{
     hash::{CryptoHash, SPARSE_MERKLE_PLACEHOLDER_HASH},
     HashValue,
 };
 use aptos_infallible::Mutex;
+use aptos_metrics_core::IntGaugeHelper;
 use aptos_types::{
-    nibble::nibble_path::NibblePath, proof::SparseMerkleProofExt,
+    nibble::{nibble_path::NibblePath, Nibble},
+    proof::SparseMerkleProofExt,
     state_store::state_storage_usage::StateStorageUsage,
 };
 use std::{
-    borrow::Borrow,
     collections::{BTreeMap, HashMap},
     sync::{Arc, MutexGuard, Weak},
 };
@@ -108,7 +112,7 @@ const BITS_IN_BYTE: usize = 8;
 /// To help finding the oldest ancestor of any SMT, a branch tracker is created each time
 /// the chain of SMTs forked (two or more SMTs updating the same parent).
 #[derive(Debug)]
-struct BranchTracker<V> {
+struct BranchTracker<V: Send + Sync + 'static> {
     /// Current branch head, n.b. when the head just started dropping, this weak link becomes
     /// invalid, we fall back to the `next`
     head: Weak<Inner<V>>,
@@ -119,7 +123,7 @@ struct BranchTracker<V> {
     parent: Option<Arc<Mutex<BranchTracker<V>>>>,
 }
 
-impl<V> BranchTracker<V> {
+impl<V: Send + Sync + 'static> BranchTracker<V> {
     fn new_head_unknown(
         parent: Option<Arc<Mutex<Self>>>,
         _locked_family: &MutexGuard<()>,
@@ -146,29 +150,31 @@ impl<V> BranchTracker<V> {
         self.next = next.map_or_else(Weak::new, Arc::downgrade)
     }
 
+    #[allow(dead_code)]
     fn parent(&self, _locked_family: &MutexGuard<()>) -> Option<Arc<Mutex<Self>>> {
         self.parent.clone()
     }
 
+    #[allow(dead_code)]
     fn head(&self, _locked_family: &MutexGuard<()>) -> Option<Arc<Inner<V>>> {
         // if `head.upgrade()` failed, it's that the head is being dropped.
         //
         // Notice the starting of the drop a SMT is not protected by the family lock -- but
         // change of the links between the branch trackers and SMTs are always protected by the
         // family lock.
-        // see `impl<V> Drop for Inner<V>`
+        // see `impl<V: Send + Sync + 'static> Drop for Inner<V>`
         self.head.upgrade().or_else(|| self.next.upgrade())
     }
 }
 
 /// Keeps track of references of children and the branch tracker of the current branch.
 #[derive(Debug)]
-struct InnerLinks<V> {
+struct InnerLinks<V: Send + Sync + 'static> {
     children: Vec<Arc<Inner<V>>>,
     branch_tracker: Arc<Mutex<BranchTracker<V>>>,
 }
 
-impl<V> InnerLinks<V> {
+impl<V: Send + Sync + 'static> InnerLinks<V> {
     fn new(branch_tracker: Arc<Mutex<BranchTracker<V>>>) -> Mutex<Self> {
         Mutex::new(Self {
             children: Vec::new(),
@@ -180,16 +186,20 @@ impl<V> InnerLinks<V> {
 /// The inner content of a sparse merkle tree, we have this so that even if a tree is dropped, the
 /// INNER of it can still live if referenced by a previous version.
 #[derive(Debug)]
-struct Inner<V> {
-    root: SubTree<V>,
+struct Inner<V: Send + Sync + 'static> {
+    root: Option<SubTree<V>>,
     usage: StateStorageUsage,
     links: Mutex<InnerLinks<V>>,
+    family: HashValue,
     generation: u64,
     family_lock: Arc<Mutex<()>>,
 }
 
-impl<V> Drop for Inner<V> {
+impl<V: Send + Sync + 'static> Drop for Inner<V> {
     fn drop(&mut self) {
+        // Drop the root in a different thread, because that's the slowest part.
+        SUBTREE_DROPPER.schedule_drop(self.root.take());
+
         // To prevent recursively locking the family, buffer all descendants outside.
         let mut processed_descendants = Vec::new();
 
@@ -219,25 +229,35 @@ impl<V> Drop for Inner<V> {
                 processed_descendants.push(descendant);
             }
         };
-        // Now that the lock is released, those in `processed_descendants` will be dropped in turn
-        // if applicable.
+        // Now that the lock is released, those in `processed_descendants` can be dropped if
+        // applicable.
+        drop(processed_descendants);
+
+        self.log_generation("drop");
     }
 }
 
-impl<V> Inner<V> {
+impl<V: Send + Sync + 'static> Inner<V> {
     fn new(root: SubTree<V>, usage: StateStorageUsage) -> Arc<Self> {
+        let family = HashValue::random();
         let family_lock = Arc::new(Mutex::new(()));
         let branch_tracker = BranchTracker::new_head_unknown(None, &family_lock.lock());
         let me = Arc::new(Self {
-            root,
+            root: Some(root),
             usage,
             links: InnerLinks::new(branch_tracker.clone()),
+            family,
             generation: 0,
             family_lock,
         });
         branch_tracker.lock().head = Arc::downgrade(&me);
 
         me
+    }
+
+    fn root(&self) -> &SubTree<V> {
+        // root only goes away during Drop
+        self.root.as_ref().expect("Root must exist.")
     }
 
     fn become_oldest(self: Arc<Self>, locked_family: &MutexGuard<()>) -> Arc<Self> {
@@ -260,11 +280,11 @@ impl<V> Inner<V> {
         branch_tracker: Arc<Mutex<BranchTracker<V>>>,
         family_lock: Arc<Mutex<()>>,
     ) -> Arc<Self> {
-        LATEST_GENERATION.set(self.generation as i64 + 1);
         Arc::new(Self {
-            root: child_root,
+            root: Some(child_root),
             usage: child_usage,
             links: InnerLinks::new(branch_tracker),
+            family: self.family,
             generation: self.generation + 1,
             family_lock,
         })
@@ -310,6 +330,7 @@ impl<V> Inner<V> {
         child
     }
 
+    #[allow(dead_code)]
     fn get_oldest_ancestor(self: &Arc<Self>) -> Arc<Self> {
         // Under the protection of family_lock, the branching structure won't change,
         // so we can follow the links and find the head of the oldest branch tracker.
@@ -335,7 +356,6 @@ impl<V> Inner<V> {
             break;
         }
 
-        OLDEST_GENERATION.set(ret.generation as i64);
         ret
     }
 
@@ -347,17 +367,21 @@ impl<V> Inner<V> {
             .map(|child| child.become_oldest(locked_family))
             .collect()
     }
+
+    fn log_generation(&self, name: &'static str) {
+        GENERATION.set_with(&[name], self.generation as i64);
+    }
 }
 
 /// The Sparse Merkle Tree implementation.
 #[derive(Clone, Debug)]
-pub struct SparseMerkleTree<V> {
+pub struct SparseMerkleTree<V: Send + Sync + 'static> {
     inner: Arc<Inner<V>>,
 }
 
-impl<V> SparseMerkleTree<V>
+impl<V: Send + Sync + 'static> SparseMerkleTree<V>
 where
-    V: Clone + CryptoHash + Send + Sync,
+    V: Clone + CryptoHash + Send + Sync + 'static,
 {
     /// Constructs a Sparse Merkle Tree with a root hash. This is often used when we restart and
     /// the scratch pad and the storage have identical state, so we use a single root hash to
@@ -390,21 +414,28 @@ where
         self.root_hash() == other.root_hash()
     }
 
+    #[allow(dead_code)]
     fn get_oldest_ancestor(&self) -> Self {
         Self {
             inner: self.inner.get_oldest_ancestor(),
         }
     }
 
-    pub fn freeze(self) -> FrozenSparseMerkleTree<V> {
-        let base_smt = self.get_oldest_ancestor();
-        let base_generation = base_smt.inner.generation;
+    pub fn freeze(&self, base_smt: &SparseMerkleTree<V>) -> FrozenSparseMerkleTree<V> {
+        assert!(base_smt.is_family(self));
+
+        self.log_generation("freeze");
+        base_smt.log_generation("oldest");
 
         FrozenSparseMerkleTree {
-            base_smt,
-            base_generation,
-            smt: self,
+            base_smt: base_smt.clone(),
+            base_generation: base_smt.generation(),
+            smt: self.clone(),
         }
+    }
+
+    pub fn log_generation(&self, name: &'static str) {
+        self.inner.log_generation(name)
     }
 
     #[cfg(test)]
@@ -415,24 +446,156 @@ where
     }
 
     fn root_weak(&self) -> SubTree<V> {
-        self.inner.root.weak()
+        self.inner.root().weak()
     }
 
     /// Returns the root hash of this tree.
     pub fn root_hash(&self) -> HashValue {
-        self.inner.root.hash()
+        self.inner.root().hash()
     }
 
     fn generation(&self) -> u64 {
         self.inner.generation
     }
 
-    fn is_the_same(&self, other: &Self) -> bool {
+    pub fn is_the_same(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.inner, &other.inner)
+    }
+
+    pub fn is_family(&self, other: &Self) -> bool {
+        self.inner.family == other.inner.family
     }
 
     pub fn usage(&self) -> StateStorageUsage {
         self.inner.usage
+    }
+
+    /// Compares an old and a new SMTs and return the newly created node hashes in between.
+    ///
+    /// Assumes 16 shards in total.
+    pub fn new_node_hashes_since(
+        &self,
+        since_smt: &Self,
+        shard_id: u8,
+    ) -> HashMap<NibblePath, HashValue> {
+        let _timer = TIMER
+            .with_label_values(&["new_node_hashes_since"])
+            .start_timer();
+
+        assert!(since_smt.is_family(self));
+
+        let mut node_hashes = HashMap::new();
+        let mut subtree = self.root_weak();
+        let mut pos = NodePosition::with_capacity(HashValue::LENGTH_IN_BITS);
+        let since_generation = since_smt.generation() + 1;
+        // Assume 16 shards here.
+        // We check the top 4 levels first, if there is any leaf node belongs to the shard we are
+        // requesting, we collect that node and return earlier (because there is no nodes below
+        // this point).
+        // Otherwise, once we reach the 5th level (the level of the root of each shard), all nodes
+        // at or below it belongs to the requested shard.
+        for i in (0..4).rev() {
+            if let Some(node) = subtree.get_node_if_in_mem(since_generation) {
+                match node.inner() {
+                    NodeInner::Internal(internal_node) => {
+                        subtree = match (shard_id >> i) & 1 {
+                            0 => {
+                                pos.push(false);
+                                internal_node.left.weak()
+                            },
+                            1 => {
+                                pos.push(true);
+                                internal_node.right.weak()
+                            },
+                            _ => {
+                                unreachable!()
+                            },
+                        }
+                    },
+                    NodeInner::Leaf(leaf_node) => {
+                        if get_state_shard_id(leaf_node.key) == shard_id {
+                            let mut nibble_path = NibblePath::new_even(vec![]);
+                            nibble_path.push(Nibble::from(shard_id));
+                            node_hashes.insert(nibble_path, subtree.hash());
+                        }
+                        return node_hashes;
+                    },
+                }
+            } else {
+                return node_hashes;
+            }
+        }
+        Self::new_node_hashes_since_impl(
+            subtree,
+            since_smt.generation() + 1,
+            &mut pos,
+            &mut node_hashes,
+        );
+        node_hashes
+    }
+
+    /// Recursively generate the partial node update batch of jellyfish merkle
+    fn new_node_hashes_since_impl(
+        subtree: SubTree<V>,
+        since_generation: u64,
+        pos: &mut NodePosition,
+        node_hashes: &mut HashMap<NibblePath, HashValue>,
+    ) {
+        if let Some(node) = subtree.get_node_if_in_mem(since_generation) {
+            let is_nibble = if let Some(path) = Self::maybe_to_nibble_path(pos) {
+                node_hashes.insert(path, subtree.hash());
+                true
+            } else {
+                false
+            };
+            match node.inner() {
+                NodeInner::Internal(internal_node) => {
+                    let depth = pos.len();
+                    pos.push(false);
+                    Self::new_node_hashes_since_impl(
+                        internal_node.left.weak(),
+                        since_generation,
+                        pos,
+                        node_hashes,
+                    );
+                    *pos.get_mut(depth).unwrap() = true;
+                    Self::new_node_hashes_since_impl(
+                        internal_node.right.weak(),
+                        since_generation,
+                        pos,
+                        node_hashes,
+                    );
+                    pos.pop();
+                },
+                NodeInner::Leaf(leaf_node) => {
+                    let mut path = NibblePath::new_even(leaf_node.key.to_vec());
+                    if !is_nibble {
+                        path.truncate(pos.len() / BITS_IN_NIBBLE + 1);
+                        node_hashes.insert(path, subtree.hash());
+                    }
+                },
+            }
+        }
+    }
+
+    fn maybe_to_nibble_path(pos: &NodePosition) -> Option<NibblePath> {
+        assert!(pos.len() <= HashValue::LENGTH_IN_BITS);
+
+        if pos.len() % BITS_IN_NIBBLE == 0 {
+            let mut bytes = pos.clone().into_vec();
+            if pos.len() % BITS_IN_BYTE == 0 {
+                Some(NibblePath::new_even(bytes))
+            } else {
+                // Unused bits in `BitVec` is uninitialized, setting to 0 to make sure.
+                if let Some(b) = bytes.last_mut() {
+                    *b &= 0xF0
+                }
+
+                Some(NibblePath::new_odd(bytes))
+            }
+        } else {
+            None
+        }
     }
 }
 
@@ -448,13 +611,13 @@ where
         proof_reader: &impl ProofRead,
     ) -> Result<Self, UpdateError> {
         self.clone()
-            .freeze()
-            .batch_update(updates, StateStorageUsage::zero(), proof_reader)
+            .freeze(self)
+            .batch_update(updates, StateStorageUsage::Untracked, proof_reader)
             .map(FrozenSparseMerkleTree::unfreeze)
     }
 
     pub fn get(&self, key: HashValue) -> StateStoreStatus<V> {
-        self.clone().freeze().get(key)
+        self.clone().freeze(self).get(key)
     }
 }
 
@@ -492,23 +655,26 @@ pub enum StateStoreStatus<V> {
 /// In the entire lifetime of this, in-mem nodes won't be dropped because a reference to the oldest
 /// SMT is held inside.
 #[derive(Clone, Debug)]
-pub struct FrozenSparseMerkleTree<V> {
-    base_smt: SparseMerkleTree<V>,
-    base_generation: u64,
-    smt: SparseMerkleTree<V>,
+pub struct FrozenSparseMerkleTree<V: Send + Sync + 'static> {
+    pub base_smt: SparseMerkleTree<V>,
+    pub base_generation: u64,
+    pub smt: SparseMerkleTree<V>,
 }
 
 impl<V> FrozenSparseMerkleTree<V>
 where
-    V: Clone + CryptoHash + Send + Sync,
+    V: Clone + CryptoHash + Send + Sync + 'static,
 {
     fn spawn(&self, child_root: SubTree<V>, child_usage: StateStorageUsage) -> Self {
+        let smt = SparseMerkleTree {
+            inner: self.smt.inner.spawn(child_root, child_usage),
+        };
+        smt.log_generation("spawn");
+
         Self {
             base_smt: self.base_smt.clone(),
             base_generation: self.base_generation,
-            smt: SparseMerkleTree {
-                inner: self.smt.inner.spawn(child_root, child_usage),
-            },
+            smt,
         }
     }
 
@@ -518,87 +684,6 @@ where
 
     pub fn root_hash(&self) -> HashValue {
         self.smt.root_hash()
-    }
-
-    /// Compares an old and a new SMTs and return the newly created node hashes in between.
-    pub fn new_node_hashes_since(&self, since_smt: &Self) -> HashMap<NibblePath, HashValue> {
-        let _timer = TIMER
-            .with_label_values(&["new_node_hashes_since"])
-            .start_timer();
-
-        assert!(self.base_smt.is_the_same(&since_smt.base_smt));
-        let mut node_hashes = HashMap::new();
-        Self::new_node_hashes_since_impl(
-            self.smt.root_weak(),
-            since_smt.smt.generation() + 1,
-            &mut NodePosition::with_capacity(HashValue::LENGTH_IN_BITS),
-            &mut node_hashes,
-        );
-        node_hashes
-    }
-
-    /// Recursively generate the partial node update batch of jellyfish merkle
-    fn new_node_hashes_since_impl(
-        subtree: SubTree<V>,
-        since_generation: u64,
-        pos: &mut NodePosition,
-        node_hashes: &mut HashMap<NibblePath, HashValue>,
-    ) {
-        if let Some(node) = subtree.get_node_if_in_mem(since_generation) {
-            let is_nibble = if let Some(path) = Self::maybe_to_nibble_path(pos) {
-                node_hashes.insert(path, subtree.hash());
-                true
-            } else {
-                false
-            };
-            match node.inner().borrow() {
-                NodeInner::Internal(internal_node) => {
-                    let depth = pos.len();
-                    pos.push(false);
-                    Self::new_node_hashes_since_impl(
-                        internal_node.left.weak(),
-                        since_generation,
-                        pos,
-                        node_hashes,
-                    );
-                    *pos.get_mut(depth).unwrap() = true;
-                    Self::new_node_hashes_since_impl(
-                        internal_node.right.weak(),
-                        since_generation,
-                        pos,
-                        node_hashes,
-                    );
-                    pos.pop();
-                },
-                NodeInner::Leaf(leaf_node) => {
-                    let mut path = NibblePath::new_even(leaf_node.key.to_vec());
-                    if !is_nibble {
-                        path.truncate(pos.len() / BITS_IN_NIBBLE + 1);
-                    }
-                    node_hashes.insert(path, subtree.hash());
-                },
-            }
-        }
-    }
-
-    fn maybe_to_nibble_path(pos: &NodePosition) -> Option<NibblePath> {
-        assert!(pos.len() <= HashValue::LENGTH_IN_BITS);
-
-        if pos.len() % BITS_IN_NIBBLE == 0 {
-            let mut bytes = pos.clone().into_vec();
-            if pos.len() % BITS_IN_BYTE == 0 {
-                Some(NibblePath::new_even(bytes))
-            } else {
-                // Unused bits in `BitVec` is uninitialized, setting to 0 to make sure.
-                if let Some(b) = bytes.last_mut() {
-                    *b &= 0xF0
-                }
-
-                Some(NibblePath::new_odd(bytes))
-            }
-        } else {
-            None
-        }
     }
 
     /// Constructs a new Sparse Merkle Tree by applying `updates`, which are considered to happen
@@ -620,7 +705,9 @@ where
             .collect::<Vec<_>>();
 
         if kvs.is_empty() {
-            assert_eq!(self.smt.inner.usage, usage);
+            if !usage.is_untracked() {
+                assert_eq!(self.smt.inner.usage, usage);
+            }
             Ok(self.clone())
         } else {
             let current_root = self.smt.root_weak();

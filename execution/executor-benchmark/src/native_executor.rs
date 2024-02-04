@@ -13,7 +13,7 @@ use aptos_storage_interface::cached_state_view::CachedStateView;
 use aptos_types::{
     account_address::AccountAddress,
     account_config::{deposit::DepositEvent, withdraw::WithdrawEvent},
-    block_executor::partitioner::ExecutableTransactions,
+    block_executor::{config::BlockExecutorConfigFromOnchain, partitioner::ExecutableTransactions},
     contract_event::ContractEvent,
     event::EventKey,
     state_store::state_key::StateKey,
@@ -117,20 +117,20 @@ impl NativeExecutor {
         let write_set = vec![
             (
                 sender_account_key,
-                WriteOp::Modification(bcs::to_bytes(&sender_account)?),
+                WriteOp::legacy_modification(bcs::to_bytes(&sender_account)?.into()),
             ),
             (
                 sender_coin_store_key,
-                WriteOp::Modification(bcs::to_bytes(&sender_coin_store)?),
+                WriteOp::legacy_modification(bcs::to_bytes(&sender_coin_store)?.into()),
             ),
             // (
             //     TOTAL_SUPPLY_STATE_KEY.clone(),
-            //     WriteOp::Modification(bcs::to_bytes(&total_supply)?),
+            //     WriteOp::legacy_modification(bcs::to_bytes(&total_supply)?),
             // ),
         ];
 
         // TODO(grao): Some values are fake, because I'm lazy.
-        let events = vec![ContractEvent::new(
+        let events = vec![ContractEvent::new_v1(
             EventKey::new(0, sender_address),
             0,
             TypeTag::Struct(Box::new(WithdrawEvent::struct_tag())),
@@ -179,7 +179,7 @@ impl NativeExecutor {
 
                 write_set.push((
                     recipient_coin_store_key,
-                    WriteOp::Modification(bcs::to_bytes(&recipient_coin_store)?),
+                    WriteOp::legacy_modification(bcs::to_bytes(&recipient_coin_store)?.into()),
                 ));
             }
         } else {
@@ -215,16 +215,16 @@ impl NativeExecutor {
 
             write_set.push((
                 recipient_account_key,
-                WriteOp::Creation(bcs::to_bytes(&recipient_account)?),
+                WriteOp::legacy_creation(bcs::to_bytes(&recipient_account)?.into()),
             ));
             write_set.push((
                 recipient_coin_store_key,
-                WriteOp::Creation(bcs::to_bytes(&recipient_coin_store)?),
+                WriteOp::legacy_creation(bcs::to_bytes(&recipient_coin_store)?.into()),
             ));
         }
 
         let events = vec![
-            ContractEvent::new(
+            ContractEvent::new_v1(
                 EventKey::new(0, recipient_address),
                 0,
                 TypeTag::Struct(Box::new(DepositEvent::struct_tag())),
@@ -337,9 +337,9 @@ impl NativeExecutor {
 
 impl TransactionBlockExecutor for NativeExecutor {
     fn execute_transaction_block(
-        transactions: ExecutableTransactions<Transaction>,
+        transactions: ExecutableTransactions,
         state_view: CachedStateView,
-        _maybe_block_gas_limit: Option<u64>,
+        _onchain_config: BlockExecutorConfigFromOnchain,
     ) -> Result<ChunkOutput> {
         let transactions = match transactions {
             ExecutableTransactions::Unsharded(txns) => txns,
@@ -348,7 +348,7 @@ impl TransactionBlockExecutor for NativeExecutor {
         let transaction_outputs = NATIVE_EXECUTOR_POOL.install(|| {
             transactions
                 .par_iter()
-                .map(|txn| match &txn {
+                .map(|txn| match &txn.expect_valid() {
                     Transaction::StateCheckpoint(_) => Self::handle_state_checkpoint(),
                     Transaction::UserTransaction(user_txn) => match user_txn.payload() {
                         aptos_types::transaction::TransactionPayload::EntryFunction(f) => {
@@ -412,7 +412,7 @@ impl TransactionBlockExecutor for NativeExecutor {
                 .collect::<Result<Vec<_>>>()
         })?;
         Ok(ChunkOutput {
-            transactions,
+            transactions: transactions.into_iter().map(|t| t.into_inner()).collect(),
             transaction_outputs,
             state_cache: state_view.into_state_cache(),
         })

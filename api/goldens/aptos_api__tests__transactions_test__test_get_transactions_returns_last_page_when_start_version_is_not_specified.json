@@ -119,7 +119,7 @@
     "state_change_hash": "",
     "event_root_hash": "",
     "state_checkpoint_hash": null,
-    "gas_used": "6",
+    "gas_used": "4",
     "success": true,
     "vm_status": "Executed successfully",
     "accumulator_root_hash": "",
@@ -272,6 +272,21 @@
             "struct_name": "0x4170746f73436f696e"
           }
         }
+      },
+      {
+        "guid": {
+          "creation_number": "0",
+          "account_address": "0x0"
+        },
+        "sequence_number": "0",
+        "type": "0x1::transaction_fee::FeeStatement",
+        "data": {
+          "execution_gas_units": "4",
+          "io_gas_units": "1",
+          "storage_fee_octas": "0",
+          "storage_fee_refund_octas": "0",
+          "total_charge_gas_units": "4"
+        }
       }
     ],
     "timestamp": "6500000",
@@ -397,7 +412,7 @@
     "state_change_hash": "",
     "event_root_hash": "",
     "state_checkpoint_hash": null,
-    "gas_used": "6",
+    "gas_used": "4",
     "success": true,
     "vm_status": "Executed successfully",
     "accumulator_root_hash": "",
@@ -550,6 +565,21 @@
             "struct_name": "0x4170746f73436f696e"
           }
         }
+      },
+      {
+        "guid": {
+          "creation_number": "0",
+          "account_address": "0x0"
+        },
+        "sequence_number": "0",
+        "type": "0x1::transaction_fee::FeeStatement",
+        "data": {
+          "execution_gas_units": "4",
+          "io_gas_units": "1",
+          "storage_fee_octas": "0",
+          "storage_fee_refund_octas": "0",
+          "total_charge_gas_units": "4"
+        }
       }
     ],
     "timestamp": "7000000",
@@ -675,7 +705,7 @@
     "state_change_hash": "",
     "event_root_hash": "",
     "state_checkpoint_hash": null,
-    "gas_used": "6",
+    "gas_used": "4",
     "success": true,
     "vm_status": "Executed successfully",
     "accumulator_root_hash": "",
@@ -828,6 +858,21 @@
             "struct_name": "0x4170746f73436f696e"
           }
         }
+      },
+      {
+        "guid": {
+          "creation_number": "0",
+          "account_address": "0x0"
+        },
+        "sequence_number": "0",
+        "type": "0x1::transaction_fee::FeeStatement",
+        "data": {
+          "execution_gas_units": "4",
+          "io_gas_units": "1",
+          "storage_fee_octas": "0",
+          "storage_fee_refund_octas": "0",
+          "total_charge_gas_units": "4"
+        }
       }
     ],
     "timestamp": "7500000",
@@ -953,7 +998,7 @@
     "state_change_hash": "",
     "event_root_hash": "",
     "state_checkpoint_hash": null,
-    "gas_used": "6",
+    "gas_used": "4",
     "success": true,
     "vm_status": "Executed successfully",
     "accumulator_root_hash": "",
@@ -1106,6 +1151,21 @@
             "struct_name": "0x4170746f73436f696e"
           }
         }
+      },
+      {
+        "guid": {
+          "creation_number": "0",
+          "account_address": "0x0"
+        },
+        "sequence_number": "0",
+        "type": "0x1::transaction_fee::FeeStatement",
+        "data": {
+          "execution_gas_units": "4",
+          "io_gas_units": "1",
+          "storage_fee_octas": "0",
+          "storage_fee_refund_octas": "0",
+          "total_charge_gas_units": "4"
+        }
       }
     ],
     "timestamp": "8000000",
@@ -1231,7 +1291,7 @@
     "state_change_hash": "",
     "event_root_hash": "",
     "state_checkpoint_hash": null,
-    "gas_used": "6",
+    "gas_used": "4",
     "success": true,
     "vm_status": "Executed successfully",
     "accumulator_root_hash": "",
@@ -1384,6 +1444,21 @@
             "struct_name": "0x4170746f73436f696e"
           }
         }
+      },
+      {
+        "guid": {
+          "creation_number": "0",
+          "account_address": "0x0"
+        },
+        "sequence_number": "0",
+        "type": "0x1::transaction_fee::FeeStatement",
+        "data": {
+          "execution_gas_units": "4",
+          "io_gas_units": "1",
+          "storage_fee_octas": "0",
+          "storage_fee_refund_octas": "0",
+          "total_charge_gas_units": "4"
+        }
       }
     ],
     "timestamp": "8500000",
@@ -1509,7 +1584,7 @@
     "state_change_hash": "",
     "event_root_hash": "",
     "state_checkpoint_hash": null,
-    "gas_used": "6",
+    "gas_used": "4",
     "success": true,
     "vm_status": "Executed successfully",
     "accumulator_root_hash": "",
@@ -1662,6 +1737,21 @@
             "struct_name": "0x4170746f73436f696e"
           }
         }
+      },
+      {
+        "guid": {
+          "creation_number": "0",
+          "account_address": "0x0"
+        },
+        "sequence_number": "0",
+        "type": "0x1::transaction_fee::FeeStatement",
+        "data": {
+          "execution_gas_units": "4",
+          "io_gas_units": "1",
+          "storage_fee_octas": "0",
+          "storage_fee_refund_octas": "0",
+          "total_charge_gas_units": "4"
+        }
       }
     ],
     "timestamp": "9000000",
@@ -1787,7 +1877,7 @@
     "state_change_hash": "",
     "event_root_hash": "",
     "state_checkpoint_hash": null,
-    "gas_used": "6",
+    "gas_used": "4",
     "success": true,
     "vm_status": "Executed successfully",
     "accumulator_root_hash": "",
@@ -1940,6 +2030,21 @@
             "struct_name": "0x4170746f73436f696e"
           }
         }
+      },
+      {
+        "guid": {
+          "creation_number": "0",
+          "account_address": "0x0"
+        },
+        "sequence_number": "0",
+        "type": "0x1::transaction_fee::FeeStatement",
+        "data": {
+          "execution_gas_units": "4",
+          "io_gas_units": "1",
+          "storage_fee_octas": "0",
+          "storage_fee_refund_octas": "0",
+          "total_charge_gas_units": "4"
+        }
       }
     ],
     "timestamp": "9500000",
@@ -2065,7 +2170,7 @@
     "state_change_hash": "",
     "event_root_hash": "",
     "state_checkpoint_hash": null,
-    "gas_used": "6",
+    "gas_used": "4",
     "success": true,
     "vm_status": "Executed successfully",
     "accumulator_root_hash": "",
@@ -2217,6 +2322,21 @@
             "module_name": "0x6170746f735f636f696e",
             "struct_name": "0x4170746f73436f696e"
           }
+        }
+      },
+      {
+        "guid": {
+          "creation_number": "0",
+          "account_address": "0x0"
+        },
+        "sequence_number": "0",
+        "type": "0x1::transaction_fee::FeeStatement",
+        "data": {
+          "execution_gas_units": "4",
+          "io_gas_units": "1",
+          "storage_fee_octas": "0",
+          "storage_fee_refund_octas": "0",
+          "total_charge_gas_units": "4"
         }
       }
     ],

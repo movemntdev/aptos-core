@@ -8,6 +8,7 @@
 //! See [`README.md`](../README.md) for integration into an adapter.
 
 use better_any::{Tid, TidAble};
+use bytes::Bytes;
 use move_binary_format::errors::{PartialVMError, PartialVMResult};
 use move_core_types::{
     account_address::AccountAddress,
@@ -32,7 +33,7 @@ use smallvec::smallvec;
 use std::{
     cell::RefCell,
     collections::{btree_map::Entry, BTreeMap, BTreeSet, VecDeque},
-    fmt::Display,
+    fmt::{Debug, Display},
     sync::Arc,
 };
 
@@ -42,7 +43,7 @@ use std::{
 /// The representation of a table handle. This is created from truncating a sha3-256 based
 /// hash over a transaction hash provided by the environment and a table creation counter
 /// local to the transaction.
-#[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Hash, PartialOrd, Ord, PartialEq, Eq)]
 pub struct TableHandle(pub AccountAddress);
 
 impl Display for TableHandle {
@@ -82,17 +83,18 @@ pub struct TableChangeSet {
 
 /// A change of a single table.
 pub struct TableChange {
-    pub entries: BTreeMap<Vec<u8>, Op<Vec<u8>>>,
+    pub entries: BTreeMap<Vec<u8>, Op<Bytes>>,
 }
 
 /// A table resolver which needs to be provided by the environment. This allows to lookup
 /// data in remote storage, as well as retrieve cost of table operations.
 pub trait TableResolver {
-    fn resolve_table_entry(
+    fn resolve_table_entry_bytes_with_layout(
         &self,
         handle: &TableHandle,
         key: &[u8],
-    ) -> Result<Option<Vec<u8>>, anyhow::Error>;
+        maybe_layout: Option<&MoveTypeLayout>,
+    ) -> Result<Option<Bytes>, PartialVMError>;
 }
 
 /// The native table context extension. This needs to be attached to the NativeContextExtensions
@@ -143,7 +145,7 @@ const HANDLE_FIELD_INDEX: usize = 0;
 impl<'a> NativeTableContext<'a> {
     /// Create a new instance of a native table context. This must be passed in via an
     /// extension into VM session functions.
-    pub fn new(txn_hash: [u8; 32], resolver: &'a dyn TableResolver) -> Self {
+    pub fn new(txn_hash: [u8; 32], resolver: &'a impl TableResolver) -> Self {
         Self {
             resolver,
             txn_hash,
@@ -176,11 +178,11 @@ impl<'a> NativeTableContext<'a> {
                 match op {
                     Op::New(val) => {
                         let bytes = serialize(&value_layout, &val)?;
-                        entries.insert(key, Op::New(bytes));
+                        entries.insert(key, Op::New(bytes.into()));
                     },
                     Op::Modify(val) => {
                         let bytes = serialize(&value_layout, &val)?;
-                        entries.insert(key, Op::Modify(bytes));
+                        entries.insert(key, Op::Modify(bytes.into()));
                     },
                     Op::Delete => {
                         entries.insert(key, Op::Delete);
@@ -211,8 +213,8 @@ impl TableData {
     ) -> PartialVMResult<&mut Table> {
         Ok(match self.tables.entry(handle) {
             Entry::Vacant(e) => {
-                let key_layout = get_type_layout(context, key_ty)?;
-                let value_layout = get_type_layout(context, value_ty)?;
+                let key_layout = context.type_to_type_layout(key_ty)?;
+                let value_layout = context.type_to_type_layout(value_ty)?;
                 let table = Table {
                     handle,
                     key_layout,
@@ -234,12 +236,11 @@ impl Table {
     ) -> PartialVMResult<(&mut GlobalValue, Option<Option<NumBytes>>)> {
         Ok(match self.content.entry(key) {
             Entry::Vacant(entry) => {
-                let (gv, loaded) = match context
-                    .resolver
-                    .resolve_table_entry(&self.handle, entry.key())
-                    .map_err(|err| {
-                        partial_extension_error(format!("remote table resolver failure: {}", err))
-                    })? {
+                let (gv, loaded) = match context.resolver.resolve_table_entry_bytes_with_layout(
+                    &self.handle,
+                    entry.key(),
+                    None,
+                )? {
                     Some(val_bytes) => {
                         let val = deserialize(&self.value_layout, &val_bytes)?;
                         (
@@ -696,10 +697,4 @@ fn deserialize(layout: &MoveTypeLayout, bytes: &[u8]) -> PartialVMResult<Value> 
 
 fn partial_extension_error(msg: impl ToString) -> PartialVMError {
     PartialVMError::new(StatusCode::VM_EXTENSION_ERROR).with_message(msg.to_string())
-}
-
-fn get_type_layout(context: &NativeContext, ty: &Type) -> PartialVMResult<MoveTypeLayout> {
-    context
-        .type_to_type_layout(ty)?
-        .ok_or_else(|| partial_extension_error("cannot determine type layout"))
 }

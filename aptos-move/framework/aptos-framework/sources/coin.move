@@ -149,7 +149,7 @@ module aptos_framework::coin {
     }
 
     /// This should be called by on-chain governance to update the config and allow
-    // or disallow upgradability of total supply.
+    /// or disallow upgradability of total supply.
     public fun allow_supply_upgrades(aptos_framework: &signer, allowed: bool) acquires SupplyConfig {
         system_addresses::assert_aptos_framework(aptos_framework);
         let allow_upgrades = &mut borrow_global_mut<SupplyConfig>(@aptos_framework).allow_upgrades;
@@ -161,7 +161,7 @@ module aptos_framework::coin {
     //
 
     /// Creates a new aggregatable coin with value overflowing on `limit`. Note that this function can
-    /// only be called by Aptos Framework (0x1) account for now becuase of `create_aggregator`.
+    /// only be called by Aptos Framework (0x1) account for now because of `create_aggregator`.
     public(friend) fun initialize_aggregatable_coin<CoinType>(aptos_framework: &signer): AggregatableCoin<CoinType> {
         let aggregator = aggregator_factory::create_aggregator(aptos_framework, MAX_U64);
         AggregatableCoin<CoinType> {
@@ -301,7 +301,10 @@ module aptos_framework::coin {
         }
     }
 
+    //
     // Public functions
+    //
+
     /// Burn `coin` with capability.
     /// The capability `_cap` should be passed as a reference to `BurnCapability<CoinType>`.
     public fun burn<CoinType>(
@@ -358,6 +361,19 @@ module aptos_framework::coin {
             &mut coin_store.deposit_events,
             DepositEvent { amount: coin.value },
         );
+
+        merge(&mut coin_store.coin, coin);
+    }
+
+    /// Deposit the coin balance into the recipient's account without checking if the account is frozen.
+    /// This is for internal use only and doesn't emit an DepositEvent.
+    public(friend) fun force_deposit<CoinType>(account_addr: address, coin: Coin<CoinType>) acquires CoinStore {
+        assert!(
+            is_account_registered<CoinType>(account_addr),
+            error::not_found(ECOIN_STORE_NOT_PUBLISHED),
+        );
+
+        let coin_store = borrow_global_mut<CoinStore<CoinType>>(account_addr);
 
         merge(&mut coin_store.coin, coin);
     }
@@ -538,6 +554,14 @@ module aptos_framework::coin {
         let maybe_supply = &mut borrow_global_mut<CoinInfo<CoinType>>(coin_address<CoinType>()).supply;
         if (option::is_some(maybe_supply)) {
             let supply = option::borrow_mut(maybe_supply);
+            spec {
+                use aptos_framework::optional_aggregator;
+                use aptos_framework::aggregator;
+                assume optional_aggregator::is_parallelizable(supply) ==> (aggregator::spec_aggregator_get_val(option::borrow(supply.aggregator))
+                    + amount <= aggregator::spec_get_limit(option::borrow(supply.aggregator)));
+                assume !optional_aggregator::is_parallelizable(supply) ==>
+                    (option::borrow(supply.integer).value + amount <= option::borrow(supply.integer).limit);
+            };
             optional_aggregator::add(supply, (amount as u128));
         };
         spec {
@@ -578,7 +602,7 @@ module aptos_framework::coin {
         coin.value
     }
 
-    /// Withdraw specifed `amount` of coin `CoinType` from the signing account.
+    /// Withdraw specified `amount` of coin `CoinType` from the signing account.
     public fun withdraw<CoinType>(
         account: &signer,
         amount: u64,

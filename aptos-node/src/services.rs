@@ -2,16 +2,23 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{bootstrap_api, indexer, mpsc::Receiver, network::ApplicationNetworkInterfaces};
+use aptos_admin_service::AdminService;
 use aptos_build_info::build_information;
 use aptos_config::config::NodeConfig;
-use aptos_consensus::network_interface::ConsensusMsg;
+use aptos_consensus::{
+    network_interface::ConsensusMsg, persistent_liveness_storage::StorageWriteProxy,
+    quorum_store::quorum_store_db::QuorumStoreDB,
+};
 use aptos_consensus_notifications::ConsensusNotifier;
-use aptos_event_notifications::ReconfigNotificationListener;
+use aptos_data_client::client::AptosDataClient;
+use aptos_event_notifications::{DbBackedOnChainConfig, ReconfigNotificationListener};
 use aptos_indexer_grpc_fullnode::runtime::bootstrap as bootstrap_indexer_grpc;
+use aptos_indexer_grpc_table_info::runtime::bootstrap as bootstrap_indexer_table_info;
 use aptos_logger::{debug, telemetry_log_writer::TelemetryLog, LoggerFilterUpdater};
 use aptos_mempool::{network::MempoolSyncMsg, MempoolClientRequest, QuorumStoreRequest};
 use aptos_mempool_notifications::MempoolNotificationListener;
 use aptos_network::application::{interface::NetworkClientInterface, storage::PeersAndMetadata};
+use aptos_network_benchmark::{run_netbench_service, NetbenchMessage};
 use aptos_peer_monitoring_service_server::{
     network::PeerMonitoringServiceNetworkEvents, storage::StorageReader,
     PeerMonitoringServiceServer,
@@ -20,9 +27,10 @@ use aptos_peer_monitoring_service_types::PeerMonitoringServiceMessage;
 use aptos_storage_interface::{DbReader, DbReaderWriter};
 use aptos_time_service::TimeService;
 use aptos_types::chain_id::ChainId;
+use aptos_validator_transaction_pool as vtxn_pool;
 use futures::channel::{mpsc, mpsc::Sender};
 use std::{sync::Arc, time::Instant};
-use tokio::runtime::Runtime;
+use tokio::runtime::{Handle, Runtime};
 
 const AC_SMP_CHANNEL_BUFFER_SIZE: usize = 1_024;
 const INTRA_NODE_CHANNEL_BUFFER_SIZE: usize = 1;
@@ -31,10 +39,11 @@ const INTRA_NODE_CHANNEL_BUFFER_SIZE: usize = 1;
 /// receiver, and both the api and indexer runtimes.
 pub fn bootstrap_api_and_indexer(
     node_config: &NodeConfig,
-    aptos_db: Arc<dyn DbReader>,
+    db_rw: DbReaderWriter,
     chain_id: ChainId,
 ) -> anyhow::Result<(
     Receiver<MempoolClientRequest>,
+    Option<Runtime>,
     Option<Runtime>,
     Option<Runtime>,
     Option<Runtime>,
@@ -43,12 +52,19 @@ pub fn bootstrap_api_and_indexer(
     let (mempool_client_sender, mempool_client_receiver) =
         mpsc::channel(AC_SMP_CHANNEL_BUFFER_SIZE);
 
+    let indexer_table_info = bootstrap_indexer_table_info(
+        node_config,
+        chain_id,
+        db_rw.clone(),
+        mempool_client_sender.clone(),
+    );
+
     // Create the API runtime
     let api_runtime = if node_config.api.enabled {
         Some(bootstrap_api(
             node_config,
             chain_id,
-            aptos_db.clone(),
+            db_rw.reader.clone(),
             mempool_client_sender.clone(),
         )?)
     } else {
@@ -59,17 +75,22 @@ pub fn bootstrap_api_and_indexer(
     let indexer_grpc = bootstrap_indexer_grpc(
         node_config,
         chain_id,
-        aptos_db.clone(),
+        db_rw.reader.clone(),
         mempool_client_sender.clone(),
     );
 
     // Create the indexer runtime
-    let indexer_runtime =
-        indexer::bootstrap_indexer(node_config, chain_id, aptos_db, mempool_client_sender)?;
+    let indexer_runtime = indexer::bootstrap_indexer(
+        node_config,
+        chain_id,
+        db_rw.reader.clone(),
+        mempool_client_sender,
+    )?;
 
     Ok((
         mempool_client_receiver,
         api_runtime,
+        indexer_table_info,
         indexer_runtime,
         indexer_grpc,
     ))
@@ -79,13 +100,14 @@ pub fn bootstrap_api_and_indexer(
 pub fn start_consensus_runtime(
     node_config: &mut NodeConfig,
     db_rw: DbReaderWriter,
-    consensus_reconfig_subscription: Option<ReconfigNotificationListener>,
+    consensus_reconfig_subscription: Option<ReconfigNotificationListener<DbBackedOnChainConfig>>,
     consensus_network_interfaces: ApplicationNetworkInterfaces<ConsensusMsg>,
     consensus_notifier: ConsensusNotifier,
     consensus_to_mempool_sender: Sender<QuorumStoreRequest>,
-) -> Runtime {
+    validator_txn_pool_client: vtxn_pool::ReadClient,
+) -> (Runtime, Arc<StorageWriteProxy>, Arc<QuorumStoreDB>) {
     let instant = Instant::now();
-    let consensus_runtime = aptos_consensus::consensus_provider::start_consensus(
+    let consensus = aptos_consensus::consensus_provider::start_consensus(
         node_config,
         consensus_network_interfaces.network_client,
         consensus_network_interfaces.network_service_events,
@@ -94,16 +116,17 @@ pub fn start_consensus_runtime(
         db_rw,
         consensus_reconfig_subscription
             .expect("Consensus requires a reconfiguration subscription!"),
+        validator_txn_pool_client,
     );
     debug!("Consensus started in {} ms", instant.elapsed().as_millis());
-    consensus_runtime
+    consensus
 }
 
 /// Create the mempool runtime and start mempool
 pub fn start_mempool_runtime_and_get_consensus_sender(
     node_config: &mut NodeConfig,
     db_rw: &DbReaderWriter,
-    mempool_reconfig_subscription: ReconfigNotificationListener,
+    mempool_reconfig_subscription: ReconfigNotificationListener<DbBackedOnChainConfig>,
     network_interfaces: ApplicationNetworkInterfaces<MempoolSyncMsg>,
     mempool_listener: MempoolNotificationListener,
     mempool_client_receiver: Receiver<MempoolClientRequest>,
@@ -131,12 +154,22 @@ pub fn start_mempool_runtime_and_get_consensus_sender(
     (mempool, consensus_to_mempool_sender)
 }
 
+/// Spawns a new thread for the admin service
+pub fn start_admin_service(node_config: &NodeConfig) -> AdminService {
+    AdminService::new(node_config)
+}
+
 /// Spawns a new thread for the node inspection service
 pub fn start_node_inspection_service(
     node_config: &NodeConfig,
+    aptos_data_client: AptosDataClient,
     peers_and_metadata: Arc<PeersAndMetadata>,
 ) {
-    aptos_inspection_service::start_inspection_service(node_config.clone(), peers_and_metadata)
+    aptos_inspection_service::start_inspection_service(
+        node_config.clone(),
+        aptos_data_client,
+        peers_and_metadata,
+    )
 }
 
 /// Starts the peer monitoring service and returns the runtime
@@ -182,6 +215,20 @@ pub fn start_peer_monitoring_service(
 
     // Return the runtime
     peer_monitoring_service_runtime
+}
+
+pub fn start_netbench_service(
+    node_config: &NodeConfig,
+    network_interfaces: ApplicationNetworkInterfaces<NetbenchMessage>,
+    runtime: &Handle,
+) {
+    let network_client = network_interfaces.network_client;
+    runtime.spawn(run_netbench_service(
+        node_config.clone(),
+        network_client,
+        network_interfaces.network_service_events,
+        TimeService::real(),
+    ));
 }
 
 /// Starts the telemetry service and grabs the build information

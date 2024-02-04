@@ -171,14 +171,14 @@ impl<'a> Disassembler<'a> {
         } else if let Some(alias) = self.module_aliases.get(&module_id) {
             Some(format!(
                 "use {}::{} as {};",
-                module_id.address(),
+                module_id.address().to_hex(),
                 module_id.name(),
                 alias
             ))
         } else {
             Some(format!(
                 "use {}::{};",
-                module_id.address(),
+                module_id.address().to_hex(),
                 module_id.name()
             ))
         }
@@ -453,7 +453,7 @@ impl<'a> Disassembler<'a> {
                 .into_iter()
                 .enumerate()
                 .map(|(local_idx, local)| format!("L{}:\t{}", local_idx, local))
-                .chain(bytecode.into_iter())
+                .chain(bytecode)
                 .collect();
             format!(" {{\n{}\n}}", body_iter.join("\n"))
         }
@@ -1064,6 +1064,7 @@ impl<'a> Disassembler<'a> {
     /// `None` when disassembling a script's "main" function.
     pub fn disassemble_function_def(
         &self,
+        def_index: usize,
         function_source_map: &FunctionSourceMap,
         function: Option<(&FunctionDefinition, &FunctionHandle)>,
         name: &IdentStr,
@@ -1153,9 +1154,11 @@ impl<'a> Disassembler<'a> {
         Ok(self.format_function_coverage(
             name,
             format!(
-                "{entry_modifier}{native_modifier}{visibility_modifier}{name}{ty_params}({params}){ret_type}{body}",
+                "{entry_modifier}{native_modifier}{visibility_modifier}{name}{ty_params}({params})\
+                {ret_type} /* def_idx: {def_index} */{body}",
                 params = &params.join(", "),
                 ret_type = Self::format_ret_type(&ret_type),
+                def_index = def_index
             ),
         ))
     }
@@ -1271,6 +1274,7 @@ impl<'a> Disassembler<'a> {
         let function_defs: Vec<String> = match self.source_mapper.bytecode {
             BinaryIndexedView::Script(script) => {
                 vec![self.disassemble_function_def(
+                    0,
                     self.source_mapper
                         .source_map
                         .get_function_source_map(FunctionDefinitionIndex(0_u16))?,
@@ -1290,6 +1294,7 @@ impl<'a> Disassembler<'a> {
                         .bytecode
                         .function_handle_at(function_definition.function);
                     self.disassemble_function_def(
+                        i,
                         self.source_mapper
                             .source_map
                             .get_function_source_map(function_definition_index)?,

@@ -4,19 +4,17 @@
 
 use crate::db_access::{CoinStore, DbAccessUtil};
 use anyhow::{Context, Result};
-use aptos_crypto::HashValue;
-use aptos_state_view::account_with_state_view::AsAccountWithStateView;
 use aptos_storage_interface::{state_view::LatestDbStateCheckpointView, DbReaderWriter};
 use aptos_transaction_generator_lib::{CounterState, ReliableTransactionSubmitter};
 use aptos_types::{
     account_address::AccountAddress,
     account_view::AccountView,
+    state_store::account_with_state_view::AsAccountWithStateView,
     transaction::{SignedTransaction, Transaction},
 };
 use async_trait::async_trait;
 use std::{
     collections::HashMap,
-    iter::once,
     sync::{atomic::AtomicUsize, mpsc},
     time::Duration,
 };
@@ -56,7 +54,6 @@ impl ReliableTransactionSubmitter for DbReliableTransactionSubmitter {
         self.block_sender.send(
             txns.iter()
                 .map(|t| Transaction::UserTransaction(t.clone()))
-                .chain(once(Transaction::StateCheckpoint(HashValue::random())))
                 .collect(),
         )?;
 

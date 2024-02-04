@@ -11,6 +11,7 @@ use aptos_crypto::{
     hash::{CryptoHash, SPARSE_MERKLE_PLACEHOLDER_HASH},
     HashValue,
 };
+use aptos_storage_interface::Result;
 use aptos_types::{
     nibble::{nibble_path::NibblePath, Nibble},
     proof::{definition::NodeInProof, SparseMerkleInternalNode, SparseMerkleLeafNode},
@@ -27,14 +28,14 @@ impl TreeReader<StateKey> for DummyReader {
         &self,
         _node_key: &NodeKey,
         _tag: &str,
-    ) -> anyhow::Result<Option<crate::Node<StateKey>>> {
+    ) -> Result<Option<crate::Node<StateKey>>> {
         unimplemented!()
     }
 
     fn get_rightmost_leaf(
         &self,
         _version: Version,
-    ) -> anyhow::Result<Option<(NodeKey, LeafNode<StateKey>)>> {
+    ) -> Result<Option<(NodeKey, LeafNode<StateKey>)>> {
         unimplemented!()
     }
 }
@@ -156,7 +157,7 @@ fn test_internal_validity() {
         );
         InternalNode::new(children);
     });
-    assert!(result.is_err());
+    assert!(result.is_ok());
 }
 
 #[test]
@@ -979,7 +980,10 @@ proptest! {
             "Filter out keys for leaves.",
             |k| k.nibble_path().num_nibbles() < 64
         ).no_shrink(),
-        node in any::<InternalNode>(),
+        node in any::<InternalNode>().prop_filter(
+            "get_child_with_siblings function only supports internal node with at least 2 leaves.",
+            |node| node.leaf_count() > 1
+        ),
     ) {
         for n in 0..16u8 {
             prop_assert_eq!(

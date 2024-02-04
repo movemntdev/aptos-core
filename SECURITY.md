@@ -4,7 +4,7 @@
 
 **DO NOT CREATE AN ISSUE** to report a security problem.
 
-Go to https://github.com/aptos-labs/aptos-core/security/advisories and open a vulnerability report. Send an email to [security@aptosfoundation.org](mailto:security@aptosfoundation.org) and provide your GitHub username. The team will traige the issue from there.
+Go to https://github.com/aptos-labs/aptos-core/security/advisories and open a vulnerability report. Send an email to [security@aptosfoundation.org](mailto:security@aptosfoundation.org) and provide your GitHub username. The team will triage the issue from there.
 
 For security reasons, DO NOT include attachments or provide detail sufficient for exploitation regarding the security issue in this email. Instead, wait for the advisory to be created, and **provide any sensitive details in the private GitHub advisory**.
 
@@ -14,7 +14,7 @@ Send the email from an email domain that is less likely to get flagged for spam 
 
 This is an actively monitored account, the team will quickly respond.
 
-If you do not receive a response within 24 hours, please directly followup with the team in [Discord](https://discord.gg/aptoslabs) by reaching out to anyone with the role “Aptos Labs”.
+If you do not receive a response within 24 hours, please directly followup with the team in [Discord](https://discord.gg/aptosnetwork) by reaching out to anyone with the role “Aptos Labs”.
 
 As above, please DO NOT include attachments or provide detail regarding the security issue in this email.
 

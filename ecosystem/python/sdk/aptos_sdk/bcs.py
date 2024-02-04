@@ -12,12 +12,39 @@ import typing
 import unittest
 from typing import Dict, List
 
+from typing_extensions import Protocol
+
 MAX_U8 = 2**8 - 1
 MAX_U16 = 2**16 - 1
 MAX_U32 = 2**32 - 1
 MAX_U64 = 2**64 - 1
 MAX_U128 = 2**128 - 1
 MAX_U256 = 2**256 - 1
+
+
+class Deserializable(Protocol):
+    # The following class can be deserialized from a bcs stream.
+
+    @classmethod
+    def from_bytes(cls, indata: bytes) -> Deserializable:
+        der = Deserializer(indata)
+        return der.struct(cls)
+
+    @staticmethod
+    def deserialize(deserializer: Deserializer) -> Deserializable:
+        ...
+
+
+class Serializable(Protocol):
+    # The following class can be serialized into a bcs stream.
+
+    def to_bytes(self) -> bytes:
+        ser = Serializer()
+        ser.struct(self)
+        return ser.output()
+
+    def serialize(self, serializer: Serializer):
+        ...
 
 
 class Deserializer:
@@ -149,14 +176,14 @@ class Serializer:
         value_encoder: typing.Callable[[Serializer, typing.Any], bytes],
     ):
         encoded_values = []
-        for (key, value) in values.items():
+        for key, value in values.items():
             encoded_values.append(
                 (encoder(key, key_encoder), encoder(value, value_encoder))
             )
         encoded_values.sort(key=lambda item: item[0])
 
         self.uleb128(len(encoded_values))
-        for (key, value) in encoded_values:
+        for key, value in encoded_values:
             self.fixed_bytes(key)
             self.fixed_bytes(value)
 

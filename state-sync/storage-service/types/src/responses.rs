@@ -7,13 +7,17 @@ use crate::{
         GetNewTransactionsOrOutputsWithProof, GetNewTransactionsWithProof,
         GetNumberOfStatesAtVersion, GetServerProtocolVersion, GetStateValuesWithProof,
         GetStorageServerSummary, GetTransactionOutputsWithProof, GetTransactionsOrOutputsWithProof,
-        GetTransactionsWithProof,
+        GetTransactionsWithProof, SubscribeTransactionOutputsWithProof,
+        SubscribeTransactionsOrOutputsWithProof, SubscribeTransactionsWithProof,
     },
     responses::Error::DegenerateRangeError,
     Epoch, StorageServiceRequest, COMPRESSION_SUFFIX_LABEL,
 };
-use aptos_compression::{metrics::CompressionClient, CompressedData, CompressionError};
-use aptos_config::config::{StorageServiceConfig, MAX_APPLICATION_MESSAGE_SIZE};
+use aptos_compression::{client::CompressionClient, CompressedData};
+use aptos_config::config::{
+    AptosDataClientConfig, StorageServiceConfig, MAX_APPLICATION_MESSAGE_SIZE,
+};
+use aptos_time_service::{TimeService, TimeServiceTrait};
 use aptos_types::{
     epoch_change::EpochChangeProof,
     ledger_info::LedgerInfoWithSignatures,
@@ -30,10 +34,8 @@ use std::{
 };
 use thiserror::Error;
 
-/// The version delta we'll tolerate when considering if a peer is eligible
-/// to handle an optimistic fetch for new data. This value is set assuming
-/// 5k TPS for a 5 second delay, which should be more than enough.
-pub const OPTIMISTIC_FETCH_VERSION_DELTA: u64 = 25000;
+// Useful file constants
+pub const NUM_MICROSECONDS_IN_SECOND: u64 = 1_000_000;
 
 #[derive(Clone, Debug, Deserialize, Error, PartialEq, Eq, Serialize)]
 pub enum Error {
@@ -45,8 +47,8 @@ pub enum Error {
     UnexpectedResponseError(String),
 }
 
-impl From<CompressionError> for Error {
-    fn from(error: CompressionError) -> Self {
+impl From<aptos_compression::Error> for Error {
+    fn from(error: aptos_compression::Error) -> Self {
         Error::UnexpectedErrorEncountered(error.to_string())
     }
 }
@@ -63,6 +65,7 @@ impl StorageServiceResponse {
     /// Creates a new response and performs compression if required
     pub fn new(data_response: DataResponse, perform_compression: bool) -> Result<Self, Error> {
         if perform_compression {
+            // Serialize and compress the raw data
             let raw_data = bcs::to_bytes(&data_response)
                 .map_err(|error| Error::UnexpectedErrorEncountered(error.to_string()))?;
             let compressed_data = aptos_compression::compress(
@@ -70,6 +73,8 @@ impl StorageServiceResponse {
                 CompressionClient::StateSync,
                 MAX_APPLICATION_MESSAGE_SIZE,
             )?;
+
+            // Create the compressed response
             let label = data_response.get_label().to_string() + COMPRESSION_SUFFIX_LABEL;
             Ok(StorageServiceResponse::CompressedResponse(
                 label,
@@ -358,9 +363,19 @@ pub struct StorageServerSummary {
     pub data_summary: DataSummary,
 }
 
+// TODO: it probably makes sense to move this logic to the data client,
+// instead of having it attached to the storage server summary.
 impl StorageServerSummary {
-    pub fn can_service(&self, request: &StorageServiceRequest) -> bool {
-        self.protocol_metadata.can_service(request) && self.data_summary.can_service(request)
+    pub fn can_service(
+        &self,
+        aptos_data_client_config: &AptosDataClientConfig,
+        time_service: TimeService,
+        request: &StorageServiceRequest,
+    ) -> bool {
+        self.protocol_metadata.can_service(request)
+            && self
+                .data_summary
+                .can_service(aptos_data_client_config, time_service, request)
     }
 }
 
@@ -420,7 +435,12 @@ pub struct DataSummary {
 
 impl DataSummary {
     /// Returns true iff the request can be serviced
-    pub fn can_service(&self, request: &StorageServiceRequest) -> bool {
+    pub fn can_service(
+        &self,
+        aptos_data_client_config: &AptosDataClientConfig,
+        time_service: TimeService,
+        request: &StorageServiceRequest,
+    ) -> bool {
         match &request.data_request {
             GetServerProtocolVersion | GetStorageServerSummary => true,
             GetEpochEndingLedgerInfos(request) => {
@@ -433,12 +453,21 @@ impl DataSummary {
                     .map(|range| range.superset_of(&desired_range))
                     .unwrap_or(false)
             },
-            GetNewTransactionOutputsWithProof(request) => {
-                self.can_service_optimistic_request(request.known_version)
-            },
-            GetNewTransactionsWithProof(request) => {
-                self.can_service_optimistic_request(request.known_version)
-            },
+            GetNewTransactionOutputsWithProof(_) => can_service_optimistic_request(
+                aptos_data_client_config,
+                time_service,
+                self.synced_ledger_info.as_ref(),
+            ),
+            GetNewTransactionsWithProof(_) => can_service_optimistic_request(
+                aptos_data_client_config,
+                time_service,
+                self.synced_ledger_info.as_ref(),
+            ),
+            GetNewTransactionsOrOutputsWithProof(_) => can_service_optimistic_request(
+                aptos_data_client_config,
+                time_service,
+                self.synced_ledger_info.as_ref(),
+            ),
             GetNumberOfStatesAtVersion(version) => self
                 .states
                 .map(|range| range.contains(*version))
@@ -499,9 +528,6 @@ impl DataSummary {
 
                 can_serve_txns && can_create_proof
             },
-            GetNewTransactionsOrOutputsWithProof(request) => {
-                self.can_service_optimistic_request(request.known_version)
-            },
             GetTransactionsOrOutputsWithProof(request) => {
                 let desired_range =
                     match CompleteDataRange::new(request.start_version, request.end_version) {
@@ -527,15 +553,22 @@ impl DataSummary {
 
                 can_serve_txns && can_serve_outputs && can_create_proof
             },
+            SubscribeTransactionOutputsWithProof(_) => can_service_subscription_request(
+                aptos_data_client_config,
+                time_service,
+                self.synced_ledger_info.as_ref(),
+            ),
+            SubscribeTransactionsOrOutputsWithProof(_) => can_service_subscription_request(
+                aptos_data_client_config,
+                time_service,
+                self.synced_ledger_info.as_ref(),
+            ),
+            SubscribeTransactionsWithProof(_) => can_service_subscription_request(
+                aptos_data_client_config,
+                time_service,
+                self.synced_ledger_info.as_ref(),
+            ),
         }
-    }
-
-    /// Returns true iff the optimistic data request can be serviced
-    fn can_service_optimistic_request(&self, known_version: u64) -> bool {
-        self.synced_ledger_info
-            .as_ref()
-            .map(|li| (li.ledger_info().version() + OPTIMISTIC_FETCH_VERSION_DELTA) > known_version)
-            .unwrap_or(false)
     }
 
     /// Returns the version of the synced ledger info (if one exists)
@@ -543,6 +576,50 @@ impl DataSummary {
         self.synced_ledger_info
             .as_ref()
             .map(|ledger_info| ledger_info.ledger_info().version())
+    }
+}
+
+/// Returns true iff an optimistic data request can be serviced
+/// by the peer with the given synced ledger info.
+fn can_service_optimistic_request(
+    aptos_data_client_config: &AptosDataClientConfig,
+    time_service: TimeService,
+    synced_ledger_info: Option<&LedgerInfoWithSignatures>,
+) -> bool {
+    let max_lag_secs = aptos_data_client_config.max_optimistic_fetch_lag_secs;
+    check_synced_ledger_lag(synced_ledger_info, time_service, max_lag_secs)
+}
+
+/// Returns true iff a subscription data request can be serviced
+/// by the peer with the given synced ledger info.
+fn can_service_subscription_request(
+    aptos_data_client_config: &AptosDataClientConfig,
+    time_service: TimeService,
+    synced_ledger_info: Option<&LedgerInfoWithSignatures>,
+) -> bool {
+    let max_lag_secs = aptos_data_client_config.max_subscription_lag_secs;
+    check_synced_ledger_lag(synced_ledger_info, time_service, max_lag_secs)
+}
+
+/// Returns true iff the synced ledger info timestamp
+/// is within the given lag (in seconds).
+fn check_synced_ledger_lag(
+    synced_ledger_info: Option<&LedgerInfoWithSignatures>,
+    time_service: TimeService,
+    max_lag_secs: u64,
+) -> bool {
+    if let Some(synced_ledger_info) = synced_ledger_info {
+        // Get the ledger info timestamp (in microseconds)
+        let ledger_info_timestamp_usecs = synced_ledger_info.ledger_info().timestamp_usecs();
+
+        // Get the current timestamp and max version lag (in microseconds)
+        let current_timestamp_usecs = time_service.now_unix_time().as_micros() as u64;
+        let max_version_lag_usecs = max_lag_secs * NUM_MICROSECONDS_IN_SECOND;
+
+        // Return true iff the synced ledger info timestamp is within the max version lag
+        ledger_info_timestamp_usecs + max_version_lag_usecs > current_timestamp_usecs
+    } else {
+        false // No synced ledger info was found!
     }
 }
 

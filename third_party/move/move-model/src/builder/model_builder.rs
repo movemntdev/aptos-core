@@ -12,17 +12,23 @@ use crate::{
     builder::builtins,
     intrinsics::IntrinsicDecl,
     model::{
-        FunId, FunctionKind, GlobalEnv, Loc, ModuleId, Parameter, QualifiedId, SpecFunId,
-        SpecVarId, StructId, TypeParameter,
+        FunId, FunctionKind, GlobalEnv, Loc, ModuleId, Parameter, QualifiedId, QualifiedInstId,
+        SpecFunId, SpecVarId, StructId, TypeParameter, TypeParameterKind,
     },
     symbol::Symbol,
-    ty::Type,
+    ty::{
+        gen_get_ty_param_kinds, infer_abilities, infer_and_check_abilities, is_phantom_type_arg,
+        Constraint, Type,
+    },
 };
 use codespan_reporting::diagnostic::Severity;
-#[allow(unused_imports)]
-use log::{debug, info, warn};
+use itertools::Itertools;
 use move_binary_format::file_format::{AbilitySet, Visibility};
-use move_compiler::{expansion::ast as EA, parser::ast as PA, shared::NumericalAddress};
+use move_compiler::{
+    expansion::ast::{self as EA},
+    parser::ast as PA,
+    shared::NumericalAddress,
+};
 use move_core_types::account_address::AccountAddress;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -57,6 +63,8 @@ pub(crate) struct ModelBuilder<'env> {
     pub move_fun_call_graph: BTreeMap<QualifiedId<SpecFunId>, BTreeSet<QualifiedId<SpecFunId>>>,
     /// A list of intrinsic declarations
     pub intrinsics: Vec<IntrinsicDecl>,
+    /// A module lookup table from names to their ids.
+    pub module_table: BTreeMap<ModuleName, ModuleId>,
 }
 
 /// A declaration of a specification function or operator in the builders state.
@@ -67,6 +75,7 @@ pub(crate) struct SpecOrBuiltinFunEntry {
     pub loc: Loc,
     pub oper: Operation,
     pub type_params: Vec<TypeParameter>,
+    pub type_param_constraints: BTreeMap<usize, Constraint>,
     pub params: Vec<Parameter>,
     pub result_type: Type,
     pub visibility: EntryVisibility,
@@ -116,7 +125,7 @@ pub(crate) struct StructEntry {
     pub struct_id: StructId,
     pub type_params: Vec<TypeParameter>,
     pub abilities: AbilitySet,
-    pub fields: Option<BTreeMap<Symbol, (usize, Type)>>,
+    pub fields: Option<BTreeMap<Symbol, (Loc, usize, Type)>>,
     pub attributes: Vec<Attribute>,
 }
 
@@ -193,7 +202,8 @@ impl<'env> ModelBuilder<'env> {
             fun_table: BTreeMap::new(),
             const_table: BTreeMap::new(),
             move_fun_call_graph: BTreeMap::new(),
-            intrinsics: Default::default(),
+            intrinsics: Vec::new(),
+            module_table: BTreeMap::new(),
         };
         builtins::declare_builtins(&mut translator);
         translator
@@ -214,6 +224,11 @@ impl<'env> ModelBuilder<'env> {
         self.env.error_with_notes(at, msg, notes)
     }
 
+    /// Shortcut for a diagnosis note.
+    pub fn note(&mut self, loc: &Loc, msg: &str) {
+        self.env.diag(Severity::Note, loc, msg)
+    }
+
     /// Defines a spec function, adding it to the spec fun table.
     pub fn define_spec_or_builtin_fun(
         &mut self,
@@ -221,10 +236,7 @@ impl<'env> ModelBuilder<'env> {
         entry: SpecOrBuiltinFunEntry,
     ) {
         // TODO: check whether overloads are distinguishable
-        self.spec_fun_table
-            .entry(name)
-            .or_insert_with(Vec::new)
-            .push(entry);
+        self.spec_fun_table.entry(name).or_default().push(entry);
     }
 
     /// Defines a spec variable.
@@ -247,7 +259,7 @@ impl<'env> ModelBuilder<'env> {
         if let Some(old) = self.spec_var_table.insert(name.clone(), entry) {
             let var_name = name.display(self.env);
             self.error(loc, &format!("duplicate declaration of `{}`", var_name));
-            self.error(&old.loc, &format!("previous declaration of `{}`", var_name));
+            self.note(&old.loc, &format!("previous declaration of `{}`", var_name));
         }
     }
 
@@ -294,7 +306,7 @@ impl<'env> ModelBuilder<'env> {
         struct_id: StructId,
         abilities: AbilitySet,
         type_params: Vec<TypeParameter>,
-        fields: Option<BTreeMap<Symbol, (usize, Type)>>,
+        fields: Option<BTreeMap<Symbol, (Loc, usize, Type)>>,
     ) {
         let entry = StructEntry {
             loc,
@@ -349,6 +361,96 @@ impl<'env> ModelBuilder<'env> {
                 );
                 Type::Error
             })
+    }
+
+    /// Looks up the fields of a structure, with instantiated field types.
+    pub fn lookup_struct_fields(&self, id: QualifiedInstId<StructId>) -> BTreeMap<Symbol, Type> {
+        let entry = self.lookup_struct_entry(id.to_qualified_id());
+        entry
+            .fields
+            .as_ref()
+            .map(|f| {
+                f.iter()
+                    .map(|(n, (_, _, field_ty))| (*n, field_ty.instantiate(&id.inst)))
+                    .collect::<BTreeMap<_, _>>()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Get all the structs which have been build so far.
+    pub fn get_struct_ids(&self) -> impl Iterator<Item = QualifiedId<StructId>> + '_ {
+        self.struct_table
+            .values()
+            .map(|e| e.module_id.qualified(e.struct_id))
+    }
+
+    /// Looks up the StructEntry for a qualified id.
+    pub fn lookup_struct_entry(&self, id: QualifiedId<StructId>) -> &StructEntry {
+        let struct_name = self
+            .reverse_struct_table
+            .get(&(id.module_id, id.id))
+            .expect("invalid Type::Struct");
+        self.struct_table
+            .get(struct_name)
+            .expect("invalid Type::Struct")
+    }
+
+    /// returns the type parameter kinds and the abilities of the struct
+    fn get_struct_sig(&self, mid: ModuleId, sid: StructId) -> (Vec<TypeParameterKind>, AbilitySet) {
+        let struct_entry = self.lookup_struct_entry(mid.qualified(sid));
+        let struct_abilities = struct_entry.abilities;
+        let ty_param_kinds = struct_entry
+            .type_params
+            .iter()
+            .map(|tp| tp.1.clone())
+            .collect_vec();
+        (ty_param_kinds, struct_abilities)
+    }
+
+    fn gen_get_struct_sig(
+        &self,
+    ) -> impl Fn(ModuleId, StructId) -> (Vec<TypeParameterKind>, AbilitySet) + Copy + '_ {
+        |mid, sid| self.get_struct_sig(mid, sid)
+    }
+
+    /// Specialized `ty::infer_and_check_abilities`
+    /// where the abilities of type arguments are given by `ty_params`
+    pub fn check_instantiation(&self, ty: &Type, ty_params: &[TypeParameter], loc: &Loc) {
+        infer_and_check_abilities(
+            ty,
+            gen_get_ty_param_kinds(ty_params),
+            self.gen_get_struct_sig(),
+            loc,
+            |loc, err| self.error(loc, err),
+        );
+    }
+
+    /// Infers the abilities the given type may have,
+    /// if all type params have all abilities.
+    pub fn infer_abilities_may_have(&self, ty: &Type) -> AbilitySet {
+        // since all type params have all abilities, it doesn't matter whether it's phantom or not
+        infer_abilities(
+            ty,
+            |_| TypeParameterKind {
+                abilities: AbilitySet::ALL,
+                is_phantom: false,
+            },
+            self.gen_get_struct_sig(),
+        )
+    }
+
+    /// Checks whether a struct is well defined.
+    pub fn ability_check_struct_def(&self, struct_entry: &StructEntry) {
+        if let Some(fields) = &struct_entry.fields {
+            let ty_params = &struct_entry.type_params;
+            for (_field_name, (loc, _field_idx, field_ty)) in fields.iter() {
+                // check fields are properly instantiated
+                self.check_instantiation(field_ty, ty_params, loc);
+                if is_phantom_type_arg(gen_get_ty_param_kinds(ty_params), field_ty) {
+                    self.error(loc, "phantom type arguments cannot be used")
+                }
+            }
+        }
     }
 
     // Generate warnings about unused schemas.

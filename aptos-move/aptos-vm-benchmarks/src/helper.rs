@@ -1,19 +1,18 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos::move_tool::MemberId;
 use aptos_cached_packages::aptos_stdlib;
 use aptos_framework::BuiltPackage;
 use aptos_language_e2e_tests::{account::Account, executor::FakeExecutor};
-use aptos_types::transaction::TransactionPayload;
+use aptos_types::{move_utils::MemberId, transaction::TransactionPayload};
 use move_binary_format::CompiledModule;
 use move_core_types::{account_address::AccountAddress, language_storage::ModuleId};
 use std::{fs::ReadDir, path::PathBuf, string::String, time::Instant};
 
-//// CONSTANTS
+// CONSTANTS
 const PREFIX: &str = "benchmark";
 
-//// generate a TransactionPayload for modules
+// generate a TransactionPayload for modules
 pub fn generate_module_payload(package: &BuiltPackage) -> TransactionPayload {
     // extract package data
     let code = package.extract_code();
@@ -28,8 +27,8 @@ pub fn generate_module_payload(package: &BuiltPackage) -> TransactionPayload {
     )
 }
 
-//// sign transaction to create a Module and return transaction status
-pub fn sign_module_txn(
+// sign transaction to create a Module and return transaction status
+pub fn execute_module_txn(
     executor: &mut FakeExecutor,
     account: &Account,
     payload: TransactionPayload,
@@ -60,15 +59,14 @@ pub fn sign_module_txn(
     println!("txn status: {:?}", txn_status);
 }
 
-//// sign user transaction and only records the body of the transaction
-pub fn sign_user_txn(executor: &mut FakeExecutor, module_name: &ModuleId, function_name: &str) {
-    let start = Instant::now();
-    executor.exec_module(module_name, function_name, vec![], vec![]);
-    let elapsed = start.elapsed();
-    println!("running time (microseconds): {}", elapsed.as_micros());
+// sign user transaction and only records the body of the transaction
+pub fn execute_user_txn(executor: &mut FakeExecutor, module_name: &ModuleId, function_name: &str) {
+    let elapsed =
+        executor.exec_func_record_running_time(module_name, function_name, vec![], vec![], 10);
+    println!("running time (microseconds): {}", elapsed);
 }
 
-//// publish module under user and sign user transaction
+// publish module under user and sign user transaction
 pub fn publish(
     package: &BuiltPackage,
     executor: &mut FakeExecutor,
@@ -92,12 +90,12 @@ pub fn publish(
         print!("Signing txn for module... ");
         let module_payload = generate_module_payload(package);
         let counter = sequence_num_counter.try_into().unwrap();
-        sign_module_txn(executor, &creator, module_payload, counter);
+        execute_module_txn(executor, &creator, module_payload, counter);
 
         //// send a txn that invokes the entry function 0x{address}::{name}::benchmark
         print!("Signing user txn... ");
         let module_name = get_module_name(address, identifier, &func_identifier);
-        sign_user_txn(executor, &module_name, &func_identifier);
+        execute_user_txn(executor, &module_name, &func_identifier);
     }
 }
 
@@ -106,7 +104,7 @@ pub fn publish(
  * GETTER FUNCTIONS
  *
  */
-//// get module name
+// get module name
 pub fn get_module_name(
     address: AccountAddress,
     identifier: &String,
@@ -117,14 +115,16 @@ pub fn get_module_name(
         member_id: _function_id,
     } = str::parse(&format!(
         "0x{}::{}::{}",
-        address, identifier, func_identifier,
+        address.to_hex(),
+        identifier,
+        func_identifier,
     ))
     .unwrap();
 
     module_id
 }
 
-//// get all directories of Move projects
+// get all directories of Move projects
 pub fn get_dir_paths(dirs: ReadDir) -> Vec<PathBuf> {
     let mut dir_paths = Vec::new();
     for dir in dirs {
@@ -138,7 +138,7 @@ pub fn get_dir_paths(dirs: ReadDir) -> Vec<PathBuf> {
     dir_paths
 }
 
-//// get functional identifiers
+// get functional identifiers
 pub fn get_functional_identifiers(
     cm: CompiledModule,
     identifier: &String,

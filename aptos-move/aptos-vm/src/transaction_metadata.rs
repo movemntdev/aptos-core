@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use aptos_crypto::{ed25519::Ed25519PrivateKey, HashValue, PrivateKey};
-use aptos_gas::{FeePerGasUnit, Gas, NumBytes};
+use aptos_gas_algebra::{FeePerGasUnit, Gas, NumBytes};
 use aptos_types::{
     account_address::AccountAddress,
     chain_id::ChainId,
@@ -33,7 +33,7 @@ impl TransactionMetadata {
         Self {
             sender: txn.sender(),
             authentication_key: txn.authenticator().sender().authentication_key().to_vec(),
-            secondary_signers: txn.authenticator().secondary_signer_addreses(),
+            secondary_signers: txn.authenticator().secondary_signer_addresses(),
             secondary_authentication_keys: txn
                 .authenticator()
                 .secondary_signers()

@@ -30,7 +30,7 @@ mod call_custom_modules;
 mod entry_points;
 mod p2p_transaction_generator;
 pub mod publish_modules;
-mod publishing;
+pub mod publishing;
 mod transaction_mix_generator;
 use self::{
     account_generator::AccountGeneratorCreator,
@@ -85,14 +85,14 @@ impl Default for TransactionType {
 pub trait TransactionGenerator: Sync + Send {
     fn generate_transactions(
         &mut self,
-        account: &mut LocalAccount,
+        account: &LocalAccount,
         num_to_create: usize,
     ) -> Vec<SignedTransaction>;
 }
 
 #[async_trait]
 pub trait TransactionGeneratorCreator: Sync + Send {
-    fn create_transaction_generator(&mut self) -> Box<dyn TransactionGenerator>;
+    fn create_transaction_generator(&self) -> Box<dyn TransactionGenerator>;
 }
 
 pub struct CounterState {
@@ -325,7 +325,7 @@ fn get_account_to_burn_from_pool(
 }
 
 pub fn create_account_transaction(
-    from: &mut LocalAccount,
+    from: &LocalAccount,
     to: AccountAddress,
     txn_factory: &TransactionFactory,
     creation_balance: u64,

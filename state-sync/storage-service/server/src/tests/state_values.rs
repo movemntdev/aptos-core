@@ -20,6 +20,7 @@ use aptos_types::{
         state_value::{StateValue, StateValueChunkWithProof},
     },
 };
+use bytes::Bytes;
 use claims::assert_matches;
 use mockall::{predicate::eq, Sequence};
 use rand::Rng;
@@ -182,9 +183,10 @@ fn create_state_keys_and_values(
 ) -> Vec<(StateKey, StateValue)> {
     // Generate random bytes of the given size
     let mut rng = rand::thread_rng();
-    let random_bytes: Vec<u8> = (0..min_bytes_per_key_value)
+    let random_bytes: Bytes = (0..min_bytes_per_key_value)
         .map(|_| rng.gen::<u8>())
-        .collect();
+        .collect::<Vec<_>>()
+        .into();
 
     // Create the requested keys and values
     (0..num_keys_and_values)
@@ -293,7 +295,7 @@ async fn get_states_with_proof_network_limit(network_limit_bytes: u64) {
         // Verify the response adheres to the network limits
         match response.get_data_response().unwrap() {
             DataResponse::StateValueChunkWithProof(state_value_chunk_with_proof) => {
-                let num_response_bytes = bcs::to_bytes(&response).unwrap().len() as u64;
+                let num_response_bytes = bcs::serialized_size(&response).unwrap() as u64;
                 let num_state_values = state_value_chunk_with_proof.raw_values.len() as u64;
                 if num_response_bytes > network_limit_bytes {
                     assert_eq!(num_state_values, 1); // Data cannot be reduced more than a single item

@@ -15,22 +15,28 @@ pub mod utils;
 #[cfg(test)]
 mod tests;
 
+use crate::network::ApplicationNetworkInterfaces;
 use anyhow::anyhow;
+use aptos_admin_service::AdminService;
 use aptos_api::bootstrap as bootstrap_api;
 use aptos_build_info::build_information;
-use aptos_config::config::{merge_node_config, NodeConfig, PersistableConfig};
+use aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use aptos_config::config::{merge_node_config, IdentityBlob, NodeConfig, PersistableConfig};
+use aptos_dkg_runtime::start_dkg_runtime;
 use aptos_framework::ReleaseBundle;
+use aptos_jwk_consensus::start_jwk_consensus_runtime;
 use aptos_logger::{prelude::*, telemetry_log_writer::TelemetryLog, Level, LoggerFilterUpdater};
 use aptos_state_sync_driver::driver_factory::StateSyncRuntimes;
-use aptos_types::chain_id::ChainId;
+use aptos_types::{chain_id::ChainId, validator_txn::Topic};
+use aptos_validator_transaction_pool as vtxn_pool;
 use clap::Parser;
 use futures::channel::mpsc;
 use hex::{FromHex, FromHexError};
 use rand::{rngs::StdRng, SeedableRng};
 use std::{
     fs,
-    io::{Read, Write},
-    path::PathBuf,
+    io::Write,
+    path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -52,6 +58,7 @@ pub struct AptosNodeArgs {
         value_parser,
         required_unless_present_any = ["test", "info"],
     )]
+    #[cfg_attr(target_os = "linux", clap(required_unless_present_any = ["stacktrace"]))]
     config: Option<PathBuf>,
 
     /// Directory to run the test mode in.
@@ -90,11 +97,27 @@ pub struct AptosNodeArgs {
     /// Display information about the build of this node
     #[clap(long)]
     info: bool,
+
+    #[cfg(target_os = "linux")]
+    /// Start as a child process to collect thread dump.
+    /// See rstack-self crate for more details.
+    #[clap(long)]
+    stacktrace: bool,
 }
 
 impl AptosNodeArgs {
     /// Runs an Aptos node based on the given command line arguments and config flags
     pub fn run(self) {
+        #[cfg(target_os = "linux")]
+        // https://sfackler.github.io/rstack/doc/rstack_self/index.html
+        //
+        // TODO(grao): I don't like this way, but I didn't find other existing solution in Rust.
+        // Maybe try to use libc directly?
+        if self.stacktrace {
+            let _ = rstack_self::child();
+            return;
+        }
+
         if self.info {
             let build_information = build_information!();
             println!(
@@ -121,8 +144,9 @@ impl AptosNodeArgs {
                 .map(StdRng::from_seed)
                 .unwrap_or_else(StdRng::from_entropy);
             setup_test_environment_and_start_node(
-                self.config,
-                self.test_config_override,
+                &self.config,
+                &self.test_config_override,
+                None,
                 self.test_dir,
                 self.random_ports,
                 self.lazy,
@@ -155,22 +179,22 @@ impl AptosNodeArgs {
     }
 }
 
-pub fn load_seed(input: &str) -> Result<Option<[u8; 32]>, FromHexError> {
+pub fn load_seed(input: &str) -> Result<[u8; 32], FromHexError> {
     let trimmed_input = input.trim();
-    if !trimmed_input.is_empty() {
-        FromHex::from_hex(trimmed_input).map(Some)
-    } else {
-        Ok(None)
-    }
+    FromHex::from_hex(trimmed_input)
 }
 
 /// Runtime handle to ensure that all inner runtimes stay in scope
 pub struct AptosHandle {
+    _admin_service: AdminService,
     _api_runtime: Option<Runtime>,
     _backup_runtime: Option<Runtime>,
     _consensus_runtime: Option<Runtime>,
+    _dkg_runtime: Option<Runtime>,
     _indexer_grpc_runtime: Option<Runtime>,
     _indexer_runtime: Option<Runtime>,
+    _indexer_table_info_runtime: Option<Runtime>,
+    _jwk_consensus_runtime: Option<Runtime>,
     _mempool_runtime: Runtime,
     _network_runtimes: Vec<Runtime>,
     _peer_monitoring_service_runtime: Runtime,
@@ -195,6 +219,11 @@ pub fn start(
 
     // Instantiate the global logger
     let (remote_log_receiver, logger_filter_update) = logger::create_logger(&config, log_file);
+
+    assert!(
+        !cfg!(feature = "testing") && !cfg!(feature = "fuzzing"),
+        "Testing features shouldn't be compiled"
+    );
 
     // Ensure failpoints are configured correctly
     if fail::has_failpoints() {
@@ -226,10 +255,112 @@ pub fn start(
     Ok(())
 }
 
-/// Creates a simple test environment and starts the node
+/// Load a config based on a variety of different ways to provide config options. For
+/// more information about each argument and its precedence, see
+/// `setup_test_environment_and_start_node`.
+pub fn load_node_config<R>(
+    config_path: &Option<PathBuf>,
+    test_config_override_path: &Option<PathBuf>,
+    test_dir: &Path,
+    random_ports: bool,
+    enable_lazy_mode: bool,
+    framework: &ReleaseBundle,
+    rng: R,
+) -> anyhow::Result<NodeConfig>
+where
+    R: rand::RngCore + rand::CryptoRng,
+{
+    // The validator builder puts the first node in the 0 directory
+    let validator_config_path = test_dir.join("0").join("node.yaml");
+
+    let config = if validator_config_path.exists() {
+        NodeConfig::load_from_path(&validator_config_path)
+            .map_err(|error| anyhow!("Unable to load config: {:?}", error))?
+    } else {
+        // Create a test only config for a single validator node.
+        let config = create_single_node_test_config(
+            config_path,
+            test_config_override_path,
+            test_dir,
+            random_ports,
+            enable_lazy_mode,
+            framework,
+            rng,
+        )?;
+        if let Some(ref test_config_override_path) = test_config_override_path {
+            println!(
+                "\tMerged default config with override from path: {:?}",
+                test_config_override_path
+            );
+        }
+        if let Some(ref config_path) = config_path {
+            println!("\tUsed user-provided config from path: {:?}", config_path);
+        }
+        config
+    };
+
+    Ok(config)
+}
+
+/// Print details about a node config configured for a test environment and start it.
+pub fn start_test_environment_node(
+    config: NodeConfig,
+    test_dir: PathBuf,
+    enable_lazy_mode: bool,
+) -> anyhow::Result<()> {
+    let aptos_root_key_path = test_dir.join("mint.key");
+
+    // Prepare log file since we cannot automatically route logs to stderr
+    let log_file = test_dir.join("validator.log");
+
+    // Print out useful information about the environment and the node
+    println!("Completed generating configuration:");
+    println!("\tLog file: {:?}", log_file);
+    println!("\tTest dir: {:?}", test_dir);
+    println!("\tAptos root key path: {:?}", aptos_root_key_path);
+    println!("\tWaypoint: {}", config.base.waypoint.genesis_waypoint());
+    println!("\tChainId: {}", ChainId::test().id());
+    println!("\tREST API endpoint: http://{}", &config.api.address);
+    println!(
+        "\tMetrics endpoint: http://{}:{}/metrics",
+        &config.inspection_service.address, &config.inspection_service.port
+    );
+    println!(
+        "\tAptosnet fullnode network endpoint: {}",
+        &config.full_node_networks[0].listen_address
+    );
+    if config.indexer_grpc.enabled {
+        println!(
+            "\tIndexer gRPC node stream endpoint: {}",
+            config.indexer_grpc.address
+        );
+    }
+    if enable_lazy_mode {
+        println!("\tLazy mode is enabled");
+    }
+    println!("\nAptos is running, press ctrl-c to exit\n");
+
+    start(config, Some(log_file), false)
+}
+
+/// Creates a simple test environment and starts the node.
+///
+/// You will notice many args referring to configs. Let's explain them:
+/// - `test_config_override_path` is the path to a config file that will be used as
+///   a template when building the final config. If not provided, a default template
+///   will be used. Many overrides are applied on top of this base config.
+/// - `config_path` is similar to `test_config_override_path`, but many of the
+///   overrides that are applied when using `test_config_override_path` are not
+///   applied when using `config_path`. Read the code for more info.
+/// - `config` is a complete NodeConfig. No overrides are applied on top of this if
+///    it is provided. If both `config` and `test_dir` are provided, `config` takes
+///    precedence.
+/// - `test_dir` is a directory that contains a config file. Much like `config`, the
+///   config read from this file is used without any overrides.
 pub fn setup_test_environment_and_start_node<R>(
-    config_path: Option<PathBuf>,
-    test_config_override_path: Option<PathBuf>,
+    config_path: &Option<PathBuf>,
+    test_config_override_path: &Option<PathBuf>,
+    config: Option<NodeConfig>,
     test_dir: Option<PathBuf>,
     random_ports: bool,
     enable_lazy_mode: bool,
@@ -247,116 +378,48 @@ where
     fs::DirBuilder::new().recursive(true).create(&test_dir)?;
     let test_dir = test_dir.canonicalize()?;
 
-    // The validator builder puts the first node in the 0 directory
-    let validator_config_path = test_dir.join("0").join("node.yaml");
-    let aptos_root_key_path = test_dir.join("mint.key");
-
-    // If there's already a config, use it. Otherwise create a test one.
-    let config = if validator_config_path.exists() {
-        NodeConfig::load_from_path(&validator_config_path)
-            .map_err(|error| anyhow!("Unable to load config: {:?}", error))?
-    } else {
-        // Create a test only config for a single validator node
-        let node_config = create_single_node_test_config(
-            config_path.clone(),
-            test_config_override_path.clone(),
+    let config = match config {
+        Some(config) => config,
+        None => load_node_config(
+            config_path,
+            test_config_override_path,
+            &test_dir,
+            random_ports,
             enable_lazy_mode,
-        )?;
-
-        // Build genesis and the validator node
-        let builder = aptos_genesis::builder::Builder::new(&test_dir, framework.clone())?
-            .with_init_config(Some(Arc::new(move |_, config, _| {
-                *config = node_config.clone();
-            })))
-            .with_init_genesis_config(Some(Arc::new(|genesis_config| {
-                genesis_config.allow_new_validators = true;
-                genesis_config.epoch_duration_secs = EPOCH_LENGTH_SECS;
-                genesis_config.recurring_lockup_duration_secs = 7200;
-            })))
-            .with_randomize_first_validator_ports(random_ports);
-        let (root_key, _genesis, genesis_waypoint, validators) = builder.build(rng)?;
-
-        // Write the mint key to disk
-        let serialized_keys = bcs::to_bytes(&root_key)?;
-        let mut key_file = fs::File::create(&aptos_root_key_path)?;
-        key_file.write_all(&serialized_keys)?;
-
-        // Build a waypoint file so that clients / docker can grab it easily
-        let waypoint_file_path = test_dir.join("waypoint.txt");
-        Write::write_all(
-            &mut fs::File::create(waypoint_file_path)?,
-            genesis_waypoint.to_string().as_bytes(),
-        )?;
-
-        // Return the validator config
-        validators[0].config.clone()
+            framework,
+            rng,
+        )?,
     };
 
-    // Prepare log file since we cannot automatically route logs to stderr
-    let log_file = test_dir.join("validator.log");
-
-    // Print out useful information about the environment and the node
-    println!("Completed generating configuration:");
-    if test_config_override_path.is_some() {
-        println!(
-            "\tMerged default config with override from path: {:?}",
-            test_config_override_path.unwrap()
-        );
-    }
-    if config_path.is_some() {
-        println!(
-            "\tUsed user-provided config from path: {:?}",
-            config_path.unwrap()
-        );
-    }
-    println!("\tLog file: {:?}", log_file);
-    println!("\tTest dir: {:?}", test_dir);
-    println!("\tAptos root key path: {:?}", aptos_root_key_path);
-    println!("\tWaypoint: {}", config.base.waypoint.genesis_waypoint());
-    println!("\tChainId: {}", ChainId::test());
-    println!("\tREST API endpoint: http://{}", &config.api.address);
-    println!(
-        "\tMetrics endpoint: http://{}:{}/metrics",
-        &config.inspection_service.address, &config.inspection_service.port
-    );
-    println!(
-        "\tAptosnet fullnode network endpoint: {}",
-        &config.full_node_networks[0].listen_address
-    );
-    if config.indexer_grpc.enabled {
-        if let Some(ref indexer_grpc_address) = config.indexer_grpc.address {
-            println!("\tIndexer gRPC endpoint: {}", indexer_grpc_address);
-        }
-    }
-    if enable_lazy_mode {
-        println!("\tLazy mode is enabled");
-    }
-    println!("\nAptos is running, press ctrl-c to exit\n");
-
-    start(config, Some(log_file), false)
+    start_test_environment_node(config, test_dir, enable_lazy_mode)
 }
 
 /// Creates a single node test config, with a few config tweaks to reduce
-/// the overhead of running the node on a local machine.
-fn create_single_node_test_config(
-    config_path: Option<PathBuf>,
-    test_config_override_path: Option<PathBuf>,
+/// the overhead of running the node on a local machine. It writes necessary
+/// configuration artifacts (e.g. the mint key) to disk.
+pub fn create_single_node_test_config<R>(
+    config_path: &Option<PathBuf>,
+    test_config_override_path: &Option<PathBuf>,
+    test_dir: &Path,
+    random_ports: bool,
     enable_lazy_mode: bool,
-) -> anyhow::Result<NodeConfig> {
+    framework: &ReleaseBundle,
+    rng: R,
+) -> anyhow::Result<NodeConfig>
+where
+    R: rand::RngCore + rand::CryptoRng,
+{
     let mut node_config = match test_config_override_path {
         // If a config override path was provided, merge it with the default config
         Some(test_config_override_path) => {
-            let mut contents = String::new();
-            fs::File::open(&test_config_override_path)
-                .map_err(|e| {
-                    anyhow!(
-                        "Unable to open config override file {:?}. Error: {}",
-                        test_config_override_path,
-                        e
-                    )
-                })?
-                .read_to_string(&mut contents)?;
-            let values = serde_yaml::from_str::<serde_yaml::Value>(&contents).map_err(|e| {
+            let reader = fs::File::open(test_config_override_path).map_err(|e| {
+                anyhow!(
+                    "Unable to open config override file {:?}. Error: {}",
+                    test_config_override_path,
+                    e
+                )
+            })?;
+            let values: serde_yaml::Value = serde_yaml::from_reader(&reader).map_err(|e| {
                 anyhow!(
                     "Unable to read config override file as YAML {:?}. Error: {}",
                     test_config_override_path,
@@ -430,7 +493,7 @@ fn create_single_node_test_config(
 
     // If a config path was provided, use that as the template
     if let Some(config_path) = config_path {
-        node_config = NodeConfig::load_config(&config_path).map_err(|e| {
+        node_config = NodeConfig::load_config(config_path).map_err(|e| {
             anyhow!(
                 "Unable to load config from path: {:?}. Error: {:?}",
                 config_path,
@@ -452,6 +515,41 @@ fn create_single_node_test_config(
         node_config.consensus.quorum_store_poll_time_ms = 3_600_000;
     }
 
+    // The validator builder puts the first node in the 0 directory
+    let aptos_root_key_path = test_dir.join("mint.key");
+
+    // Build genesis and the validator node
+    let builder = aptos_genesis::builder::Builder::new(test_dir, framework.clone())?
+        .with_init_config(Some(Arc::new(move |_, config, _| {
+            *config = node_config.clone();
+        })))
+        .with_init_genesis_config(Some(Arc::new(|genesis_config| {
+            genesis_config.allow_new_validators = true;
+            genesis_config.epoch_duration_secs = EPOCH_LENGTH_SECS;
+            genesis_config.recurring_lockup_duration_secs = 7200;
+        })))
+        .with_randomize_first_validator_ports(random_ports);
+    let (root_key, _genesis, genesis_waypoint, mut validators) = builder.build(rng)?;
+
+    // Write the mint key to disk
+    let serialized_keys = bcs::to_bytes(&root_key)?;
+    let mut key_file = fs::File::create(aptos_root_key_path)?;
+    key_file.write_all(&serialized_keys)?;
+
+    // Build a waypoint file so that clients / docker can grab it easily
+    let waypoint_file_path = test_dir.join("waypoint.txt");
+    Write::write_all(
+        &mut fs::File::create(waypoint_file_path)?,
+        genesis_waypoint.to_string().as_bytes(),
+    )?;
+
+    aptos_config::config::sanitize_node_config(validators[0].config.override_config_mut())?;
+
+    let mut node_config = validators[0].config.override_config().clone();
+
+    // Enable the AdminService.
+    node_config.admin_service.enabled = Some(true);
+
     Ok(node_config)
 }
 
@@ -462,15 +560,16 @@ pub fn setup_environment_and_start_node(
     logger_filter_update_job: Option<LoggerFilterUpdater>,
 ) -> anyhow::Result<AptosHandle> {
     // Log the node config at node startup
-    info!("Using node config {:?}", &node_config);
+    node_config.log_all_configs();
 
-    // Start the node inspection service
-    let peers_and_metadata = network::create_peers_and_metadata(&node_config);
-    services::start_node_inspection_service(&node_config, peers_and_metadata.clone());
+    // Starts the admin service
+    let admin_service = services::start_admin_service(&node_config);
 
     // Set up the storage database and any RocksDB checkpoints
-    let (aptos_db, db_rw, backup_service, genesis_waypoint) =
+    let (db_rw, backup_service, genesis_waypoint) =
         storage::initialize_database_and_checkpoints(&mut node_config)?;
+
+    admin_service.set_aptos_db(db_rw.clone().into());
 
     // Set the Aptos VM configurations
     utils::set_aptos_vm_configurations(&node_config);
@@ -494,12 +593,17 @@ pub fn setup_environment_and_start_node(
         mut event_subscription_service,
         mempool_reconfig_subscription,
         consensus_reconfig_subscription,
+        dkg_subscriptions,
+        jwk_consensus_subscriptions,
     ) = state_sync::create_event_subscription_service(&node_config, &db_rw);
 
     // Set up the networks and gather the application network handles
+    let peers_and_metadata = network::create_peers_and_metadata(&node_config);
     let (
         network_runtimes,
         consensus_network_interfaces,
+        dkg_network_interfaces,
+        jwk_consensus_network_interfaces,
         mempool_network_interfaces,
         peer_monitoring_service_network_interfaces,
         storage_service_network_interfaces,
@@ -518,7 +622,7 @@ pub fn setup_environment_and_start_node(
     );
 
     // Start state sync and get the notification endpoints for mempool and consensus
-    let (state_sync_runtimes, mempool_listener, consensus_notifier) =
+    let (aptos_data_client, state_sync_runtimes, mempool_listener, consensus_notifier) =
         state_sync::start_state_sync_and_get_notification_handles(
             &node_config,
             storage_service_network_interfaces,
@@ -527,9 +631,21 @@ pub fn setup_environment_and_start_node(
             db_rw.clone(),
         )?;
 
+    // Start the node inspection service
+    services::start_node_inspection_service(
+        &node_config,
+        aptos_data_client,
+        peers_and_metadata.clone(),
+    );
+
     // Bootstrap the API and indexer
-    let (mempool_client_receiver, api_runtime, indexer_runtime, indexer_grpc_runtime) =
-        services::bootstrap_api_and_indexer(&node_config, aptos_db, chain_id)?;
+    let (
+        mempool_client_receiver,
+        api_runtime,
+        indexer_table_info_runtime,
+        indexer_runtime,
+        indexer_grpc_runtime,
+    ) = services::bootstrap_api_and_indexer(&node_config, db_rw.clone(), chain_id)?;
 
     // Create mempool and get the consensus to mempool sender
     let (mempool_runtime, consensus_to_mempool_sender) =
@@ -542,6 +658,65 @@ pub fn setup_environment_and_start_node(
             mempool_client_receiver,
             peers_and_metadata,
         );
+    let (dkg_txn_pulled_tx, dkg_txn_pulled_rx) = aptos_channel::new(QueueStyle::FIFO, 1, None);
+    let (vtxn_read_client, mut txn_write_clients) = vtxn_pool::new(vec![
+        (Topic::DKG, Some(dkg_txn_pulled_tx)),
+        (Topic::JWK_CONSENSUS, None),
+    ]);
+    let vtxn_pool_writer_for_jwk = txn_write_clients.pop().unwrap();
+    let vtxn_pool_writer_for_dkg = txn_write_clients.pop().unwrap();
+
+    let identity_blob: Option<Arc<IdentityBlob>> = node_config
+        .consensus
+        .safety_rules
+        .initial_safety_rules_config
+        .identity_blob()
+        .ok()
+        .map(Arc::new);
+
+    let dkg_runtime = match (dkg_network_interfaces, identity_blob.clone()) {
+        (Some(interfaces), Some(identity_blob)) => {
+            let ApplicationNetworkInterfaces {
+                network_client,
+                network_service_events,
+            } = interfaces;
+            let (reconfig_events, dkg_start_events) = dkg_subscriptions
+                .expect("DKG needs to listen to NewEpochEvents events and DKGStartEvents");
+            let my_addr = node_config.validator_network.as_ref().unwrap().peer_id();
+            let dkg_runtime = start_dkg_runtime(
+                my_addr,
+                identity_blob,
+                network_client,
+                network_service_events,
+                reconfig_events,
+                dkg_start_events,
+                vtxn_pool_writer_for_dkg,
+                dkg_txn_pulled_rx,
+            );
+            Some(dkg_runtime)
+        },
+        _ => None,
+    };
+
+    let jwk_consensus_runtime = if let Some(obj) = jwk_consensus_network_interfaces {
+        let ApplicationNetworkInterfaces {
+            network_client,
+            network_service_events,
+        } = obj;
+        let (reconfig_events, onchain_jwk_updated_events) = jwk_consensus_subscriptions.expect(
+            "JWK consensus needs to listen to NewEpochEvents and OnChainJWKMapUpdated events.",
+        );
+        let jwk_consensus_runtime = start_jwk_consensus_runtime(
+            network_client,
+            network_service_events,
+            vtxn_pool_writer_for_jwk,
+            reconfig_events,
+            onchain_jwk_updated_events,
+        );
+        Some(jwk_consensus_runtime)
+    } else {
+        None
+    };
 
     // Create the consensus runtime (this blocks on state sync first)
     let consensus_runtime = consensus_network_interfaces.map(|consensus_network_interfaces| {
@@ -551,22 +726,29 @@ pub fn setup_environment_and_start_node(
         debug!("State sync initialization complete.");
 
         // Initialize and start consensus
-        services::start_consensus_runtime(
+        let (runtime, consensus_db, quorum_store_db) = services::start_consensus_runtime(
             &mut node_config,
             db_rw,
             consensus_reconfig_subscription,
             consensus_network_interfaces,
             consensus_notifier,
             consensus_to_mempool_sender,
-        )
+            vtxn_read_client,
+        );
+        admin_service.set_consensus_dbs(consensus_db, quorum_store_db);
+        runtime
     });
 
     Ok(AptosHandle {
+        _admin_service: admin_service,
         _api_runtime: api_runtime,
         _backup_runtime: backup_service,
         _consensus_runtime: consensus_runtime,
+        _dkg_runtime: dkg_runtime,
         _indexer_grpc_runtime: indexer_grpc_runtime,
         _indexer_runtime: indexer_runtime,
+        _indexer_table_info_runtime: indexer_table_info_runtime,
+        _jwk_consensus_runtime: jwk_consensus_runtime,
         _mempool_runtime: mempool_runtime,
         _network_runtimes: network_runtimes,
         _peer_monitoring_service_runtime: peer_monitoring_service_runtime,

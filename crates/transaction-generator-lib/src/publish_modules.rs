@@ -34,7 +34,7 @@ impl PublishPackageGenerator {
 impl TransactionGenerator for PublishPackageGenerator {
     fn generate_transactions(
         &mut self,
-        account: &mut LocalAccount,
+        account: &LocalAccount,
         num_to_create: usize,
     ) -> Vec<SignedTransaction> {
         let mut requests = Vec::with_capacity(num_to_create);
@@ -43,8 +43,11 @@ impl TransactionGenerator for PublishPackageGenerator {
         let package = self
             .package_handler
             .write()
-            .pick_package(&mut self.rng, account);
-        let txn = package.publish_transaction(account, &self.txn_factory);
+            .pick_package(&mut self.rng, account.address());
+        let txn = account.sign_with_transaction_builder(
+            self.txn_factory
+                .payload(package.publish_transaction_payload()),
+        );
         requests.push(txn);
         // use module published
         // for _ in 1..transactions_per_account - 1 {
@@ -56,7 +59,7 @@ impl TransactionGenerator for PublishPackageGenerator {
         // let package = self
         //     .package_handler
         //     .write()
-        //     .pick_package(&mut self.rng, account);
+        //     .pick_package(&mut self.rng, account.address());
         // let txn = package.publish_transaction(account, &self.txn_factory);
         // requests.push(txn);
         requests
@@ -78,7 +81,7 @@ impl PublishPackageCreator {
 }
 
 impl TransactionGeneratorCreator for PublishPackageCreator {
-    fn create_transaction_generator(&mut self) -> Box<dyn TransactionGenerator> {
+    fn create_transaction_generator(&self) -> Box<dyn TransactionGenerator> {
         Box::new(PublishPackageGenerator::new(
             StdRng::from_entropy(),
             self.package_handler.clone(),

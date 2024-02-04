@@ -13,15 +13,16 @@ use aptos_build_info::build_information;
 use aptos_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
 use aptos_keygen::KeyGen;
 use aptos_logger::{debug, Level};
-use aptos_rest_client::{aptos_api_types::HashValue, Account, Client, State};
+use aptos_rest_client::{aptos_api_types::HashValue, Account, Client, FaucetClient, State};
 use aptos_telemetry::service::telemetry_is_disabled;
 use aptos_types::{
     account_address::create_multisig_account_address,
     chain_id::ChainId,
+    on_chain_config::{FeatureFlag, Features},
     transaction::{authenticator::AuthenticationKey, TransactionPayload},
 };
 use itertools::Itertools;
-use move_core_types::account_address::AccountAddress;
+use move_core_types::{account_address::AccountAddress, language_storage::CORE_CODE_ADDRESS};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 #[cfg(unix)]
@@ -57,23 +58,32 @@ pub fn prompt_yes(prompt: &str) -> bool {
     result.unwrap()
 }
 
-/// Convert any successful response to Success
+/// Convert any successful response to Success. If there is an error, show it as JSON
+/// unless `jsonify_error` is false.
 pub async fn to_common_success_result<T>(
     command: &str,
     start_time: Instant,
     result: CliTypedResult<T>,
+    jsonify_error: bool,
 ) -> CliResult {
-    to_common_result(command, start_time, result.map(|_| "Success")).await
+    to_common_result(
+        command,
+        start_time,
+        result.map(|_| "Success"),
+        jsonify_error,
+    )
+    .await
 }
 
-/// For pretty printing outputs in JSON
+/// For pretty printing outputs in JSON. You can opt out of printing the error as
+/// JSON by setting `jsonify_error` to false.
 pub async fn to_common_result<T: Serialize>(
     command: &str,
     start_time: Instant,
     result: CliTypedResult<T>,
+    jsonify_error: bool,
 ) -> CliResult {
     let latency = start_time.elapsed();
-    let is_err = result.is_err();
 
     if !telemetry_is_disabled() {
         let error = if let Err(ref error) = result {
@@ -85,7 +95,7 @@ pub async fn to_common_result<T: Serialize>(
 
         if let Err(err) = timeout(
             Duration::from_millis(2000),
-            send_telemetry_event(command, latency, !is_err, error),
+            send_telemetry_event(command, latency, error),
         )
         .await
         {
@@ -93,7 +103,15 @@ pub async fn to_common_result<T: Serialize>(
         }
     }
 
-    let result: ResultWrapper<T> = result.into();
+    // Return early with a non JSON error if requested.
+    if let Err(err) = &result {
+        if !jsonify_error {
+            return Err(format!("{:#}", err));
+        }
+    }
+
+    let is_err = result.is_err();
+    let result = ResultWrapper::<T>::from(result);
     let string = serde_json::to_string_pretty(&result).unwrap();
     if is_err {
         Err(string)
@@ -107,12 +125,7 @@ pub fn cli_build_information() -> BTreeMap<String, String> {
 }
 
 /// Sends a telemetry event about the CLI build, command and result
-async fn send_telemetry_event(
-    command: &str,
-    latency: Duration,
-    success: bool,
-    error: Option<&str>,
-) {
+async fn send_telemetry_event(command: &str, latency: Duration, error: Option<&str>) {
     // Collect the build information
     let build_information = cli_build_information();
 
@@ -121,7 +134,7 @@ async fn send_telemetry_event(
         build_information,
         command.into(),
         latency,
-        success,
+        error.is_none(),
         error,
     )
     .await;
@@ -151,7 +164,7 @@ impl<T> From<CliTypedResult<T>> for ResultWrapper<T> {
     fn from(result: CliTypedResult<T>) -> Self {
         match result {
             Ok(inner) => ResultWrapper::Result(inner),
-            Err(inner) => ResultWrapper::Error(inner.to_string()),
+            Err(inner) => ResultWrapper::Error(format!("{:#}", inner)),
         }
     }
 }
@@ -281,6 +294,15 @@ pub async fn get_auth_key(
     Ok(get_account(client, address).await?.authentication_key)
 }
 
+/// Retrieves the value of the specified feature flag from the rest client
+pub async fn get_feature_flag(client: &Client, flag: FeatureFlag) -> CliTypedResult<bool> {
+    let features = client
+        .get_account_resource_bcs::<Features>(CORE_CODE_ADDRESS, "0x1::features::Features")
+        .await?
+        .into_inner();
+    Ok(features.is_enabled(flag))
+}
+
 /// Retrieves the chain id from the rest client
 pub async fn chain_id(rest_client: &Client) -> CliTypedResult<ChainId> {
     let state = rest_client
@@ -406,35 +428,23 @@ pub fn read_line(input_name: &'static str) -> CliTypedResult<String> {
     Ok(input_buf)
 }
 
-/// Fund account (and possibly create it) from a faucet
+/// Fund account (and possibly create it) from a faucet. This function waits for the
+/// transaction on behalf of the caller.
 pub async fn fund_account(
+    rest_client: Client,
     faucet_url: Url,
-    num_octas: u64,
+    faucet_auth_token: Option<&str>,
     address: AccountAddress,
-) -> CliTypedResult<Vec<HashValue>> {
-    let response = reqwest::Client::new()
-        .post(format!(
-            "{}mint?amount={}&auth_key={}",
-            faucet_url, num_octas, address
-        ))
-        .body("{}")
-        .send()
-        .await
-        .map_err(|err| {
-            CliError::ApiError(format!("Failed to fund account with faucet: {:#}", err))
-        })?;
-    if response.status() == 200 {
-        let hashes: Vec<HashValue> = response
-            .json()
-            .await
-            .map_err(|err| CliError::UnexpectedError(err.to_string()))?;
-        Ok(hashes)
-    } else {
-        Err(CliError::ApiError(format!(
-            "Faucet issue: {}",
-            response.status()
-        )))
+    num_octas: u64,
+) -> CliTypedResult<()> {
+    let mut client = FaucetClient::new_from_rest_client(faucet_url, rest_client);
+    if let Some(token) = faucet_auth_token {
+        client = client.with_auth_token(token.to_string());
     }
+    client
+        .fund(address, num_octas)
+        .await
+        .map_err(|err| CliError::ApiError(format!("Faucet issue: {:#}", err)))
 }
 
 /// Fund by public key (and possibly create it) from a faucet

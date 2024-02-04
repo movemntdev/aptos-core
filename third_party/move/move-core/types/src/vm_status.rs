@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #![allow(clippy::unit_arg)]
+#![allow(clippy::arc_with_non_send_sync)]
 
 use crate::language_storage::ModuleId;
 use anyhow::Result;
@@ -701,7 +702,7 @@ pub enum StatusCode {
     MAX_FIELD_DEFINITIONS_REACHED = 1121,
     // Reserved error code for future use
     TOO_MANY_BACK_EDGES = 1122,
-    RESERVED_VERIFICATION_ERROR_1 = 1123,
+    EVENT_METADATA_VALIDATION_ERROR = 1123,
     RESERVED_VERIFICATION_ERROR_2 = 1124,
     RESERVED_VERIFICATION_ERROR_3 = 1125,
     RESERVED_VERIFICATION_ERROR_4 = 1126,
@@ -728,15 +729,24 @@ pub enum StatusCode {
     // Failed to resolve type due to linking being broken after verification
     TYPE_RESOLUTION_FAILURE = 2021,
     DUPLICATE_NATIVE_FUNCTION = 2022,
+    // code invariant error while handling delayed fields, should never happen,
+    // always indicates a code bug.
+    // Unlike regular CODE_INVARIANT_ERROR, this is a signal to BlockSTM,
+    // which it might do something about (i.e. fallback to sequential execution)
+    DELAYED_FIELDS_CODE_INVARIANT_ERROR = 2023,
+    // Speculative error means that there was an issue because of speculative
+    // reads provided to the transaction, and the transaction needs to
+    // be re-executed.
+    // Should never be committed on chain
+    SPECULATIVE_EXECUTION_ABORT_ERROR = 2024,
+
     // Reserved error code for future use
-    RESERVED_INVARIANT_VIOLATION_ERROR_1 = 2023,
-    RESERVED_INVARIANT_VIOLATION_ERROR_2 = 2024,
     RESERVED_INVARIANT_VIOLATION_ERROR_3 = 2025,
     RESERVED_INVARIANT_VIOLATION_ERROR_4 = 2026,
     RESERVED_INVARIANT_VIOLATION_ERROR_5 = 2027,
 
     // Errors that can arise from binary decoding (deserialization)
-    // Deserializtion Errors: 3000-3999
+    // Deserialization Errors: 3000-3999
     UNKNOWN_BINARY_ERROR = 3000,
     MALFORMED = 3001,
     BAD_MAGIC = 3002,
@@ -792,8 +802,8 @@ pub enum StatusCode {
     EXECUTION_LIMIT_REACHED = 4030,
     IO_LIMIT_REACHED = 4031,
     STORAGE_LIMIT_REACHED = 4032,
+    TYPE_TAG_LIMIT_EXCEEDED = 4033,
     // Reserved error code for future use
-    RESERVED_RUNTIME_ERROR_1 = 4033,
     RESERVED_RUNTIME_ERROR_2 = 4034,
     RESERVED_RUNTIME_ERROR_3 = 4035,
     RESERVED_RUNTIME_ERROR_4 = 4036,

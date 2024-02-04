@@ -2,13 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    metrics, network::StorageServiceNetworkEvents, storage::StorageReader, StorageServiceServer,
+    metrics, network::StorageServiceNetworkEvents, storage::StorageReader, tests::utils,
+    StorageServiceServer,
 };
 use anyhow::Result;
 use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_config::{config::StorageServiceConfig, network_id::NetworkId};
+use aptos_config::{
+    config::{StateSyncConfig, StorageServiceConfig},
+    network_id::NetworkId,
+};
 use aptos_crypto::HashValue;
-use aptos_logger::Level;
 use aptos_network::{
     application::{interface::NetworkServiceEvents, storage::PeersAndMetadata},
     peer_manager::PeerManagerNotification,
@@ -70,12 +73,16 @@ impl MockClient {
         MockTimeService,
         Arc<PeersAndMetadata>,
     ) {
-        initialize_logger();
+        utils::initialize_logger();
+
+        // Create the state sync config
+        let mut state_sync_config = StateSyncConfig::default();
+        let storage_service_config = storage_config.unwrap_or_default();
+        state_sync_config.storage_service = storage_service_config;
 
         // Create the storage reader
-        let storage_config = storage_config.unwrap_or_default();
         let storage_reader = StorageReader::new(
-            storage_config,
+            storage_service_config,
             Arc::new(db_reader.unwrap_or_else(create_mock_db_reader)),
         );
 
@@ -84,10 +91,11 @@ impl MockClient {
         let mut network_and_events = HashMap::new();
         let mut peer_manager_notifiers = HashMap::new();
         for network_id in network_ids.clone() {
-            let queue_cfg =
-                aptos_channel::Config::new(storage_config.max_network_channel_size as usize)
-                    .queue_style(QueueStyle::FIFO)
-                    .counters(&metrics::PENDING_STORAGE_SERVER_NETWORK_EVENTS);
+            let queue_cfg = aptos_channel::Config::new(
+                storage_service_config.max_network_channel_size as usize,
+            )
+            .queue_style(QueueStyle::FIFO)
+            .counters(&metrics::PENDING_STORAGE_SERVER_NETWORK_EVENTS);
             let (peer_manager_notifier, peer_manager_notification_receiver) = queue_cfg.build();
             let (_, connection_notification_receiver) = queue_cfg.build();
 
@@ -111,7 +119,7 @@ impl MockClient {
         let executor = tokio::runtime::Handle::current();
         let mock_time_service = TimeService::mock();
         let storage_server = StorageServiceServer::new(
-            storage_config,
+            state_sync_config,
             executor,
             storage_reader,
             mock_time_service.clone(),
@@ -213,14 +221,6 @@ fn get_random_network_id() -> NetworkId {
     }
 }
 
-/// Initializes the Aptos logger for tests
-fn initialize_logger() {
-    aptos_logger::Logger::builder()
-        .is_async(false)
-        .level(Level::Debug)
-        .build();
-}
-
 // This automatically creates a MockDatabaseReader.
 // TODO(joshlind): if we frequently use these mocks, we should define a single
 // mock test crate to be shared across the codebase.
@@ -231,7 +231,7 @@ mock! {
             &self,
             start_epoch: u64,
             end_epoch: u64,
-        ) -> Result<EpochChangeProof>;
+        ) -> aptos_storage_interface::Result<EpochChangeProof>;
 
         fn get_transactions(
             &self,
@@ -239,32 +239,32 @@ mock! {
             batch_size: u64,
             ledger_version: Version,
             fetch_events: bool,
-        ) -> Result<TransactionListWithProof>;
+        ) -> aptos_storage_interface::Result<TransactionListWithProof>;
 
         fn get_transaction_by_hash(
             &self,
             hash: HashValue,
             ledger_version: Version,
             fetch_events: bool,
-        ) -> Result<Option<TransactionWithProof>>;
+        ) -> aptos_storage_interface::Result<Option<TransactionWithProof>>;
 
         fn get_transaction_by_version(
             &self,
             version: Version,
             ledger_version: Version,
             fetch_events: bool,
-        ) -> Result<TransactionWithProof>;
+        ) -> aptos_storage_interface::Result<TransactionWithProof>;
 
-        fn get_first_txn_version(&self) -> Result<Option<Version>>;
+        fn get_first_txn_version(&self) -> aptos_storage_interface::Result<Option<Version>>;
 
-        fn get_first_write_set_version(&self) -> Result<Option<Version>>;
+        fn get_first_write_set_version(&self) -> aptos_storage_interface::Result<Option<Version>>;
 
         fn get_transaction_outputs(
             &self,
             start_version: Version,
             limit: u64,
             ledger_version: Version,
-        ) -> Result<TransactionOutputListWithProof>;
+        ) -> aptos_storage_interface::Result<TransactionOutputListWithProof>;
 
         fn get_events(
             &self,
@@ -273,23 +273,23 @@ mock! {
             order: Order,
             limit: u64,
             ledger_version: Version,
-        ) -> Result<Vec<EventWithVersion>>;
+        ) -> aptos_storage_interface::Result<Vec<EventWithVersion>>;
 
-        fn get_block_timestamp(&self, version: u64) -> Result<u64>;
+        fn get_block_timestamp(&self, version: u64) -> aptos_storage_interface::Result<u64>;
 
         fn get_last_version_before_timestamp(
             &self,
             _timestamp: u64,
             _ledger_version: Version,
-        ) -> Result<Version>;
+        ) -> aptos_storage_interface::Result<Version>;
 
-        fn get_latest_ledger_info_option(&self) -> Result<Option<LedgerInfoWithSignatures>>;
+        fn get_latest_ledger_info_option(&self) -> aptos_storage_interface::Result<Option<LedgerInfoWithSignatures>>;
 
-        fn get_latest_ledger_info(&self) -> Result<LedgerInfoWithSignatures>;
+        fn get_latest_ledger_info(&self) -> aptos_storage_interface::Result<LedgerInfoWithSignatures>;
 
-        fn get_latest_version(&self) -> Result<Version>;
+        fn get_latest_version(&self) -> aptos_storage_interface::Result<Version>;
 
-        fn get_latest_commit_metadata(&self) -> Result<(Version, u64)>;
+        fn get_latest_commit_metadata(&self) -> aptos_storage_interface::Result<(Version, u64)>;
 
         fn get_account_transaction(
             &self,
@@ -297,7 +297,7 @@ mock! {
             seq_num: u64,
             include_events: bool,
             ledger_version: Version,
-        ) -> Result<Option<TransactionWithProof>>;
+        ) -> aptos_storage_interface::Result<Option<TransactionWithProof>>;
 
         fn get_account_transactions(
             &self,
@@ -306,63 +306,67 @@ mock! {
             limit: u64,
             include_events: bool,
             ledger_version: Version,
-        ) -> Result<AccountTransactionsWithProof>;
+        ) -> aptos_storage_interface::Result<AccountTransactionsWithProof>;
 
         fn get_state_proof_with_ledger_info(
             &self,
             known_version: u64,
             ledger_info: LedgerInfoWithSignatures,
-        ) -> Result<StateProof>;
+        ) -> aptos_storage_interface::Result<StateProof>;
 
-        fn get_state_proof(&self, known_version: u64) -> Result<StateProof>;
+        fn get_state_proof(&self, known_version: u64) -> aptos_storage_interface::Result<StateProof>;
 
         fn get_state_value_with_proof_by_version(
             &self,
             state_key: &StateKey,
             version: Version,
-        ) -> Result<(Option<StateValue>, SparseMerkleProof)>;
+        ) -> aptos_storage_interface::Result<(Option<StateValue>, SparseMerkleProof)>;
 
-        fn get_latest_executed_trees(&self) -> Result<ExecutedTrees>;
+        fn get_latest_executed_trees(&self) -> aptos_storage_interface::Result<ExecutedTrees>;
 
-        fn get_epoch_ending_ledger_info(&self, known_version: u64) -> Result<LedgerInfoWithSignatures>;
+        fn get_epoch_ending_ledger_info(&self, known_version: u64) ->aptos_storage_interface::Result<LedgerInfoWithSignatures>;
 
-        fn get_accumulator_root_hash(&self, _version: Version) -> Result<HashValue>;
+        fn get_accumulator_root_hash(&self, _version: Version) -> aptos_storage_interface::Result<HashValue>;
 
         fn get_accumulator_consistency_proof(
             &self,
             _client_known_version: Option<Version>,
             _ledger_version: Version,
-        ) -> Result<AccumulatorConsistencyProof>;
+        ) -> aptos_storage_interface::Result<AccumulatorConsistencyProof>;
 
         fn get_accumulator_summary(
             &self,
             ledger_version: Version,
-        ) -> Result<TransactionAccumulatorSummary>;
+        ) -> aptos_storage_interface::Result<TransactionAccumulatorSummary>;
 
-        fn get_state_leaf_count(&self, version: Version) -> Result<usize>;
+        fn get_state_leaf_count(&self, version: Version) -> aptos_storage_interface::Result<usize>;
 
         fn get_state_value_chunk_with_proof(
             &self,
             version: Version,
             start_idx: usize,
             chunk_size: usize,
-        ) -> Result<StateValueChunkWithProof>;
+        ) -> aptos_storage_interface::Result<StateValueChunkWithProof>;
 
-        fn get_epoch_snapshot_prune_window(&self) -> Result<usize>;
+        fn get_epoch_snapshot_prune_window(&self) -> aptos_storage_interface::Result<usize>;
 
-        fn is_state_merkle_pruner_enabled(&self) -> Result<bool>;
+        fn is_state_merkle_pruner_enabled(&self) -> aptos_storage_interface::Result<bool>;
     }
 }
 
-/// Creates a mock db with the basic expectations required to handle optimistic fetch requests
-pub fn create_mock_db_for_optimistic_fetch(
-    highest_ledger_info_clone: LedgerInfoWithSignatures,
+/// Creates a mock db with the basic expectations required to
+/// handle storage summary updates.
+pub fn create_mock_db_with_summary_updates(
+    highest_ledger_info: LedgerInfoWithSignatures,
     lowest_version: Version,
 ) -> MockDatabaseReader {
+    // Create a new mock db reader
     let mut db_reader = create_mock_db_reader();
+
+    // Set up the basic expectations to handle storage summary updates
     db_reader
         .expect_get_latest_ledger_info()
-        .returning(move || Ok(highest_ledger_info_clone.clone()));
+        .returning(move || Ok(highest_ledger_info.clone()));
     db_reader
         .expect_get_first_txn_version()
         .returning(move || Ok(Some(lowest_version)));
@@ -375,6 +379,7 @@ pub fn create_mock_db_for_optimistic_fetch(
     db_reader
         .expect_is_state_merkle_pruner_enabled()
         .returning(move || Ok(true));
+
     db_reader
 }
 

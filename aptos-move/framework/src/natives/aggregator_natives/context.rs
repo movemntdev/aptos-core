@@ -2,21 +2,26 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use aptos_aggregator::{
-    aggregator_extension::{AggregatorData, AggregatorID, AggregatorState},
-    delta_change_set::{DeltaOp, DeltaUpdate},
+    aggregator_v1_extension::{AggregatorData, AggregatorState},
+    bounded_math::SignedU128,
+    delayed_change::DelayedChange,
+    delayed_field_extension::DelayedFieldData,
+    delta_change_set::DeltaOp,
+    resolver::{AggregatorV1Resolver, DelayedFieldResolver},
+    types::DelayedFieldID,
 };
-use aptos_types::vm_status::VMStatus;
+use aptos_types::{aggregator::PanicError, state_store::state_key::StateKey, write_set::WriteOp};
 use better_any::{Tid, TidAble};
-use move_binary_format::errors::Location;
-use move_table_extension::TableResolver;
+use move_core_types::value::MoveTypeLayout;
 use std::{
     cell::RefCell,
-    collections::{btree_map, BTreeMap},
+    collections::{BTreeMap, HashSet},
+    sync::Arc,
 };
 
 /// Represents a single aggregator change.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum AggregatorChange {
+pub enum AggregatorChangeV1 {
     // A value should be written to storage.
     Write(u128),
     // A delta should be merged with the value from storage.
@@ -29,7 +34,10 @@ pub enum AggregatorChange {
 /// set can be converted into appropriate `WriteSet` and `DeltaChangeSet` by the
 /// user, e.g. VM session.
 pub struct AggregatorChangeSet {
-    pub changes: BTreeMap<AggregatorID, AggregatorChange>,
+    pub aggregator_v1_changes: BTreeMap<StateKey, AggregatorChangeV1>,
+    pub delayed_field_changes: BTreeMap<DelayedFieldID, DelayedChange<DelayedFieldID>>,
+    pub reads_needing_exchange: BTreeMap<StateKey, (WriteOp, Arc<MoveTypeLayout>)>,
+    pub group_reads_needing_exchange: BTreeMap<StateKey, (WriteOp, u64)>,
 }
 
 /// Native context that can be attached to VM `NativeContextExtensions`.
@@ -38,9 +46,10 @@ pub struct AggregatorChangeSet {
 #[derive(Tid)]
 pub struct NativeAggregatorContext<'a> {
     txn_hash: [u8; 32],
-    pub(crate) resolver: &'a dyn TableResolver,
-    pub(crate) aggregator_data: RefCell<AggregatorData>,
-    pub(crate) aggregator_enabled: bool,
+    pub(crate) aggregator_v1_resolver: &'a dyn AggregatorV1Resolver,
+    pub(crate) aggregator_v1_data: RefCell<AggregatorData>,
+    pub(crate) delayed_field_resolver: &'a dyn DelayedFieldResolver,
+    pub(crate) delayed_field_data: RefCell<DelayedFieldData>,
 }
 
 impl<'a> NativeAggregatorContext<'a> {
@@ -48,14 +57,15 @@ impl<'a> NativeAggregatorContext<'a> {
     /// passed into VM session.
     pub fn new(
         txn_hash: [u8; 32],
-        resolver: &'a dyn TableResolver,
-        aggregator_enabled: bool,
+        aggregator_v1_resolver: &'a dyn AggregatorV1Resolver,
+        delayed_field_resolver: &'a dyn DelayedFieldResolver,
     ) -> Self {
         Self {
             txn_hash,
-            resolver,
-            aggregator_data: Default::default(),
-            aggregator_enabled,
+            aggregator_v1_resolver,
+            aggregator_v1_data: Default::default(),
+            delayed_field_resolver,
+            delayed_field_data: Default::default(),
         }
     }
 
@@ -66,89 +76,75 @@ impl<'a> NativeAggregatorContext<'a> {
 
     /// Returns all changes made within this context (i.e. by a single
     /// transaction).
-    pub fn into_change_set(self) -> AggregatorChangeSet {
+    pub fn into_change_set(self) -> Result<AggregatorChangeSet, PanicError> {
         let NativeAggregatorContext {
-            aggregator_data, ..
+            aggregator_v1_data,
+            delayed_field_data,
+            ..
         } = self;
-        let (_, destroyed_aggregators, aggregators) = aggregator_data.into_inner().into();
+        let (_, destroyed_aggregators, aggregators) = aggregator_v1_data.into_inner().into();
 
-        let mut changes = BTreeMap::new();
+        let mut aggregator_v1_changes = BTreeMap::new();
 
         // First, process all writes and deltas.
         for (id, aggregator) in aggregators {
             let (value, state, limit, history) = aggregator.into();
 
             let change = match state {
-                AggregatorState::Data => AggregatorChange::Write(value),
+                AggregatorState::Data => AggregatorChangeV1::Write(value),
                 AggregatorState::PositiveDelta => {
-                    // Aggregator state can be a delta only if aggregators are enabled.
-                    assert!(self.aggregator_enabled);
                     let history = history.unwrap();
-                    let plus = DeltaUpdate::Plus(value);
-                    let delta_op =
-                        DeltaOp::new(plus, limit, history.max_positive, history.min_negative);
-                    AggregatorChange::Merge(delta_op)
+                    let plus = SignedU128::Positive(value);
+                    let delta_op = DeltaOp::new(plus, limit, history);
+                    AggregatorChangeV1::Merge(delta_op)
                 },
                 AggregatorState::NegativeDelta => {
-                    // Aggregator state can be a delta only if aggregators are enabled.
-                    assert!(self.aggregator_enabled);
                     let history = history.unwrap();
-                    let minus = DeltaUpdate::Minus(value);
-                    let delta_op =
-                        DeltaOp::new(minus, limit, history.max_positive, history.min_negative);
-                    AggregatorChange::Merge(delta_op)
+                    let minus = SignedU128::Negative(value);
+                    let delta_op = DeltaOp::new(minus, limit, history);
+                    AggregatorChangeV1::Merge(delta_op)
                 },
             };
-            changes.insert(id, change);
+            aggregator_v1_changes.insert(id.0, change);
         }
 
         // Additionally, do not forget to delete destroyed values from storage.
         for id in destroyed_aggregators {
-            changes.insert(id, AggregatorChange::Delete);
+            aggregator_v1_changes.insert(id.0, AggregatorChangeV1::Delete);
         }
 
-        AggregatorChangeSet { changes }
+        let delayed_field_changes = delayed_field_data.into_inner().into();
+        let delayed_write_set_keys = delayed_field_changes
+            .keys()
+            .cloned()
+            .collect::<HashSet<_>>();
+        Ok(AggregatorChangeSet {
+            aggregator_v1_changes,
+            delayed_field_changes,
+            // is_empty check covers both whether delayed fields are enabled or not, as well as whether there
+            // are any changes that would require computing reads needing exchange.
+            // TODO[agg_v2](optimize) we only later compute the the write set, so cannot pass the correct skip values here.
+            reads_needing_exchange: if delayed_write_set_keys.is_empty() {
+                BTreeMap::new()
+            } else {
+                self.delayed_field_resolver
+                    .get_reads_needing_exchange(&delayed_write_set_keys, &HashSet::new())?
+            },
+            group_reads_needing_exchange: if delayed_write_set_keys.is_empty() {
+                BTreeMap::new()
+            } else {
+                self.delayed_field_resolver
+                    .get_group_reads_needing_exchange(&delayed_write_set_keys, &HashSet::new())?
+            },
+        })
     }
-}
 
-impl AggregatorChangeSet {
-    pub fn squash(&mut self, other: Self) -> Result<(), VMStatus> {
-        for (other_id, other_change) in other.changes {
-            match self.changes.entry(other_id) {
-                // If something was changed only in `other` session, add it.
-                btree_map::Entry::Vacant(entry) => {
-                    entry.insert(other_change);
-                },
-                // Otherwise, we might need to aggregate deltas.
-                btree_map::Entry::Occupied(mut entry) => {
-                    use AggregatorChange::*;
-
-                    let entry_mut = entry.get_mut();
-                    match (*entry_mut, other_change) {
-                        (Write(_) | Merge(_), Write(data)) => *entry_mut = Write(data),
-                        (Write(_) | Merge(_), Delete) => *entry_mut = Delete,
-                        (Write(data), Merge(delta)) => {
-                            let new_data = delta
-                                .apply_to(data)
-                                .map_err(|e| e.finish(Location::Undefined).into_vm_status())?;
-                            *entry_mut = Write(new_data);
-                        },
-                        (Merge(delta1), Merge(mut delta2)) => {
-                            // `delta1` occurred before `delta2`, therefore we must ensure we merge the latter
-                            // one to the initial delta.
-                            delta2
-                                .merge_with_previous_delta(delta1)
-                                .map_err(|e| e.finish(Location::Undefined).into_vm_status())?;
-                            *entry_mut = Merge(delta2)
-                        },
-                        // Hashing properties guarantee that aggregator keys should
-                        // not collide, making this case impossible.
-                        (Delete, _) => unreachable!("resource cannot be accessed after deletion"),
-                    }
-                },
-            }
-        }
-        Ok(())
+    #[cfg(test)]
+    fn into_delayed_fields(self) -> BTreeMap<DelayedFieldID, DelayedChange<DelayedFieldID>> {
+        let NativeAggregatorContext {
+            delayed_field_data, ..
+        } = self;
+        delayed_field_data.into_inner().into()
     }
 }
 
@@ -156,46 +152,29 @@ impl AggregatorChangeSet {
 mod test {
     use super::*;
     use aptos_aggregator::{
-        aggregator_extension::aggregator_id_for_test, delta_change_set::serialize,
+        aggregator_v1_id_for_test, aggregator_v1_state_key_for_test,
+        bounded_math::SignedU128,
+        delayed_change::DelayedApplyChange,
+        delta_change_set::DeltaWithMax,
+        delta_math::DeltaHistory,
+        tests::types::FAKE_AGGREGATOR_VIEW_GEN_ID_START,
+        types::{DelayedFieldValue, SnapshotToStringFormula},
+        FakeAggregatorView,
     };
-    use aptos_language_e2e_tests::data_store::FakeDataStore;
-    use aptos_types::state_store::state_key::StateKey;
-    use claims::{assert_matches, assert_ok};
+    use claims::{assert_matches, assert_ok, assert_ok_eq, assert_some_eq};
 
-    fn get_test_resolver() -> FakeDataStore {
-        #[allow(clippy::redundant_closure)]
-        let mut state_view = FakeDataStore::default();
-
-        let AggregatorID {
-            handle: handle_500,
-            key: key_500,
-        } = aggregator_id_for_test(500);
-        let AggregatorID {
-            handle: handle_600,
-            key: key_600,
-        } = aggregator_id_for_test(600);
-        let AggregatorID {
-            handle: handle_700,
-            key: key_700,
-        } = aggregator_id_for_test(700);
-
-        state_view.set_legacy(
-            StateKey::table_item(handle_500.into(), key_500.0.to_vec()),
-            serialize(&150),
-        );
-        state_view.set_legacy(
-            StateKey::table_item(handle_600.into(), key_600.0.to_vec()),
-            serialize(&100),
-        );
-        state_view.set_legacy(
-            StateKey::table_item(handle_700.into(), key_700.0.to_vec()),
-            serialize(&200),
-        );
+    fn get_test_resolver_v1() -> FakeAggregatorView {
+        let mut state_view = FakeAggregatorView::default();
+        state_view.set_from_state_key(aggregator_v1_state_key_for_test(500), 150);
+        state_view.set_from_state_key(aggregator_v1_state_key_for_test(600), 100);
+        state_view.set_from_state_key(aggregator_v1_state_key_for_test(700), 200);
+        state_view.set_from_aggregator_id(DelayedFieldID::new(900), 300);
+        state_view.set_from_aggregator_id(DelayedFieldID::new(1000), 400);
         state_view
     }
 
     // All aggregators are initialized deterministically based on their ID,
-    // with the following spec.
+    // with V1 key, with the following spec.
     //
     //     +-------+---------------+-----------+-----+---------+
     //     |  key  | storage value |  create   | get | remove  |
@@ -204,139 +183,324 @@ mod test {
     //     |  200  |               |   yes     | yes |         |
     //     |  300  |               |   yes     |     |   yes   |
     //     |  400  |               |   yes     |     |         |
-    //     |  500  |               |           | yes |   yes   |
-    //     |  600  |               |           | yes |         |
-    //     |  700  |               |           | yes |         |
+    //     |  500  |      150      |           | yes |   yes   |
+    //     |  600  |      100      |           | yes |         |
+    //     |  700  |      200      |           | yes |         |
     //     |  800  |               |           |     |   yes   |
     //     +-------+---------------+-----------+-----+---------+
-    fn test_set_up(context: &NativeAggregatorContext, aggregator_enabled: bool) {
-        let mut aggregator_data = context.aggregator_data.borrow_mut();
+    fn test_set_up_v1(context: &NativeAggregatorContext) {
+        let mut aggregator_data = context.aggregator_v1_data.borrow_mut();
 
-        aggregator_data.create_new_aggregator(aggregator_id_for_test(100), 100);
-        aggregator_data.create_new_aggregator(aggregator_id_for_test(200), 200);
-        aggregator_data.create_new_aggregator(aggregator_id_for_test(300), 300);
-        aggregator_data.create_new_aggregator(aggregator_id_for_test(400), 400);
+        aggregator_data.create_new_aggregator(aggregator_v1_id_for_test(100), 100);
+        aggregator_data.create_new_aggregator(aggregator_v1_id_for_test(200), 200);
+        aggregator_data.create_new_aggregator(aggregator_v1_id_for_test(300), 300);
+        aggregator_data.create_new_aggregator(aggregator_v1_id_for_test(400), 400);
 
-        assert_ok!(aggregator_data.get_aggregator(
-            aggregator_id_for_test(100),
-            100,
-            context.resolver,
-            aggregator_enabled,
-        ));
-        assert_ok!(aggregator_data.get_aggregator(
-            aggregator_id_for_test(200),
-            200,
-            context.resolver,
-            aggregator_enabled,
-        ));
-        aggregator_data
-            .get_aggregator(
-                aggregator_id_for_test(500),
-                500,
-                context.resolver,
-                aggregator_enabled,
-            )
+        assert_ok!(aggregator_data.get_aggregator(aggregator_v1_id_for_test(100), 100));
+        assert_ok!(aggregator_data.get_aggregator(aggregator_v1_id_for_test(200), 200));
+        assert_ok!(aggregator_data
+            .get_aggregator(aggregator_v1_id_for_test(500), 500)
             .unwrap()
-            .add(150)
-            .unwrap();
-        aggregator_data
-            .get_aggregator(
-                aggregator_id_for_test(600),
-                600,
-                context.resolver,
-                aggregator_enabled,
-            )
+            .add(150));
+        assert_ok!(aggregator_data
+            .get_aggregator(aggregator_v1_id_for_test(600), 600)
             .unwrap()
-            .add(100)
-            .unwrap();
-        aggregator_data
-            .get_aggregator(
-                aggregator_id_for_test(700),
-                700,
-                context.resolver,
-                aggregator_enabled,
-            )
+            .add(100));
+        assert_ok!(aggregator_data
+            .get_aggregator(aggregator_v1_id_for_test(700), 700)
             .unwrap()
-            .add(200)
-            .unwrap();
+            .add(200));
 
-        aggregator_data.remove_aggregator(aggregator_id_for_test(100));
-        aggregator_data.remove_aggregator(aggregator_id_for_test(300));
-        aggregator_data.remove_aggregator(aggregator_id_for_test(500));
-        aggregator_data.remove_aggregator(aggregator_id_for_test(800));
+        aggregator_data.remove_aggregator(aggregator_v1_id_for_test(100));
+        aggregator_data.remove_aggregator(aggregator_v1_id_for_test(300));
+        aggregator_data.remove_aggregator(aggregator_v1_id_for_test(500));
+        aggregator_data.remove_aggregator(aggregator_v1_id_for_test(800));
     }
 
     #[test]
-    fn test_into_change_set() {
-        let resolver = get_test_resolver();
-        let context = NativeAggregatorContext::new([0; 32], &resolver, true);
+    fn test_v1_into_change_set() {
+        let resolver = get_test_resolver_v1();
+        let context = NativeAggregatorContext::new([0; 32], &resolver, &resolver);
+        test_set_up_v1(&context);
 
-        test_set_up(&context, true);
-        let AggregatorChangeSet { changes } = context.into_change_set();
+        let AggregatorChangeSet {
+            aggregator_v1_changes,
+            ..
+        } = context.into_change_set().unwrap();
 
-        assert!(!changes.contains_key(&aggregator_id_for_test(100)));
+        assert!(!aggregator_v1_changes.contains_key(&aggregator_v1_state_key_for_test(100)));
         assert_matches!(
-            changes.get(&aggregator_id_for_test(200)).unwrap(),
-            AggregatorChange::Write(0)
+            aggregator_v1_changes
+                .get(&aggregator_v1_state_key_for_test(200))
+                .unwrap(),
+            AggregatorChangeV1::Write(0)
         );
-        assert!(!changes.contains_key(&aggregator_id_for_test(300)));
+        assert!(!aggregator_v1_changes.contains_key(&aggregator_v1_state_key_for_test(300)));
         assert_matches!(
-            changes.get(&aggregator_id_for_test(400)).unwrap(),
-            AggregatorChange::Write(0)
+            aggregator_v1_changes
+                .get(&aggregator_v1_state_key_for_test(400))
+                .unwrap(),
+            AggregatorChangeV1::Write(0)
         );
         assert_matches!(
-            changes.get(&aggregator_id_for_test(500)).unwrap(),
-            AggregatorChange::Delete
+            aggregator_v1_changes
+                .get(&aggregator_v1_state_key_for_test(500))
+                .unwrap(),
+            AggregatorChangeV1::Delete
         );
-        let delta_100 = DeltaOp::new(DeltaUpdate::Plus(100), 600, 100, 0);
+        let delta_100 = DeltaOp::new(SignedU128::Positive(100), 600, DeltaHistory {
+            max_achieved_positive_delta: 100,
+            min_achieved_negative_delta: 0,
+            min_overflow_positive_delta: None,
+            max_underflow_negative_delta: None,
+        });
         assert_eq!(
-            *changes.get(&aggregator_id_for_test(600)).unwrap(),
-            AggregatorChange::Merge(delta_100)
+            *aggregator_v1_changes
+                .get(&aggregator_v1_state_key_for_test(600))
+                .unwrap(),
+            AggregatorChangeV1::Merge(delta_100)
         );
-        let delta_200 = DeltaOp::new(DeltaUpdate::Plus(200), 700, 200, 0);
+        let delta_200 = DeltaOp::new(SignedU128::Positive(200), 700, DeltaHistory {
+            max_achieved_positive_delta: 200,
+            min_achieved_negative_delta: 0,
+            min_overflow_positive_delta: None,
+            max_underflow_negative_delta: None,
+        });
         assert_eq!(
-            *changes.get(&aggregator_id_for_test(700)).unwrap(),
-            AggregatorChange::Merge(delta_200)
+            *aggregator_v1_changes
+                .get(&aggregator_v1_state_key_for_test(700))
+                .unwrap(),
+            AggregatorChangeV1::Merge(delta_200)
         );
         assert_matches!(
-            changes.get(&aggregator_id_for_test(800)).unwrap(),
-            AggregatorChange::Delete
+            aggregator_v1_changes
+                .get(&aggregator_v1_state_key_for_test(800))
+                .unwrap(),
+            AggregatorChangeV1::Delete
+        );
+    }
+
+    fn get_test_resolver_v2() -> FakeAggregatorView {
+        let mut state_view = FakeAggregatorView::default();
+        state_view.set_from_aggregator_id(DelayedFieldID::new(900), 300);
+        state_view.set_from_aggregator_id(DelayedFieldID::new(1000), 400);
+        state_view
+    }
+
+    fn id_from_fake_idx(idx: u64) -> DelayedFieldID {
+        DelayedFieldID::new(FAKE_AGGREGATOR_VIEW_GEN_ID_START as u64 + idx)
+    }
+
+    // All aggregators are initialized deterministically based on their ID,
+    // with v2 id, with the following spec.
+    //
+    //   agg(900) : storage(300)  -> try_add(200)  -> failed try_sub(501)  -> try_add(300)    -> try_add(100)  -> failed try_add(51)
+    //                                   |                                       |
+    //                               snapshot(0)                              snapshot(1)
+    //                                   |
+    //                               string_concat(4)
+    //   agg(1000): storage(400)
+    //
+    //   agg(2000):  create()    -> try_add (500) -> failed try_add(1700) -> failed try_sub(501)
+    //                                 |
+    //                              snapshot(2)
+    //                                 |
+    //                              string_concat(3)
+    fn test_set_up_v2(context: &NativeAggregatorContext) {
+        let mut delayed_field_data = context.delayed_field_data.borrow_mut();
+
+        assert_ok_eq!(
+            delayed_field_data.try_add_delta(
+                DelayedFieldID::new(900),
+                900,
+                SignedU128::Positive(200),
+                context.delayed_field_resolver
+            ),
+            true
+        );
+
+        // failed because of wrong max_value
+        assert!(delayed_field_data
+            .snapshot(
+                DelayedFieldID::new(900),
+                800,
+                context.delayed_field_resolver
+            )
+            .is_err());
+
+        assert_ok_eq!(
+            delayed_field_data.snapshot(
+                DelayedFieldID::new(900),
+                900,
+                context.delayed_field_resolver
+            ),
+            id_from_fake_idx(0)
+        );
+
+        assert_ok_eq!(
+            delayed_field_data.try_add_delta(
+                DelayedFieldID::new(900),
+                900,
+                SignedU128::Negative(501),
+                context.delayed_field_resolver
+            ),
+            false
+        );
+
+        assert_ok_eq!(
+            delayed_field_data.try_add_delta(
+                DelayedFieldID::new(900),
+                900,
+                SignedU128::Positive(300),
+                context.delayed_field_resolver
+            ),
+            true
+        );
+
+        assert_ok_eq!(
+            delayed_field_data.snapshot(
+                DelayedFieldID::new(900),
+                900,
+                context.delayed_field_resolver
+            ),
+            id_from_fake_idx(1)
+        );
+
+        assert_ok_eq!(
+            delayed_field_data.try_add_delta(
+                DelayedFieldID::new(900),
+                900,
+                SignedU128::Positive(100),
+                context.delayed_field_resolver
+            ),
+            true
+        );
+
+        assert_ok_eq!(
+            delayed_field_data.try_add_delta(
+                DelayedFieldID::new(900),
+                900,
+                SignedU128::Positive(51),
+                context.delayed_field_resolver
+            ),
+            false
+        );
+
+        delayed_field_data.create_new_aggregator(DelayedFieldID::new(2000));
+        assert_ok_eq!(
+            delayed_field_data.try_add_delta(
+                DelayedFieldID::new(2000),
+                2000,
+                SignedU128::Positive(500),
+                context.delayed_field_resolver
+            ),
+            true
+        );
+
+        assert_ok_eq!(
+            delayed_field_data.snapshot(
+                DelayedFieldID::new(2000),
+                2000,
+                context.delayed_field_resolver
+            ),
+            id_from_fake_idx(2)
+        );
+
+        assert_ok_eq!(
+            delayed_field_data.string_concat(
+                id_from_fake_idx(2),
+                "prefix".as_bytes().to_vec(),
+                "suffix".as_bytes().to_vec(),
+                context.delayed_field_resolver,
+            ),
+            id_from_fake_idx(3)
+        );
+
+        assert_ok_eq!(
+            delayed_field_data.string_concat(
+                id_from_fake_idx(0),
+                "prefix".as_bytes().to_vec(),
+                "suffix".as_bytes().to_vec(),
+                context.delayed_field_resolver,
+            ),
+            id_from_fake_idx(4)
+        );
+
+        assert_ok_eq!(
+            delayed_field_data.try_add_delta(
+                DelayedFieldID::new(2000),
+                2000,
+                SignedU128::Positive(1700),
+                context.delayed_field_resolver
+            ),
+            false
+        );
+        assert_ok_eq!(
+            delayed_field_data.try_add_delta(
+                DelayedFieldID::new(2000),
+                2000,
+                SignedU128::Negative(501),
+                context.delayed_field_resolver
+            ),
+            false
         );
     }
 
     #[test]
-    fn test_into_change_set_aggregator_disabled() {
-        let resolver = get_test_resolver();
-        let context = NativeAggregatorContext::new([0; 32], &resolver, false);
+    fn test_v2_into_change_set() {
+        let resolver = get_test_resolver_v2();
+        let context = NativeAggregatorContext::new([0; 32], &resolver, &resolver);
+        test_set_up_v2(&context);
+        let delayed_field_changes = context.into_delayed_fields();
+        assert!(!delayed_field_changes.contains_key(&DelayedFieldID::new(1000)));
+        assert_some_eq!(
+            delayed_field_changes.get(&DelayedFieldID::new(900)),
+            &DelayedChange::Apply(DelayedApplyChange::AggregatorDelta {
+                delta: DeltaWithMax::new(SignedU128::Positive(600), 900)
+            }),
+        );
+        // Snapshots have full history (not just until their point),
+        // So their validation validates full transaction, and it is not
+        // needed to check aggregators too (i.e. when we do read_snapshot)
+        assert_some_eq!(
+            delayed_field_changes.get(&id_from_fake_idx(0)),
+            &DelayedChange::Apply(DelayedApplyChange::SnapshotDelta {
+                base_aggregator: DelayedFieldID::new(900),
+                delta: DeltaWithMax::new(SignedU128::Positive(200), 900)
+            }),
+        );
+        assert_some_eq!(
+            delayed_field_changes.get(&id_from_fake_idx(1)),
+            &DelayedChange::Apply(DelayedApplyChange::SnapshotDelta {
+                base_aggregator: DelayedFieldID::new(900),
+                delta: DeltaWithMax::new(SignedU128::Positive(500), 900)
+            }),
+        );
 
-        test_set_up(&context, false);
-        let AggregatorChangeSet { changes } = context.into_change_set();
+        assert_some_eq!(
+            delayed_field_changes.get(&DelayedFieldID::new(2000)),
+            &DelayedChange::Create(DelayedFieldValue::Aggregator(500)),
+        );
 
-        assert!(!changes.contains_key(&aggregator_id_for_test(100)));
-        assert_matches!(
-            changes.get(&aggregator_id_for_test(200)).unwrap(),
-            AggregatorChange::Write(0)
+        assert_some_eq!(
+            delayed_field_changes.get(&id_from_fake_idx(2)),
+            &DelayedChange::Create(DelayedFieldValue::Snapshot(500)),
         );
-        assert!(!changes.contains_key(&aggregator_id_for_test(300)));
-        assert_matches!(
-            changes.get(&aggregator_id_for_test(400)).unwrap(),
-            AggregatorChange::Write(0)
+        assert_some_eq!(
+            delayed_field_changes.get(&id_from_fake_idx(3)),
+            &DelayedChange::Create(DelayedFieldValue::Derived(
+                "prefix500suffix".as_bytes().to_vec()
+            )),
         );
-        assert_matches!(
-            changes.get(&aggregator_id_for_test(500)).unwrap(),
-            AggregatorChange::Delete
-        );
-        assert_matches!(
-            changes.get(&aggregator_id_for_test(600)).unwrap(),
-            AggregatorChange::Write(200)
-        );
-        assert_matches!(
-            changes.get(&aggregator_id_for_test(700)).unwrap(),
-            AggregatorChange::Write(400)
-        );
-        assert_matches!(
-            changes.get(&aggregator_id_for_test(800)).unwrap(),
-            AggregatorChange::Delete
+        assert_some_eq!(
+            delayed_field_changes.get(&id_from_fake_idx(4)),
+            &DelayedChange::Apply(DelayedApplyChange::SnapshotDerived {
+                base_snapshot: id_from_fake_idx(0),
+                formula: SnapshotToStringFormula::Concat {
+                    prefix: "prefix".as_bytes().to_vec(),
+                    suffix: "suffix".as_bytes().to_vec(),
+                },
+            }),
         );
     }
 }

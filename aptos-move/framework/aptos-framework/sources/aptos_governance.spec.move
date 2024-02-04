@@ -1,4 +1,32 @@
 spec aptos_framework::aptos_governance {
+    /// <high-level-req>
+    /// No.: 1
+    /// Requirement: The create proposal function calls create proposal v2.
+    /// Criticality: Low
+    /// Implementation: The create_proposal function internally calls create_proposal_v2.
+    /// Enforcement: This is manually audited to ensure create_proposal_v2 is called in create_proposal.
+    ///
+    /// No.: 2
+    /// Requirement: The proposer must have a stake equal to or greater than the required bond amount.
+    /// Criticality: High
+    /// Implementation: The create_proposal_v2 function verifies that the stake balance equals or exceeds the required
+    /// proposer stake amount.
+    /// Enforcement: Formally verified in [high-level-req-2](CreateProposalAbortsIf).
+    ///
+    /// No.: 3
+    /// Requirement: The Approved execution hashes resources that exist when the vote function is called.
+    /// Criticality: Low
+    /// Implementation: The Vote function acquires the Approved execution hashes resources.
+    /// Enforcement: Formally verified in [high-level-req-3](VoteAbortIf).
+    ///
+    /// No.: 4
+    /// Requirement: The execution script hash of a successful governance proposal is added to the approved list if the
+    /// proposal can be resolved.
+    /// Criticality: Medium
+    /// Implementation: The add_approved_script_hash function asserts that proposal_state == PROPOSAL_STATE_SUCCEEDED.
+    /// Enforcement: Formally verified in [high-level-req-4](AddApprovedScriptHash).
+    /// </high-level-req>
+    ///
     spec module {
         pragma verify = true;
         pragma aborts_if_is_strict;
@@ -16,6 +44,8 @@ spec aptos_framework::aptos_governance {
         aborts_if exists<GovernanceResponsbility>(@aptos_framework) &&
             simple_map::spec_contains_key(signer_caps, signer_address);
         ensures exists<GovernanceResponsbility>(@aptos_framework);
+        let post post_signer_caps = global<GovernanceResponsbility>(@aptos_framework).signer_caps;
+        ensures simple_map::spec_contains_key(post_signer_caps, signer_address);
     }
 
     /// Signer address must be @aptos_framework.
@@ -56,6 +86,7 @@ spec aptos_framework::aptos_governance {
         let addr = signer::address_of(aptos_framework);
         aborts_if addr != @aptos_framework;
         aborts_if exists<VotingRecordsV2>(@aptos_framework);
+        ensures exists<VotingRecordsV2>(@aptos_framework);
     }
 
     spec schema InitializeAbortIf {
@@ -109,6 +140,7 @@ spec aptos_framework::aptos_governance {
         use aptos_framework::aptos_coin::AptosCoin;
         use aptos_framework::transaction_fee;
 
+        pragma verify_duration_estimate = 200;
         let addr = signer::address_of(aptos_framework);
         aborts_if addr != @aptos_framework;
 
@@ -208,6 +240,7 @@ spec aptos_framework::aptos_governance {
         let stake_balance_2 = 0;
         let governance_config = global<GovernanceConfig>(@aptos_framework);
         let required_proposer_stake = governance_config.required_proposer_stake;
+        /// [high-level-req-2]
         // Comparison of the three results of get_voting_power(stake_pool) and required_proposer_stake
         aborts_if allow_validator_set_change && stake_balance_0 < required_proposer_stake;
         aborts_if !allow_validator_set_change && stake::spec_is_current_epoch_validator(stake_pool) && stake_balance_1 < required_proposer_stake;
@@ -230,7 +263,7 @@ spec aptos_framework::aptos_governance {
 
         // verify voting::create_proposal_v2
         aborts_if option::spec_is_some(maybe_supply) && governance_config.min_voting_threshold > early_resolution_vote_threshold_value;
-        aborts_if len(execution_hash) <= 0;
+        aborts_if len(execution_hash) == 0;
         aborts_if !exists<voting::VotingForum<GovernanceProposal>>(@aptos_framework);
         let voting_forum = global<voting::VotingForum<GovernanceProposal>>(@aptos_framework);
         let proposal_id = voting_forum.next_proposal_id;
@@ -433,6 +466,7 @@ spec aptos_framework::aptos_governance {
         let post post_approved_hashes = global<ApprovedExecutionHashes>(@aptos_framework);
 
         // Due to the complexity of the success state, the validation of 'borrow_global_mut<ApprovedExecutionHashes>(@aptos_framework);' is discussed in four cases.
+        /// [high-level-req-3]
         aborts_if
             if (should_pass) {
                 proposal_state_successed_0 && !exists<ApprovedExecutionHashes>(@aptos_framework)
@@ -483,6 +517,7 @@ spec aptos_framework::aptos_governance {
             (proposal.yes_votes <= proposal.no_votes || proposal.yes_votes + proposal.no_votes < proposal.min_vote_threshold);
 
         let post post_approved_hashes = global<ApprovedExecutionHashes>(@aptos_framework);
+        /// [high-level-req-4]
         ensures simple_map::spec_contains_key(post_approved_hashes.hashes, proposal_id) &&
             simple_map::spec_get(post_approved_hashes.hashes, proposal_id) == proposal.execution_hash;
     }
@@ -533,6 +568,8 @@ spec aptos_framework::aptos_governance {
         aborts_if !exists<voting::VotingForum<GovernanceProposal>>(@aptos_framework);
         let proposal = table::spec_get(voting_forum.proposals, proposal_id);
         aborts_if !proposal.is_resolved;
+        let post approved_hashes = global<ApprovedExecutionHashes>(@aptos_framework).hashes;
+        ensures !simple_map::spec_contains_key(approved_hashes, proposal_id);
     }
 
     spec reconfigure(aptos_framework: &signer) {
@@ -541,6 +578,7 @@ spec aptos_framework::aptos_governance {
         use aptos_framework::aptos_coin::AptosCoin;
         use aptos_framework::transaction_fee;
 
+        pragma verify_duration_estimate = 120; // TODO: set because of timeout (property proved)
         aborts_if !system_addresses::is_aptos_framework_address(signer::address_of(aptos_framework));
 
         include transaction_fee::RequiresCollectedFeesPerValueLeqBlockAptosSupply;
@@ -713,6 +751,8 @@ spec aptos_framework::aptos_governance {
         use aptos_framework::chain_status;
         requires chain_status::is_operating();
 
+        // TODO: These function passed locally however failed in github CI
+        pragma verify_duration_estimate = 120;
         // verify voting::resolve_proposal_v2
         include VotingIsProposalResolvableAbortsif;
 
@@ -724,13 +764,11 @@ spec aptos_framework::aptos_governance {
         aborts_if !string::spec_internal_check_utf8(voting::IS_MULTI_STEP_PROPOSAL_IN_EXECUTION_KEY);
         let multi_step_in_execution_key = utf8(voting::IS_MULTI_STEP_PROPOSAL_IN_EXECUTION_KEY);
         let post is_multi_step_proposal_in_execution_value = simple_map::spec_get(post_proposal.metadata, multi_step_in_execution_key);
-        ensures simple_map::spec_contains_key(proposal.metadata, multi_step_in_execution_key) ==>
-            is_multi_step_proposal_in_execution_value == std::bcs::serialize(true);
 
         aborts_if !string::spec_internal_check_utf8(voting::IS_MULTI_STEP_PROPOSAL_KEY);
         let multi_step_key = utf8(voting::IS_MULTI_STEP_PROPOSAL_KEY);
         aborts_if simple_map::spec_contains_key(proposal.metadata, multi_step_key) &&
-                            aptos_std::from_bcs::deserializable<bool>(simple_map::spec_get(proposal.metadata, multi_step_key));
+            !aptos_std::from_bcs::deserializable<bool>(simple_map::spec_get(proposal.metadata, multi_step_key));
         let is_multi_step = simple_map::spec_contains_key(proposal.metadata, multi_step_key) &&
                             aptos_std::from_bcs::deserialize<bool>(simple_map::spec_get(proposal.metadata, multi_step_key));
         let next_execution_hash_is_empty = len(next_execution_hash) == 0;
@@ -743,12 +781,10 @@ spec aptos_framework::aptos_governance {
                 simple_map::spec_contains_key(proposal.metadata, multi_step_in_execution_key) ==>
                     is_multi_step_proposal_in_execution_value == std::bcs::serialize(true)
             };
-        ensures !next_execution_hash_is_empty ==> post_proposal.execution_hash == next_execution_hash &&
-            simple_map::spec_contains_key(proposal.metadata, multi_step_in_execution_key) ==>
-                is_multi_step_proposal_in_execution_value == std::bcs::serialize(true);
+        ensures !next_execution_hash_is_empty ==> post_proposal.execution_hash == next_execution_hash;
 
         // verify remove_approved_hash
-        aborts_if next_execution_hash_is_empty && !exists<ApprovedExecutionHashes>(@aptos_framework);
+        aborts_if !exists<ApprovedExecutionHashes>(@aptos_framework);
         let post post_approved_hashes = global<ApprovedExecutionHashes>(@aptos_framework).hashes;
         ensures next_execution_hash_is_empty ==> !simple_map::spec_contains_key(post_approved_hashes, proposal_id);
         ensures !next_execution_hash_is_empty ==>

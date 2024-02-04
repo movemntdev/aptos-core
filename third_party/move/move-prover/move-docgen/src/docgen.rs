@@ -671,6 +671,7 @@ impl<'env> Docgen<'env> {
         if !module_env.get_structs().count() > 0 {
             for s in module_env
                 .get_structs()
+                .filter(|s| !s.is_test_only())
                 .sorted_by(|a, b| Ord::cmp(&a.get_loc(), &b.get_loc()))
             {
                 self.gen_struct(&spec_block_map, &s);
@@ -684,7 +685,7 @@ impl<'env> Docgen<'env> {
 
         let funs = module_env
             .get_functions()
-            .filter(|f| self.options.include_private_fun || f.is_exposed())
+            .filter(|f| (self.options.include_private_fun || f.is_exposed()) && !f.is_test_only())
             .sorted_by(|a, b| Ord::cmp(&a.get_loc(), &b.get_loc()))
             .collect_vec();
         if !funs.is_empty() {
@@ -716,6 +717,140 @@ impl<'env> Docgen<'env> {
         if let Some(label) = toc_label {
             self.gen_toc(label);
         }
+    }
+
+    #[allow(clippy::format_collect)]
+    fn gen_html_table(&self, input: &str, column_names: Vec<&str>) {
+        let row_blocks = input.split("\n\n").collect::<Vec<_>>();
+
+        let header_row = column_names
+            .iter()
+            .map(|name| format!("<th>{}</th>", name))
+            .collect::<String>();
+        self.doc_text(&format!("<table>\n<tr>\n{}\n</tr>\n", header_row));
+
+        for row_block in row_blocks {
+            if !row_block.trim().is_empty() {
+                self.gen_table_rows(row_block, column_names.clone());
+            }
+        }
+        self.doc_text("</table>\n");
+    }
+
+    fn gen_table_rows(&self, row_block: &str, column_names: Vec<&str>) {
+        let lines = row_block.lines().collect::<Vec<_>>();
+        let mut row_data = vec![String::new(); column_names.len()];
+        let mut current_key: Option<usize> = None;
+
+        for line in lines {
+            let trimmed_line = line.trim();
+            if trimmed_line.is_empty() {
+                continue;
+            }
+
+            let parts = trimmed_line.splitn(2, ':').collect::<Vec<_>>();
+            if parts.len() == 2 {
+                let key = parts[0].trim();
+
+                if let Some(index) = column_names.iter().position(|&name| name == key) {
+                    let value = self.convert_to_anchor(parts[1].trim());
+                    row_data[index] = value;
+                    current_key = Some(index);
+                }
+            } else if let Some(key_index) = current_key {
+                row_data[key_index].push(' ');
+                row_data[key_index].push_str(&self.convert_to_anchor(trimmed_line));
+            }
+        }
+
+        self.doc_text(&format!(
+            "<tr>\n{}\n</tr>\n",
+            row_data
+                .iter()
+                .map(|data| format!("<td>{}</td>", data))
+                .collect::<Vec<_>>()
+                .join("\n")
+        ));
+    }
+
+    fn gen_req_tags(&self, tags: Vec<&str>) {
+        let mut links = Vec::new();
+
+        for &tag in tags.iter() {
+            let (req_tag, module_link, suffix) = if tag.contains("::") {
+                let parts = tag.split("::").collect::<Vec<_>>();
+                let module_name = *parts.first().unwrap_or(&"");
+                let req_tag = *parts.get(1).unwrap_or(&"");
+                let label_link = self
+                    .resolve_to_label(module_name, false)
+                    .unwrap_or_default();
+                let module_link = label_link.split('#').next().unwrap_or("").to_string();
+                let suffix = format!(" of the <a href={}>{}</a> module", module_link, module_name);
+                (req_tag, module_link, suffix)
+            } else {
+                (tag, String::new(), String::new())
+            };
+
+            let req_number = req_tag
+                .split('-')
+                .nth(3)
+                .unwrap_or_default()
+                .split('.')
+                .next()
+                .unwrap_or_default();
+
+            let href = format!("href=\"{}#high-level-req\"", module_link);
+            let link = format!(
+                "<a id=\"{}\" {}>high-level requirement {}</a>{}",
+                req_tag, href, req_number, suffix
+            );
+            links.push(link);
+        }
+
+        match links.len() {
+            0 => {
+                self.doc_text_general(false, "");
+            },
+            1 => {
+                self.doc_text_general(false, &format!("// This enforces {}:", links[0]));
+            },
+            _ => {
+                let last_link = links.pop().unwrap();
+                let links_str = links.join(", ");
+                self.doc_text_general(
+                    false,
+                    &format!("// This enforces {} and {}:", links_str, last_link),
+                );
+            },
+        }
+    }
+
+    fn convert_to_anchor(&self, input: &str) -> String {
+        // Regular expression to match Markdown link format [text](link)
+        let re = Regex::new(r"\[(.*?)\]\((.*?)\)").unwrap();
+        re.replace_all(input, |caps: &regex::Captures| {
+            let tag = &caps[1];
+            let text = &caps[2];
+
+            if tag.starts_with("http://") || tag.starts_with("https://") {
+                format!("<a href=\"{}\">{}</a>", tag, text)
+            } else if tag.contains("::") {
+                let parts = tag.split("::").collect::<Vec<_>>();
+                if let Some(module_name) = parts.first() {
+                    let label_link = self
+                        .resolve_to_label(module_name, false)
+                        .unwrap_or_default();
+                    let module_link = label_link.split('#').next().unwrap_or("").to_string();
+                    let spec_tag = parts.get(1).unwrap_or(&"");
+                    format!("<a href=\"{}#{}\">{}</a>", module_link, spec_tag, text)
+                } else {
+                    format!("<a href=\"#t{}\">{}</a>", tag, text)
+                }
+            } else {
+                format!("<a href=\"#{}\">{}</a>", tag, text)
+            }
+        })
+        .to_string()
     }
 
     /// Generate a static call diagram (.svg) starting from the given function.
@@ -1146,7 +1281,9 @@ impl<'env> Docgen<'env> {
         let params = func_env
             .get_parameters()
             .iter()
-            .map(|Parameter(name, ty)| format!("{}: {}", self.name_string(*name), ty.display(tctx)))
+            .map(|Parameter(name, ty, _)| {
+                format!("{}: {}", self.name_string(*name), ty.display(tctx))
+            })
             .join(", ");
         let return_types = func_env.get_result_type().flatten();
         let return_str = match return_types.len() {
@@ -1196,7 +1333,31 @@ impl<'env> Docgen<'env> {
             self.begin_collapsed(title);
         }
         for block in blocks {
-            self.doc_text(self.env.get_doc(&block.loc));
+            let text = self.env.get_doc(&block.loc);
+            let start_tag = "<high-level-req>";
+            let end_tag = "</high-level-req>";
+
+            if let Some(start) = text.find(start_tag) {
+                if let Some(end) = text.find(end_tag) {
+                    let table_text = text[start + start_tag.len()..end].trim();
+                    self.doc_text(&text[0..start]);
+                    self.section_header("High-level Requirements", "high-level-req");
+                    let column_names = vec![
+                        "No.",
+                        "Requirement",
+                        "Criticality",
+                        "Implementation",
+                        "Enforcement",
+                    ];
+                    self.gen_html_table(table_text, column_names);
+                    self.doc_text(&text[end + end_tag.len()..text.len()]);
+                    self.section_header("Module-level Specification", "module-level-spec");
+                } else {
+                    self.doc_text("");
+                }
+            } else {
+                self.doc_text(text);
+            }
             let mut in_code = false;
             let (is_schema, schema_header) =
                 if let SpecBlockTarget::Schema(_, sid, type_params) = &block.target {
@@ -1237,10 +1398,24 @@ impl<'env> Docgen<'env> {
                 }
             };
             for loc in &block.member_locs {
+                let mut tags = Vec::new();
                 let doc = self.env.get_doc(loc);
                 if !doc.is_empty() {
-                    end_code(&mut in_code);
-                    self.doc_text(doc);
+                    let mut start = 0;
+
+                    while let (Some(open), Some(close)) =
+                        (doc[start..].find('['), doc[start..].find(']'))
+                    {
+                        if open < close {
+                            tags.push(&doc[start + open + 1..start + close]);
+                        }
+                        start += close + 1;
+                    }
+
+                    if tags.is_empty() {
+                        end_code(&mut in_code);
+                        self.doc_text(doc);
+                    }
                 }
                 // Inject label for spec item definition.
                 if let Some(item) = self.loc_to_spec_item_map.get(loc) {
@@ -1256,6 +1431,7 @@ impl<'env> Docgen<'env> {
                     }
                 }
                 begin_code(&mut in_code);
+                self.gen_req_tags(tags);
                 self.code_text(&self.get_source_with_indent(loc));
             }
             end_code(&mut in_code);
@@ -1338,6 +1514,7 @@ impl<'env> Docgen<'env> {
         self.gen_spec_blocks(module_env, "", &SpecBlockTarget::Module, spec_block_map);
         for struct_env in module_env
             .get_structs()
+            .filter(|s| !s.is_test_only())
             .sorted_by(|a, b| Ord::cmp(&a.get_loc(), &b.get_loc()))
         {
             let target =
@@ -1355,6 +1532,7 @@ impl<'env> Docgen<'env> {
         }
         for func_env in module_env
             .get_functions()
+            .filter(|f| !f.is_test_only())
             .sorted_by(|a, b| Ord::cmp(&a.get_loc(), &b.get_loc()))
         {
             let target = SpecBlockTarget::Function(func_env.module_env.get_id(), func_env.get_id());
@@ -1402,7 +1580,7 @@ impl<'env> Docgen<'env> {
         let type_param_names = func_env
             .get_type_parameters()
             .iter()
-            .map(|TypeParameter(name, _)| *name)
+            .map(|TypeParameter(name, _, _)| *name)
             .collect_vec();
         TypeDisplayContext::new_with_params(self.env, type_param_names)
     }
@@ -1415,7 +1593,7 @@ impl<'env> Docgen<'env> {
         let type_param_names = struct_env
             .get_type_parameters()
             .iter()
-            .map(|TypeParameter(name, _)| *name)
+            .map(|TypeParameter(name, _, _)| *name)
             .collect_vec();
         TypeDisplayContext::new_with_params(self.env, type_param_names)
     }
@@ -1463,13 +1641,13 @@ impl<'env> Docgen<'env> {
     /// Generate label.
     fn label(&self, label: &str) {
         emitln!(self.writer);
-        emitln!(self.writer, "<a name=\"{}\"></a>", label);
+        emitln!(self.writer, "<a id=\"{}\"></a>", label);
         emitln!(self.writer);
     }
 
     /// Generate label in code, without empty lines.
     fn label_in_code(&self, label: &str) {
-        emitln!(self.writer, "<a name=\"{}\"></a>", label);
+        emitln!(self.writer, "<a id=\"{}\"></a>", label);
     }
 
     /// Begins a collapsed section.
@@ -1515,16 +1693,16 @@ impl<'env> Docgen<'env> {
                 emitln!(self.writer, line)
             }
         }
-        // Always be sure to have an empty line at the end of block.
-        emitln!(self.writer);
     }
 
     fn doc_text_for_root(&self, text: &str) {
-        self.doc_text_general(true, text)
+        self.doc_text_general(true, text);
+        emitln!(self.writer);
     }
 
     fn doc_text(&self, text: &str) {
-        self.doc_text_general(false, text)
+        self.doc_text_general(false, text);
+        emitln!(self.writer);
     }
 
     /// Makes a label from a string.
@@ -1550,11 +1728,7 @@ impl<'env> Docgen<'env> {
                     // inside inline code section. Eagerly consume/match this '`'
                     let code = chars.take_while_ref(non_code_filter).collect::<String>();
                     // consume the remaining '`'. Report an error if we find an unmatched '`'.
-                    assert!(
-                       chars.next() == Some('`'),
-                       "Missing backtick found in {} while generating documentation for the following text: \"{}\"",
-                       self.current_module.as_ref().unwrap().get_name().display_full(self.env), text,
-                   );
+                    assert_eq!(chars.next(), Some('`'), "Missing backtick found in {} while generating documentation for the following text: \"{}\"", self.current_module.as_ref().unwrap().get_name().display_full(self.env), text);
 
                     write!(
                         &mut decorated_text,
@@ -1869,7 +2043,11 @@ impl<'env> Docgen<'env> {
                 ))
                 .unwrap_or("");
             let newl_at = source_before.rfind('\n').unwrap_or(0);
-            let mut indent = source_before.len() - newl_at - 1;
+            let mut indent = if source_before.len() > newl_at {
+                source_before.len() - newl_at - 1
+            } else {
+                0
+            };
             if indent >= 4 && source_before.ends_with("spec ") {
                 // Special case for `spec define` and similar constructs.
                 indent -= 4;

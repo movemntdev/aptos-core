@@ -198,7 +198,7 @@ fn create_test_poison(mloc: Loc) -> P::ModuleMember {
         loc: mloc,
         visibility: P::Visibility::Internal,
         entry: None,
-        acquires: vec![],
+        access_specifiers: None,
         signature,
         inline: false,
         name: P::FunctionName(sp(mloc, "unit_test_poison".into())),
@@ -241,7 +241,9 @@ fn test_attributes(attrs: &P::Attributes) -> Vec<(Loc, known_attributes::Testing
         .filter_map(
             |attr| match KnownAttribute::resolve(attr.value.attribute_name().value)? {
                 KnownAttribute::Testing(test_attr) => Some((attr.loc, test_attr)),
-                KnownAttribute::Verification(_) | KnownAttribute::Native(_) => None,
+                KnownAttribute::Verification(_)
+                | KnownAttribute::Native(_)
+                | KnownAttribute::Deprecation(_) => None,
             },
         )
         .collect()

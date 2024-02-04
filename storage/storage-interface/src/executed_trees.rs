@@ -5,25 +5,26 @@ use crate::{
     async_proof_fetcher::AsyncProofFetcher, cached_state_view::CachedStateView,
     state_delta::StateDelta, DbReader,
 };
-use anyhow::Result;
-use aptos_crypto::{hash::TransactionAccumulatorHasher, HashValue};
-use aptos_state_view::StateViewId;
+use aptos_crypto::HashValue;
 use aptos_types::{
-    proof::accumulator::InMemoryAccumulator, state_store::state_storage_usage::StateStorageUsage,
+    proof::accumulator::{InMemoryAccumulator, InMemoryTransactionAccumulator},
+    state_store::{errors::StateviewError, state_storage_usage::StateStorageUsage, StateViewId},
     transaction::Version,
 };
 use std::sync::Arc;
+
+type Result<T, E = StateviewError> = std::result::Result<T, E>;
 
 /// A wrapper of the in-memory state sparse merkle tree and the transaction accumulator that
 /// represent a specific state collectively. Usually it is a state after executing a block.
 #[derive(Clone, Debug)]
 pub struct ExecutedTrees {
     /// The in-memory representation of state after execution.
-    state: StateDelta,
+    pub state: StateDelta,
 
     /// The in-memory Merkle Accumulator representing a blockchain state consistent with the
     /// `state_tree`.
-    transaction_accumulator: Arc<InMemoryAccumulator<TransactionAccumulatorHasher>>,
+    pub transaction_accumulator: Arc<InMemoryTransactionAccumulator>,
 }
 
 impl ExecutedTrees {
@@ -31,7 +32,7 @@ impl ExecutedTrees {
         &self.state
     }
 
-    pub fn txn_accumulator(&self) -> &Arc<InMemoryAccumulator<TransactionAccumulatorHasher>> {
+    pub fn txn_accumulator(&self) -> &Arc<InMemoryTransactionAccumulator> {
         &self.transaction_accumulator
     }
 
@@ -49,7 +50,7 @@ impl ExecutedTrees {
 
     pub fn new(
         state: StateDelta,
-        transaction_accumulator: Arc<InMemoryAccumulator<TransactionAccumulatorHasher>>,
+        transaction_accumulator: Arc<InMemoryTransactionAccumulator>,
     ) -> Self {
         assert_eq!(
             state.current_version.map_or(0, |v| v + 1),

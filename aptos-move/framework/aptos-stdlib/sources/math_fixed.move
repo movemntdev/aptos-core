@@ -10,7 +10,7 @@ module aptos_std::math_fixed {
 
     /// Natural log 2 in 32 bit fixed point
     const LN2: u128 = 2977044472;  // ln(2) in fixed 32 representation
-    const LN2_X_32: u64 = 32 * 2977044472;  // ln(2) in fixed 32 representation
+    const LN2_X_32: u64 = 32 * 2977044472;  // 32 * ln(2) in fixed 32 representation
 
     /// Square root of fixed point number
     public fun sqrt(x: FixedPoint32): FixedPoint32 {
@@ -124,7 +124,7 @@ module aptos_std::math_fixed {
         assert_approx_the_same(result,  1 << 33, 6);
     }
 
-    #[testonly]
+    #[test_only]
     /// For functions that approximate a value it's useful to test a value is close
     /// to the most correct value up to last digit
     fun assert_approx_the_same(x: u128, y: u128, precission: u128) {

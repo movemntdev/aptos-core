@@ -18,7 +18,7 @@ use std::sync::Arc;
 // Fn + Send + Sync, as it will be called from multiple threads simultaneously
 // if you need any coordination, use Arc<RwLock<X>> fields
 pub type TransactionGeneratorWorker = dyn Fn(
-        &mut LocalAccount,
+        &LocalAccount,
         &Package,
         &LocalAccount,
         &TransactionFactory,
@@ -82,7 +82,7 @@ impl CustomModulesDelegationGenerator {
 impl TransactionGenerator for CustomModulesDelegationGenerator {
     fn generate_transactions(
         &mut self,
-        account: &mut LocalAccount,
+        account: &LocalAccount,
         num_to_create: usize,
     ) -> Vec<SignedTransaction> {
         let mut requests = Vec::with_capacity(num_to_create);
@@ -135,8 +135,11 @@ impl CustomModulesDelegationGeneratorCreator {
                 2 * init_txn_factory.get_gas_unit_price() * init_txn_factory.get_max_gas_amount(),
             ));
 
-            let package = package_handler.pick_package(&mut rng, &mut publisher);
-            requests_publish.push(package.publish_transaction(&mut publisher, &init_txn_factory));
+            let package = package_handler.pick_package(&mut rng, publisher.address());
+
+            requests_publish.push(publisher.sign_with_transaction_builder(
+                init_txn_factory.payload(package.publish_transaction_payload()),
+            ));
 
             requests_initialize.append(&mut workload.initialize_package(
                 &package,
@@ -185,7 +188,7 @@ impl CustomModulesDelegationGeneratorCreator {
 }
 
 impl TransactionGeneratorCreator for CustomModulesDelegationGeneratorCreator {
-    fn create_transaction_generator(&mut self) -> Box<dyn TransactionGenerator> {
+    fn create_transaction_generator(&self) -> Box<dyn TransactionGenerator> {
         Box::new(CustomModulesDelegationGenerator::new(
             StdRng::from_entropy(),
             self.txn_factory.clone(),

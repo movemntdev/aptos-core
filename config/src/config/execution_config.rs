@@ -2,9 +2,10 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use super::WaypointConfig;
 use crate::config::{
-    config_sanitizer::ConfigSanitizer, node_config_loader::NodeType, utils::RootPath, Error,
-    NodeConfig,
+    config_sanitizer::ConfigSanitizer, node_config_loader::NodeType,
+    transaction_filter_type::Filter, utils::RootPath, Error, NodeConfig,
 };
 use aptos_types::{chain_id::ChainId, transaction::Transaction};
 use serde::{Deserialize, Serialize};
@@ -34,6 +35,10 @@ pub struct ExecutionConfig {
     pub paranoid_hot_potato_verification: bool,
     /// Enables enhanced metrics around processed transactions
     pub processed_transactions_detailed_counters: bool,
+    /// Enables filtering of transactions before they are sent to execution
+    pub transaction_filter: Filter,
+    /// Used during DB bootstrapping
+    pub genesis_waypoint: Option<WaypointConfig>,
 }
 
 impl std::fmt::Debug for ExecutionConfig {
@@ -63,6 +68,8 @@ impl Default for ExecutionConfig {
             paranoid_type_verification: true,
             paranoid_hot_potato_verification: true,
             processed_transactions_detailed_counters: false,
+            transaction_filter: Filter::empty(),
+            genesis_waypoint: None,
         }
     }
 }
@@ -127,26 +134,29 @@ impl ExecutionConfig {
 
 impl ConfigSanitizer for ExecutionConfig {
     fn sanitize(
-        node_config: &mut NodeConfig,
+        node_config: &NodeConfig,
         _node_type: NodeType,
-        chain_id: ChainId,
+        chain_id: Option<ChainId>,
     ) -> Result<(), Error> {
         let sanitizer_name = Self::get_sanitizer_name();
         let execution_config = &node_config.execution;
 
         // If this is a mainnet node, ensure that additional verifiers are enabled
-        if chain_id.is_mainnet() {
-            if !execution_config.paranoid_hot_potato_verification {
-                return Err(Error::ConfigSanitizerFailed(
-                    sanitizer_name,
-                    "paranoid_hot_potato_verification must be enabled for mainnet nodes!".into(),
-                ));
-            }
-            if !execution_config.paranoid_type_verification {
-                return Err(Error::ConfigSanitizerFailed(
-                    sanitizer_name,
-                    "paranoid_type_verification must be enabled for mainnet nodes!".into(),
-                ));
+        if let Some(chain_id) = chain_id {
+            if chain_id.is_mainnet() {
+                if !execution_config.paranoid_hot_potato_verification {
+                    return Err(Error::ConfigSanitizerFailed(
+                        sanitizer_name,
+                        "paranoid_hot_potato_verification must be enabled for mainnet nodes!"
+                            .into(),
+                    ));
+                }
+                if !execution_config.paranoid_type_verification {
+                    return Err(Error::ConfigSanitizerFailed(
+                        sanitizer_name,
+                        "paranoid_type_verification must be enabled for mainnet nodes!".into(),
+                    ));
+                }
             }
         }
 
@@ -166,7 +176,7 @@ mod test {
     #[test]
     fn test_sanitize_valid_execution_config() {
         // Create a node config with a valid execution config
-        let mut node_config = NodeConfig {
+        let node_config = NodeConfig {
             execution: ExecutionConfig {
                 paranoid_hot_potato_verification: true,
                 paranoid_type_verification: true,
@@ -176,14 +186,14 @@ mod test {
         };
 
         // Sanitize the config and verify that it succeeds
-        ExecutionConfig::sanitize(&mut node_config, NodeType::Validator, ChainId::mainnet())
+        ExecutionConfig::sanitize(&node_config, NodeType::Validator, Some(ChainId::mainnet()))
             .unwrap();
     }
 
     #[test]
     fn test_sanitize_hot_potato_mainnet() {
         // Create a node config with missing paranoid_hot_potato_verification on mainnet
-        let mut node_config = NodeConfig {
+        let node_config = NodeConfig {
             execution: ExecutionConfig {
                 paranoid_hot_potato_verification: false,
                 paranoid_type_verification: true,
@@ -194,7 +204,7 @@ mod test {
 
         // Sanitize the config and verify that it fails
         let error =
-            ExecutionConfig::sanitize(&mut node_config, NodeType::Validator, ChainId::mainnet())
+            ExecutionConfig::sanitize(&node_config, NodeType::Validator, Some(ChainId::mainnet()))
                 .unwrap_err();
         assert!(matches!(error, Error::ConfigSanitizerFailed(_, _)));
     }
@@ -202,7 +212,7 @@ mod test {
     #[test]
     fn test_sanitize_paranoid_type_mainnet() {
         // Create a node config with missing paranoid_type_verification on mainnet
-        let mut node_config = NodeConfig {
+        let node_config = NodeConfig {
             execution: ExecutionConfig {
                 paranoid_hot_potato_verification: true,
                 paranoid_type_verification: false,
@@ -213,7 +223,7 @@ mod test {
 
         // Sanitize the config and verify that it fails
         let error =
-            ExecutionConfig::sanitize(&mut node_config, NodeType::Validator, ChainId::mainnet())
+            ExecutionConfig::sanitize(&node_config, NodeType::Validator, Some(ChainId::mainnet()))
                 .unwrap_err();
         assert!(matches!(error, Error::ConfigSanitizerFailed(_, _)));
     }

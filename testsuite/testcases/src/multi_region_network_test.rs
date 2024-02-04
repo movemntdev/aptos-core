@@ -5,23 +5,23 @@ use crate::{LoadDestination, NetworkLoadTest};
 use aptos_forge::{GroupNetEm, NetworkContext, NetworkTest, Swarm, SwarmChaos, SwarmNetEm, Test};
 use aptos_logger::info;
 use aptos_types::PeerId;
-use itertools::{self, Itertools};
+use itertools::{self, EitherOrBoth, Itertools};
 use std::collections::BTreeMap;
 
 /// The link stats are obtained from https://github.com/doitintl/intercloud-throughput/blob/master/results_202202/results.csv
 /// The four regions were hand-picked from the dataset to simulate a multi-region setup
-/// with high latencies and low bandwidth.
-macro_rules! FOUR_REGION_LINK_STATS_CSV {
-    () => {
-        "data/four_region_link_stats.csv"
-    };
-}
+/// with high latencies.
+/// Note, we restrict bandwidth to 300 Mbps between all regions. The reasoning is that the dataset
+/// is measuring TCP bandwidth only which is primarily affected by RTT, and not the actual bandwidth
+/// across the regions, which would vary according to competing traffic, etc.
+const FOUR_REGION_LINK_STATS: &[u8] = include_bytes!("data/four_region_link_stats.csv");
+/// The two regions were chosen as the most distant regions among the four regions set.
+const TWO_REGION_LINK_STATS: &[u8] = include_bytes!("data/two_region_link_stats.csv");
 
-fn get_link_stats_table() -> BTreeMap<String, BTreeMap<String, (u64, f64)>> {
+fn get_link_stats_table(csv: &[u8]) -> BTreeMap<String, BTreeMap<String, (u64, f64)>> {
     let mut stats_table = BTreeMap::new();
 
-    let mut rdr =
-        csv::Reader::from_reader(include_bytes!(FOUR_REGION_LINK_STATS_CSV!()).as_slice());
+    let mut rdr = csv::Reader::from_reader(csv);
     rdr.deserialize()
         .for_each(|result: Result<(String, String, u64, f64), _>| {
             if let Ok((from, to, bitrate, latency)) = result {
@@ -34,37 +34,38 @@ fn get_link_stats_table() -> BTreeMap<String, BTreeMap<String, (u64, f64)>> {
     stats_table
 }
 
-/// Chunks the given set of peers into the number of specified groups
-pub(crate) fn chunk_peers(peers: Vec<PeerId>, num_groups: usize) -> Vec<Vec<PeerId>> {
-    // Chunk the peers into exact groups
-    let approx_chunk_size = peers.len() / num_groups;
-    let chunks = peers.chunks_exact(approx_chunk_size);
-    let mut peer_chunks: Vec<Vec<PeerId>> = chunks.clone().map(|chunk| chunk.to_vec()).collect();
-
-    // Get any remaining peers and add them to the first group
-    let remaining_peers: Vec<PeerId> = chunks
-        .remainder()
-        .iter()
-        // If `approx_peers_per_region` is 1, then it is possible we will have more regions than
-        // desired, so the remaining peers will be in the first group.
-        .chain(chunks.skip(num_groups).flatten())
-        .cloned()
-        .collect();
-    if !remaining_peers.is_empty() {
-        peer_chunks[0].append(remaining_peers.to_vec().as_mut());
+fn div_ceil(dividend: usize, divisor: usize) -> usize {
+    if dividend % divisor == 0 {
+        dividend / divisor
+    } else {
+        dividend / divisor + 1
     }
+}
 
-    peer_chunks
+/// Chunks the given set of peers into the specified number of chunks. The difference between the
+/// largest chunk and smallest chunk is at most one.
+pub(crate) fn chunk_peers(mut peers: Vec<Vec<PeerId>>, num_chunks: usize) -> Vec<Vec<PeerId>> {
+    let mut chunks = vec![];
+    let mut chunks_remaining = num_chunks;
+    while chunks_remaining > 0 {
+        let chunk_size = div_ceil(peers.len(), chunks_remaining);
+        let remaining = peers.split_off(chunk_size);
+        chunks.push(peers.iter().flatten().cloned().collect());
+        peers = remaining;
+
+        chunks_remaining -= 1;
+    }
+    chunks
 }
 
 /// Creates a table of peers grouped by region. The peers are divided into N groups, where N is the
 /// number of regions provided in the link stats table. Any remaining peers are added to the first
 /// group.
 fn create_link_stats_table_with_peer_groups(
-    peers: Vec<PeerId>,
+    peers: Vec<Vec<PeerId>>,
     link_stats_table: &LinkStatsTable,
 ) -> LinkStatsTableWithPeerGroups {
-    // Verify that we have enough peers to simulate the link stats table
+    // Verify that we have enough grouped peers to simulate the link stats table
     assert!(peers.len() >= link_stats_table.len());
 
     // Verify that we have the correct number of regions to simulate the link stats table
@@ -105,7 +106,7 @@ pub struct InterRegionNetEmConfig {
 impl Default for InterRegionNetEmConfig {
     fn default() -> Self {
         Self {
-            delay_jitter_ms: 20,
+            delay_jitter_ms: 0,
             delay_correlation_percentage: 50,
             loss_percentage: 3,
             loss_correlation_percentage: 50,
@@ -160,7 +161,7 @@ impl Default for IntraRegionNetEmConfig {
         Self {
             bandwidth_rate_mbps: 10 * 1000, // 10 Gbps
             delay_latency_ms: 50,
-            delay_jitter_ms: 5,
+            delay_jitter_ms: 0,
             delay_correlation_percentage: 50,
             loss_percentage: 1,
             loss_correlation_percentage: 50,
@@ -204,9 +205,18 @@ pub struct MultiRegionNetworkEmulationConfig {
 impl Default for MultiRegionNetworkEmulationConfig {
     fn default() -> Self {
         Self {
-            link_stats_table: get_link_stats_table(),
+            link_stats_table: get_link_stats_table(FOUR_REGION_LINK_STATS),
             inter_region_config: InterRegionNetEmConfig::default(),
             intra_region_config: Some(IntraRegionNetEmConfig::default()),
+        }
+    }
+}
+
+impl MultiRegionNetworkEmulationConfig {
+    pub fn two_region() -> Self {
+        Self {
+            link_stats_table: get_link_stats_table(TWO_REGION_LINK_STATS),
+            ..Default::default()
         }
     }
 }
@@ -229,8 +239,22 @@ impl MultiRegionNetworkEmulationTest {
     /// the fullnodes).
     fn create_netem_chaos(&self, swarm: &mut dyn Swarm) -> SwarmNetEm {
         let all_validators = swarm.validators().map(|v| v.peer_id()).collect::<Vec<_>>();
+        let all_vfns = swarm.full_nodes().map(|v| v.peer_id()).collect::<Vec<_>>();
+
+        let all_pairs: Vec<_> = all_validators
+            .iter()
+            .zip_longest(all_vfns)
+            .map(|either_or_both| match either_or_both {
+                EitherOrBoth::Both(validator, vfn) => vec![*validator, vfn],
+                EitherOrBoth::Left(validator) => vec![*validator],
+                EitherOrBoth::Right(_) => {
+                    panic!("Number of validators must be >= number of VFNs")
+                },
+            })
+            .collect();
+
         let network_emulation_config = self.network_emulation_config.clone();
-        create_multi_region_swarm_network_chaos(all_validators, Some(network_emulation_config))
+        create_multi_region_swarm_network_chaos(all_pairs, Some(network_emulation_config))
     }
 }
 
@@ -240,10 +264,11 @@ impl Test for MultiRegionNetworkEmulationTest {
     }
 }
 
-/// Creates a SwarmNetEm to be injected via chaos. Network emulation
-/// is added to all the given peers using the specified config.
+/// Creates a SwarmNetEm to be injected via chaos. Network emulation is added to all the given
+/// peers using the specified config. Peers that must be colocated should be grouped in the same
+/// inner vector. They are treated as a single group.
 pub fn create_multi_region_swarm_network_chaos(
-    all_peers: Vec<PeerId>,
+    all_peers: Vec<Vec<PeerId>>,
     network_emulation_config: Option<MultiRegionNetworkEmulationConfig>,
 ) -> SwarmNetEm {
     // Determine the network emulation config to use
@@ -293,6 +318,7 @@ impl NetworkTest for MultiRegionNetworkEmulationTest {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aptos_types::account_address::AccountAddress;
     use std::vec;
 
     #[test]
@@ -300,14 +326,14 @@ mod tests {
         aptos_logger::Logger::new().init();
 
         // Create a config with 8 peers and multiple regions
-        let all_peers = (0..8).map(|_| PeerId::random()).collect();
+        let all_peers: Vec<_> = (0..8).map(|_| vec![PeerId::random()]).collect();
         let netem = create_multi_region_swarm_network_chaos(all_peers, None);
 
         // Verify the number of group netems
         assert_eq!(netem.group_netems.len(), 10);
 
         // Create a config with 10 peers and multiple regions
-        let all_peers: Vec<PeerId> = (0..10).map(|_| PeerId::random()).collect();
+        let all_peers: Vec<_> = (0..10).map(|_| vec![PeerId::random()]).collect();
         let netem = create_multi_region_swarm_network_chaos(all_peers.clone(), None);
 
         // Verify the resulting group netems
@@ -317,13 +343,68 @@ mod tests {
         assert_eq!(netem.group_netems[0], GroupNetEm {
             name: "aws--ap-northeast-1-self-netem".to_owned(),
             rate_in_mbps: 10000,
-            source_nodes: vec![all_peers[0], all_peers[1], all_peers[8], all_peers[9],],
-            target_nodes: vec![all_peers[0], all_peers[1], all_peers[8], all_peers[9],],
+            source_nodes: vec![
+                all_peers[0][0],
+                all_peers[1][0],
+                all_peers[8][0],
+                all_peers[9][0],
+            ],
+            target_nodes: vec![
+                all_peers[0][0],
+                all_peers[1][0],
+                all_peers[8][0],
+                all_peers[9][0],
+            ],
             delay_latency_ms: 50,
             delay_jitter_ms: 5,
             delay_correlation_percentage: 50,
             loss_percentage: 1,
             loss_correlation_percentage: 50
         })
+    }
+
+    #[test]
+    fn test_chunk_peers() {
+        let peers: Vec<_> = (0..3).map(|_| vec![AccountAddress::random()]).collect();
+        let chunks = chunk_peers(peers, 4);
+        assert_eq!(chunks[0].len(), 1);
+        assert_eq!(chunks[1].len(), 1);
+        assert_eq!(chunks[2].len(), 1);
+        assert_eq!(chunks[3].len(), 0);
+
+        let peers: Vec<_> = (0..4).map(|_| vec![AccountAddress::random()]).collect();
+        let chunks = chunk_peers(peers, 4);
+        assert_eq!(chunks[0].len(), 1);
+        assert_eq!(chunks[1].len(), 1);
+        assert_eq!(chunks[2].len(), 1);
+        assert_eq!(chunks[3].len(), 1);
+
+        let peers: Vec<_> = (0..5).map(|_| vec![AccountAddress::random()]).collect();
+        let chunks = chunk_peers(peers, 4);
+        assert_eq!(chunks[0].len(), 2);
+        assert_eq!(chunks[1].len(), 1);
+        assert_eq!(chunks[2].len(), 1);
+        assert_eq!(chunks[3].len(), 1);
+
+        let peers: Vec<_> = (0..6).map(|_| vec![AccountAddress::random()]).collect();
+        let chunks = chunk_peers(peers, 4);
+        assert_eq!(chunks[0].len(), 2);
+        assert_eq!(chunks[1].len(), 2);
+        assert_eq!(chunks[2].len(), 1);
+        assert_eq!(chunks[3].len(), 1);
+
+        let peers: Vec<_> = (0..7).map(|_| vec![AccountAddress::random()]).collect();
+        let chunks = chunk_peers(peers, 4);
+        assert_eq!(chunks[0].len(), 2);
+        assert_eq!(chunks[1].len(), 2);
+        assert_eq!(chunks[2].len(), 2);
+        assert_eq!(chunks[3].len(), 1);
+
+        let peers: Vec<_> = (0..8).map(|_| vec![AccountAddress::random()]).collect();
+        let chunks = chunk_peers(peers, 4);
+        assert_eq!(chunks[0].len(), 2);
+        assert_eq!(chunks[1].len(), 2);
+        assert_eq!(chunks[2].len(), 2);
+        assert_eq!(chunks[3].len(), 2);
     }
 }

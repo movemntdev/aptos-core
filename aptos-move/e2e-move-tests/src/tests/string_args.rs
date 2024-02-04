@@ -29,7 +29,9 @@ fn success_generic(ty_args: Vec<TypeTag>, tests: Vec<(&str, Vec<(Vec<Vec<u8>>, &
 
     // Load the code
     let acc = h.new_account_at(AccountAddress::from_hex_literal("0xcafe").unwrap());
-    assert_success!(h.publish_package(&acc, &common::test_dir_path("string_args.data/pack")));
+    assert_success!(
+        h.publish_package_cache_building(&acc, &common::test_dir_path("string_args.data/pack"))
+    );
 
     let mut module_data = parse_struct_tag("0xCAFE::test::ModuleData").unwrap();
     let string_struct = StructTag {
@@ -90,7 +92,9 @@ fn fail_generic(
 
     // Load the code
     let acc = h.new_account_at(AccountAddress::from_hex_literal("0xcafe").unwrap());
-    assert_success!(h.publish_package(&acc, &common::test_dir_path("string_args.data/pack")));
+    assert_success!(
+        h.publish_package_cache_building(&acc, &common::test_dir_path("string_args.data/pack"))
+    );
 
     let module_data = parse_struct_tag("0xCAFE::test::ModuleData").unwrap();
 
@@ -314,13 +318,13 @@ fn string_args_bad_utf8() {
     tests.push(("0xcafe::test::hi", args, abort_info()));
 
     // vector of strings
-    let bad = vec![0xC3u8, 0x28u8];
+    let bad = [0xC3u8, 0x28u8];
     let s_vec = vec![&bad[..], "hello".as_bytes(), "world".as_bytes()];
     let i = 0u64;
     let args = vec![bcs::to_bytes(&s_vec).unwrap(), bcs::to_bytes(&i).unwrap()];
     tests.push(("0xcafe::test::str_vec", args, abort_info()));
 
-    let bad = vec![0xC3u8, 0x28u8];
+    let bad = [0xC3u8, 0x28u8];
     let s_vec = vec![&bad[..], "hello".as_bytes(), "world".as_bytes()];
     let args = vec![bcs::to_bytes(&s_vec).unwrap(), bcs::to_bytes(&i).unwrap()];
     tests.push(("0xcafe::test::str_vec", args, abort_info()));
@@ -329,7 +333,7 @@ fn string_args_bad_utf8() {
     let i = 0u64;
     let j = 0u64;
 
-    let bad = vec![0x40u8, 0xFEu8];
+    let bad = [0x40u8, 0xFEu8];
     let s_vec = vec![
         vec![&bad[..], "hello".as_bytes(), "world".as_bytes()],
         vec![
@@ -350,7 +354,7 @@ fn string_args_bad_utf8() {
     ];
     tests.push(("0xcafe::test::str_vec_vec", args, abort_info()));
 
-    let bad = vec![0xF0u8, 0x28u8, 0x8Cu8, 0x28u8];
+    let bad = [0xF0u8, 0x28u8, 0x8Cu8, 0x28u8];
     let s_vec = vec![
         vec![
             "hi there!".as_bytes(),
@@ -371,7 +375,7 @@ fn string_args_bad_utf8() {
     ];
     tests.push(("0xcafe::test::str_vec_vec", args, abort_info()));
 
-    let bad = vec![0x60u8, 0xFFu8];
+    let bad = [0x60u8, 0xFFu8];
     let s_vec = vec![
         vec![
             "hi there!".as_bytes(),
@@ -652,4 +656,27 @@ fn string_args_generic_instantiation() {
     let string_type = TypeTag::Struct(Box::new(string_struct));
 
     success_generic(vec![string_type, address_type], tests);
+}
+
+#[test]
+fn huge_string_args_are_not_allowed() {
+    let mut tests = vec![];
+    let mut len: u64 = 1_000_000_000_000;
+    let mut big_str_arg = vec![];
+    loop {
+        let cur = len & 0x7F;
+        if cur != len {
+            big_str_arg.push((cur | 0x80) as u8);
+            len >>= 7;
+        } else {
+            big_str_arg.push(cur as u8);
+            break;
+        }
+    }
+    tests.push((
+        "0xcafe::test::hi",
+        vec![big_str_arg],
+        deserialization_failure(),
+    ));
+    fail(tests);
 }

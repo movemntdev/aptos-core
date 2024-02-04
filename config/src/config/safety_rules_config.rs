@@ -11,6 +11,7 @@ use crate::{
     },
     keys::ConfigKey,
 };
+use anyhow::bail;
 use aptos_crypto::{bls12381, Uniform};
 use aptos_types::{chain_id::ChainId, network_address::NetworkAddress, waypoint::Waypoint, PeerId};
 use rand::rngs::StdRng;
@@ -70,9 +71,9 @@ impl SafetyRulesConfig {
 
 impl ConfigSanitizer for SafetyRulesConfig {
     fn sanitize(
-        node_config: &mut NodeConfig,
+        node_config: &NodeConfig,
         node_type: NodeType,
-        chain_id: ChainId,
+        chain_id: Option<ChainId>,
     ) -> Result<(), Error> {
         let sanitizer_name = Self::get_sanitizer_name();
         let safety_rules_config = &node_config.consensus.safety_rules;
@@ -82,40 +83,32 @@ impl ConfigSanitizer for SafetyRulesConfig {
             return Ok(());
         }
 
-        // Verify that the secure backend is appropriate for mainnet validators
-        if chain_id.is_mainnet()
-            && node_type.is_validator()
-            && safety_rules_config.backend.is_in_memory()
-        {
-            return Err(Error::ConfigSanitizerFailed(
-                sanitizer_name,
-                "The secure backend should not be set to in memory storage in mainnet!".to_string(),
-            ));
-        }
-
-        // Verify that the safety rules service is set to local for optimal performance
-        if chain_id.is_mainnet() && !safety_rules_config.service.is_local() {
-            return Err(Error::ConfigSanitizerFailed(
-                sanitizer_name,
-                format!("The safety rules service should be set to local in mainnet for optimal performance! Given config: {:?}", &safety_rules_config.service)
-            ));
-        }
-
-        // Verify that the safety rules test config is not enabled in mainnet
-        if chain_id.is_mainnet() && safety_rules_config.test.is_some() {
-            return Err(Error::ConfigSanitizerFailed(
-                sanitizer_name,
-                "The safety rules test config should not be used in mainnet!".to_string(),
-            ));
-        }
-
-        // Verify that the initial safety rules config is set for validators
-        if node_type.is_validator() {
-            if let InitialSafetyRulesConfig::None = safety_rules_config.initial_safety_rules_config
+        if let Some(chain_id) = chain_id {
+            // Verify that the secure backend is appropriate for mainnet validators
+            if chain_id.is_mainnet()
+                && node_type.is_validator()
+                && safety_rules_config.backend.is_in_memory()
             {
                 return Err(Error::ConfigSanitizerFailed(
                     sanitizer_name,
-                    "The initial safety rules config must be set for validators!".to_string(),
+                    "The secure backend should not be set to in memory storage in mainnet!"
+                        .to_string(),
+                ));
+            }
+
+            // Verify that the safety rules service is set to local for optimal performance
+            if chain_id.is_mainnet() && !safety_rules_config.service.is_local() {
+                return Err(Error::ConfigSanitizerFailed(
+                    sanitizer_name,
+                    format!("The safety rules service should be set to local in mainnet for optimal performance! Given config: {:?}", &safety_rules_config.service)
+                ));
+            }
+
+            // Verify that the safety rules test config is not enabled in mainnet
+            if chain_id.is_mainnet() && safety_rules_config.test.is_some() {
+                return Err(Error::ConfigSanitizerFailed(
+                    sanitizer_name,
+                    "The safety rules test config should not be used in mainnet!".to_string(),
                 ));
             }
         }
@@ -150,12 +143,21 @@ impl InitialSafetyRulesConfig {
         }
     }
 
-    pub fn identity_blob(&self) -> IdentityBlob {
+    pub fn has_identity_blob(&self) -> bool {
+        match self {
+            InitialSafetyRulesConfig::FromFile { .. } => true,
+            InitialSafetyRulesConfig::None => false,
+        }
+    }
+
+    pub fn identity_blob(&self) -> anyhow::Result<IdentityBlob> {
         match self {
             InitialSafetyRulesConfig::FromFile {
                 identity_blob_path, ..
-            } => IdentityBlob::from_file(identity_blob_path).unwrap(),
-            InitialSafetyRulesConfig::None => panic!("Must have an identity blob"),
+            } => IdentityBlob::from_file(identity_blob_path),
+            InitialSafetyRulesConfig::None => {
+                bail!("loading identity blob failed with missing initial safety rules config")
+            },
         }
     }
 }
@@ -232,7 +234,7 @@ mod tests {
     #[test]
     fn test_sanitize_invalid_backend_for_mainnet() {
         // Create a node config with an invalid backend for mainnet
-        let mut node_config = NodeConfig {
+        let node_config = NodeConfig {
             consensus: ConsensusConfig {
                 safety_rules: SafetyRulesConfig {
                     backend: SecureBackend::InMemoryStorage,
@@ -244,16 +246,19 @@ mod tests {
         };
 
         // Verify that the config sanitizer fails
-        let error =
-            SafetyRulesConfig::sanitize(&mut node_config, NodeType::Validator, ChainId::mainnet())
-                .unwrap_err();
+        let error = SafetyRulesConfig::sanitize(
+            &node_config,
+            NodeType::Validator,
+            Some(ChainId::mainnet()),
+        )
+        .unwrap_err();
         assert!(matches!(error, Error::ConfigSanitizerFailed(_, _)));
     }
 
     #[test]
     fn test_sanitize_backend_for_mainnet_fullnodes() {
         // Create a node config with an invalid backend for mainnet validators
-        let mut node_config = NodeConfig {
+        let node_config = NodeConfig {
             consensus: ConsensusConfig {
                 safety_rules: SafetyRulesConfig {
                     backend: SecureBackend::InMemoryStorage,
@@ -266,9 +271,9 @@ mod tests {
 
         // Verify that the config sanitizer passes because the node is a fullnode
         SafetyRulesConfig::sanitize(
-            &mut node_config,
+            &node_config,
             NodeType::PublicFullnode,
-            ChainId::mainnet(),
+            Some(ChainId::mainnet()),
         )
         .unwrap();
     }
@@ -276,7 +281,7 @@ mod tests {
     #[test]
     fn test_sanitize_invalid_service_for_mainnet() {
         // Create a node config with a non-local service
-        let mut node_config = NodeConfig {
+        let node_config = NodeConfig {
             consensus: ConsensusConfig {
                 safety_rules: SafetyRulesConfig {
                     service: SafetyRulesService::Serializer,
@@ -288,16 +293,19 @@ mod tests {
         };
 
         // Verify that the config sanitizer fails
-        let error =
-            SafetyRulesConfig::sanitize(&mut node_config, NodeType::Validator, ChainId::mainnet())
-                .unwrap_err();
+        let error = SafetyRulesConfig::sanitize(
+            &node_config,
+            NodeType::Validator,
+            Some(ChainId::mainnet()),
+        )
+        .unwrap_err();
         assert!(matches!(error, Error::ConfigSanitizerFailed(_, _)));
     }
 
     #[test]
     fn test_sanitize_test_config_on_mainnet() {
         // Create a node config with a test config
-        let mut node_config = NodeConfig {
+        let node_config = NodeConfig {
             consensus: ConsensusConfig {
                 safety_rules: SafetyRulesConfig {
                     test: Some(SafetyRulesTestConfig::new(PeerId::random())),
@@ -309,30 +317,12 @@ mod tests {
         };
 
         // Verify that the config sanitizer fails
-        let error =
-            SafetyRulesConfig::sanitize(&mut node_config, NodeType::Validator, ChainId::mainnet())
-                .unwrap_err();
-        assert!(matches!(error, Error::ConfigSanitizerFailed(_, _)));
-    }
-
-    #[test]
-    fn test_sanitize_missing_initial_safety_rules() {
-        // Create a node config with a test config
-        let mut node_config = NodeConfig {
-            consensus: ConsensusConfig {
-                safety_rules: SafetyRulesConfig {
-                    test: Some(SafetyRulesTestConfig::new(PeerId::random())),
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-
-        // Verify that the config sanitizer fails
-        let error =
-            SafetyRulesConfig::sanitize(&mut node_config, NodeType::Validator, ChainId::mainnet())
-                .unwrap_err();
+        let error = SafetyRulesConfig::sanitize(
+            &node_config,
+            NodeType::Validator,
+            Some(ChainId::mainnet()),
+        )
+        .unwrap_err();
         assert!(matches!(error, Error::ConfigSanitizerFailed(_, _)));
     }
 }

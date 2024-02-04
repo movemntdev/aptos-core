@@ -9,9 +9,9 @@ use crate::{
         pruner_worker::PrunerWorker,
     },
 };
-use anyhow::Result;
 use aptos_config::config::LedgerPrunerConfig;
 use aptos_infallible::Mutex;
+use aptos_storage_interface::Result;
 use aptos_types::transaction::{AtomicVersion, Version};
 use std::sync::{atomic::Ordering, Arc};
 
@@ -155,6 +155,11 @@ impl LedgerPrunerManager {
         let min_readable_version = latest_version.saturating_sub(self.prune_window);
         self.min_readable_version
             .store(min_readable_version, Ordering::SeqCst);
+
+        PRUNER_VERSIONS
+            .with_label_values(&["ledger_pruner", "min_readable"])
+            .set(min_readable_version as i64);
+
         self.pruner_worker
             .as_ref()
             .unwrap()

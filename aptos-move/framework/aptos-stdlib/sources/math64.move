@@ -4,9 +4,8 @@ module aptos_std::math64 {
     use std::fixed_point32::FixedPoint32;
     use std::fixed_point32;
 
-    /// Abort value when an invalid argument is provided.
+    /// Cannot log2 the value 0
     const EINVALID_ARG_FLOOR_LOG2: u64 = 1;
-    const EDIVISION_BY_ZERO: u64 = 1;
 
     /// Return the largest of two numbers.
     public fun max(a: u64, b: u64): u64 {
@@ -29,6 +28,8 @@ module aptos_std::math64 {
 
     /// Returns a * b / c going through u128 to prevent intermediate overflow
     public inline fun mul_div(a: u64, b: u64, c: u64): u64 {
+        // Inline functions cannot take constants, as then every module using it needs the constant
+        assert!(c != 0, std::error::invalid_argument(4));
         (((a as u128) * (b as u128) / (c as u128)) as u64)
     }
 
@@ -116,7 +117,8 @@ module aptos_std::math64 {
         // ceil_div(x, y) = floor((x + y - 1) / y) = floor((x - 1) / y) + 1
         // (x + y - 1) could spuriously overflow. so we use the later version
         if (x == 0) {
-            assert!(y != 0, EDIVISION_BY_ZERO);
+            // Inline functions cannot take constants, as then every module using it needs the constant
+            assert!(y != 0, std::error::invalid_argument(4));
             0
         }
         else (x - 1) / y + 1
@@ -190,6 +192,12 @@ module aptos_std::math64 {
     }
 
     #[test]
+    #[expected_failure(abort_code = 0x10004, location = aptos_std::math64)]
+    public entry fun test_mul_div_by_zero() {
+        mul_div(1, 1, 0);
+    }
+
+    #[test]
     public entry fun test_floor_lg2() {
         let idx: u8 = 0;
         while (idx < 64) {
@@ -251,7 +259,7 @@ module aptos_std::math64 {
         assert!(result == 3037000499, 0);
     }
 
-    #[testonly]
+    #[test_only]
     /// For functions that approximate a value it's useful to test a value is close
     /// to the most correct value up to last digit
     fun assert_approx_the_same(x: u128, y: u128, precission: u64) {

@@ -9,17 +9,19 @@ use aptos_crypto::{
     hash::HashValue,
     ValidCryptoMaterialStringExt,
 };
-use aptos_gas::{InitialGasSchedule, TransactionGasParameters};
+use aptos_gas_schedule::{InitialGasSchedule, TransactionGasParameters};
 use aptos_language_e2e_tests::data_store::{FakeDataStore, GENESIS_CHANGE_SET_HEAD};
-use aptos_state_view::TStateView;
 use aptos_types::{
     access_path::AccessPath,
     account_config::{aptos_test_root_address, AccountResource, CoinStoreResource},
+    block_executor::config::BlockExecutorConfigFromOnchain,
     block_metadata::BlockMetadata,
     chain_id::ChainId,
     contract_event::ContractEvent,
-    state_store::{state_key::StateKey, table::TableHandle},
+    on_chain_config::BlockGasLimitType,
+    state_store::{state_key::StateKey, table::TableHandle, TStateView},
     transaction::{
+        signature_verified_transaction::into_signature_verified_block,
         EntryFunction as TransactionEntryFunction, ExecutionStatus, Module as TransactionModule,
         RawTransaction, Script as TransactionScript, Transaction, TransactionOutput,
         TransactionStatus,
@@ -46,12 +48,12 @@ use move_resource_viewer::{AnnotatedMoveValue, MoveValueAnnotator};
 use move_transactional_test_runner::{
     framework::{run_test_impl, CompiledState, MoveTestAdapter},
     tasks::{InitCommand, SyntaxChoice, TaskInput},
-    vm_test_harness::view_resource_in_move_storage,
+    vm_test_harness::{view_resource_in_move_storage, TestRunConfig},
 };
 use move_vm_runtime::session::SerializedReturnValues;
 use once_cell::sync::Lazy;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     convert::TryFrom,
     fmt,
     path::Path,
@@ -74,6 +76,9 @@ struct AptosTestAdapter<'a> {
     storage: FakeDataStore,
     default_syntax: SyntaxChoice,
     private_key_mapping: BTreeMap<String, Ed25519PrivateKey>,
+    #[allow(unused)]
+    comparison_mode: bool,
+    run_config: TestRunConfig,
 }
 
 /// Parameters *required* to create a transaction.
@@ -294,6 +299,7 @@ static PRECOMPILED_APTOS_FRAMEWORK: Lazy<FullyCompiledProgram> = Lazy::new(|| {
         deps,
         None,
         move_compiler::Flags::empty().set_sources_shadow_deps(false),
+        aptos_framework::extended_checks::get_all_attribute_names(),
     )
     .unwrap();
     match program_res {
@@ -472,7 +478,15 @@ impl<'a> AptosTestAdapter<'a> {
     /// Should error if the transaction ends up being discarded, or having a status other than
     /// EXECUTED.
     fn run_transaction(&mut self, txn: Transaction) -> Result<TransactionOutput> {
-        let mut outputs = AptosVM::execute_block(vec![txn], &self.storage.clone(), None)?;
+        let txn_block = vec![txn];
+        let sig_verified_block = into_signature_verified_block(txn_block);
+        let onchain_config = BlockExecutorConfigFromOnchain {
+            // TODO fetch values from state?
+            block_gas_limit_type: BlockGasLimitType::Limit(30000),
+        };
+        let mut outputs =
+            AptosVM::execute_block(&sig_verified_block, &self.storage.clone(), onchain_config)?
+                .into_inner();
 
         assert_eq!(outputs.len(), 1);
 
@@ -551,8 +565,18 @@ impl<'a> MoveTestAdapter<'a> for AptosTestAdapter<'a> {
         self.default_syntax
     }
 
+    fn known_attributes(&self) -> &BTreeSet<String> {
+        aptos_framework::extended_checks::get_all_attribute_names()
+    }
+
+    fn run_config(&self) -> TestRunConfig {
+        self.run_config
+    }
+
     fn init(
         default_syntax: SyntaxChoice,
+        comparison_mode: bool,
+        run_config: TestRunConfig,
         pre_compiled_deps: Option<&'a FullyCompiledProgram>,
         task_opt: Option<TaskInput<(InitCommand, Self::ExtraInitArgs)>>,
     ) -> (Self, Option<String>) {
@@ -583,8 +607,8 @@ impl<'a> MoveTestAdapter<'a> for AptosTestAdapter<'a> {
             private_key_mapping.insert(name, private_key);
         }
 
-        // Initial coins to mint, defaults to 5000
-        let mut coins_to_mint = 5000;
+        // Initial coins to mint, defaults to 5,000,000
+        let mut coins_to_mint = 5000000;
 
         if let Some(TaskInput {
             command: (_, init_args),
@@ -614,6 +638,8 @@ impl<'a> MoveTestAdapter<'a> for AptosTestAdapter<'a> {
             default_syntax,
             storage,
             private_key_mapping,
+            comparison_mode,
+            run_config,
         };
 
         for (_, addr) in additional_named_address_mapping {
@@ -927,8 +953,13 @@ struct PrettyEvent<'a>(&'a ContractEvent);
 impl<'a> fmt::Display for PrettyEvent<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "{{")?;
-        writeln!(f, "    key:     {}", self.0.key())?;
-        writeln!(f, "    seq_num: {}", self.0.sequence_number())?;
+        match self.0 {
+            ContractEvent::V1(v1) => {
+                writeln!(f, "    key:     {}", v1.key())?;
+                writeln!(f, "    seq_num: {}", v1.sequence_number())?;
+            },
+            ContractEvent::V2(_v2) => (),
+        }
         writeln!(f, "    type:    {}", self.0.type_tag())?;
         writeln!(f, "    data:    {:?}", hex::encode(self.0.event_data()))?;
         write!(f, "}}")
@@ -957,7 +988,14 @@ fn render_events(events: &[ContractEvent]) -> Option<String> {
 }
 
 pub fn run_aptos_test(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    run_aptos_test_with_config(path, TestRunConfig::CompilerV1)
+}
+
+pub fn run_aptos_test_with_config(
+    path: &Path,
+    config: TestRunConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
     // TODO: remove once bundles removed
     aptos_vm::aptos_vm::allow_module_bundle_for_test();
-    run_test_impl::<AptosTestAdapter>(path, Some(&*PRECOMPILED_APTOS_FRAMEWORK))
+    run_test_impl::<AptosTestAdapter>(config, path, Some(&*PRECOMPILED_APTOS_FRAMEWORK))
 }

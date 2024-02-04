@@ -2,6 +2,8 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+#![allow(clippy::arc_with_non_send_sync)]
+
 //! A model to test properties of common Aptos transactions.
 //!
 //! The structs and functions in this module together form a simplified *model* of how common Aptos
@@ -378,8 +380,10 @@ pub fn run_and_assert_universe(
     for (idx, (output, expected)) in outputs.iter().zip(&expected_values).enumerate() {
         prop_assert!(
             transaction_status_eq(output.status(), &expected.0),
-            "unexpected status for transaction {}",
-            idx
+            "unexpected status for transaction {}, {:?} != {:?}",
+            idx,
+            output.status(),
+            &expected.0
         );
         executor.apply_write_set(output.write_set());
     }

@@ -16,9 +16,11 @@ use aptos_mempool::MempoolClientSender;
 use aptos_storage_interface::DbReader;
 use aptos_types::chain_id::ChainId;
 use poem::{
+    handler,
     http::{header, Method},
     listener::{Listener, RustlsCertificate, RustlsConfig, TcpListener},
     middleware::Cors,
+    web::Html,
     EndpointExt, Route, Server,
 };
 use poem_openapi::{ContactObject, LicenseObject, OpenApiService};
@@ -39,8 +41,31 @@ pub fn bootstrap(
 
     let context = Context::new(chain_id, db, mp_sender, config.clone());
 
-    attach_poem_to_runtime(runtime.handle(), context, config, false)
+    attach_poem_to_runtime(runtime.handle(), context.clone(), config, false)
         .context("Failed to attach poem to runtime")?;
+
+    if let Some(period_ms) = config.api.periodic_gas_estimation_ms {
+        runtime.spawn(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(period_ms));
+            loop {
+                interval.tick().await;
+                let context_cloned = context.clone();
+                tokio::task::spawn_blocking(move || {
+                    if let Ok(latest_ledger_info) =
+                        context_cloned.get_latest_ledger_info::<crate::response::BasicError>()
+                    {
+                        if let Ok(gas_estimation) = context_cloned
+                            .estimate_gas_price::<crate::response::BasicError>(&latest_ledger_info)
+                        {
+                            TransactionsApi::log_gas_estimation(&gas_estimation);
+                        }
+                    }
+                })
+                .await
+                .unwrap_or(());
+            }
+        });
+    }
 
     Ok(runtime)
 }
@@ -222,6 +247,7 @@ pub fn attach_poem_to_runtime(
 
         // Build routes for the API
         let route = Route::new()
+            .at("/", root_handler)
             .nest(
                 "/v1",
                 Route::new()
@@ -249,6 +275,24 @@ pub fn attach_poem_to_runtime(
     info!("API server is running at {}", actual_address);
 
     Ok(actual_address)
+}
+
+#[handler]
+async fn root_handler() -> Html<&'static str> {
+    let response = "<html>
+<head>
+    <title>Aptos Node API</title>
+</head>
+<body>
+    <p>
+        Welcome! The latest node API can be found at <a href=\"/v1\">/v1<a/>.
+    </p>
+    <p>
+        Learn more about the v1 node API here: <a href=\"/v1/spec\">/v1/spec<a/>.
+    </p>
+</body>
+</html>";
+    Html(response)
 }
 
 /// Returns the maximum number of runtime workers to be given to the

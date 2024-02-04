@@ -4,7 +4,9 @@
 
 use crate::transaction_validation::APTOS_TRANSACTION_VALIDATION;
 use aptos_logger::{enabled, Level};
+use aptos_types::transaction::TransactionStatus;
 use aptos_vm_logging::{log_schema::AdapterLogSchema, prelude::*};
+use aptos_vm_types::output::VMOutput;
 use move_binary_format::errors::VMError;
 use move_core_types::vm_status::{StatusCode, VMStatus};
 
@@ -206,9 +208,13 @@ pub fn expect_only_successful_execution(
     let status = error.into_vm_status();
     Err(match status {
         VMStatus::Executed => VMStatus::Executed,
-        // Storage error can be a result of speculation failure so throw the error back for caller to handle.
+        // Speculative errors are returned for caller to handle.
         e @ VMStatus::Error {
-            status_code: StatusCode::STORAGE_ERROR,
+            status_code:
+                StatusCode::SPECULATIVE_EXECUTION_ABORT_ERROR
+                | StatusCode::DELAYED_FIELDS_CODE_INVARIANT_ERROR
+                // TODO[agg_v2](fix) remove special handling of storage errors here
+                | StatusCode::STORAGE_ERROR,
             ..
         } => e,
         status => {
@@ -226,4 +232,8 @@ pub fn expect_only_successful_execution(
             }
         },
     })
+}
+
+pub(crate) fn discarded_output(status_code: StatusCode) -> VMOutput {
+    VMOutput::empty_with_status(TransactionStatus::Discard(status_code))
 }

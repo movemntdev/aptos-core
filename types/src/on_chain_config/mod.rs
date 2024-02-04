@@ -5,10 +5,11 @@
 use crate::{
     access_path::AccessPath,
     account_config::CORE_CODE_ADDRESS,
-    chain_id::ChainId,
     event::{EventHandle, EventKey},
+    state_store::{state_key::StateKey, StateView},
 };
 use anyhow::{format_err, Result};
+use bytes::Bytes;
 use move_core_types::{
     ident_str,
     identifier::{IdentStr, Identifier},
@@ -16,7 +17,7 @@ use move_core_types::{
     move_resource::{MoveResource, MoveStructType},
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::{collections::HashMap, fmt, sync::Arc};
+use std::{collections::HashMap, fmt, fmt::Debug, sync::Arc};
 
 mod approved_execution_hashes;
 mod aptos_features;
@@ -27,6 +28,7 @@ mod execution_config;
 mod gas_schedule;
 mod timed_features;
 mod timestamp;
+mod transaction_fee;
 mod validator_set;
 
 pub use self::{
@@ -36,16 +38,17 @@ pub use self::{
         Version, APTOS_MAX_KNOWN_VERSION, APTOS_VERSION_2, APTOS_VERSION_3, APTOS_VERSION_4,
     },
     consensus_config::{
-        ConsensusConfigV1, LeaderReputationType, OnChainConsensusConfig, ProposerAndVoterConfig,
-        ProposerElectionType,
+        ConsensusConfigV1, ConsensusConfigV1Ext, ConsensusExtraFeature, DagConsensusConfigV1,
+        LeaderReputationType, OnChainConsensusConfig, ProposerAndVoterConfig, ProposerElectionType,
     },
     execution_config::{
-        ExecutionConfigV1, ExecutionConfigV2, OnChainExecutionConfig, TransactionDeduperType,
-        TransactionShufflerType,
+        BlockGasLimitType, ExecutionConfigV1, ExecutionConfigV2, OnChainExecutionConfig,
+        TransactionDeduperType, TransactionShufflerType,
     },
     gas_schedule::{GasSchedule, GasScheduleV2, StorageGasSchedule},
-    timed_features::{TimedFeatureFlag, TimedFeatureOverride, TimedFeatures},
+    timed_features::{TimedFeatureFlag, TimedFeatureOverride, TimedFeatures, TimedFeaturesBuilder},
     timestamp::CurrentTimeMicroseconds,
+    transaction_fee::TransactionFeeBurnCap,
     validator_set::{ConsensusScheme, ValidatorSet},
 };
 
@@ -72,24 +75,43 @@ impl fmt::Display for ConfigID {
     }
 }
 
-/// State sync will panic if the value of any config in this registry is uninitialized
-pub const ON_CHAIN_CONFIG_REGISTRY: &[ConfigID] = &[
-    ApprovedExecutionHashes::CONFIG_ID,
-    ValidatorSet::CONFIG_ID,
-    Version::CONFIG_ID,
-    OnChainConsensusConfig::CONFIG_ID,
-    ChainId::CONFIG_ID,
-];
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct OnChainConfigPayload {
-    epoch: u64,
-    configs: Arc<HashMap<ConfigID, Vec<u8>>>,
+pub trait OnChainConfigProvider: Debug + Clone + Send + Sync + 'static {
+    fn get<T: OnChainConfig>(&self) -> Result<T>;
 }
 
-impl OnChainConfigPayload {
-    pub fn new(epoch: u64, configs: Arc<HashMap<ConfigID, Vec<u8>>>) -> Self {
-        Self { epoch, configs }
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InMemoryOnChainConfig {
+    configs: HashMap<ConfigID, Vec<u8>>,
+}
+
+impl InMemoryOnChainConfig {
+    pub fn new(configs: HashMap<ConfigID, Vec<u8>>) -> Self {
+        Self { configs }
+    }
+}
+
+impl OnChainConfigProvider for InMemoryOnChainConfig {
+    fn get<T: OnChainConfig>(&self) -> Result<T> {
+        let bytes = self
+            .configs
+            .get(&T::CONFIG_ID)
+            .ok_or_else(|| format_err!("[on-chain cfg] config not in payload"))?;
+        T::deserialize_into_config(bytes)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct OnChainConfigPayload<P: OnChainConfigProvider> {
+    epoch: u64,
+    provider: Arc<P>,
+}
+
+impl<P: OnChainConfigProvider> OnChainConfigPayload<P> {
+    pub fn new(epoch: u64, provider: P) -> Self {
+        Self {
+            epoch,
+            provider: Arc::new(provider),
+        }
     }
 
     pub fn epoch(&self) -> u64 {
@@ -97,35 +119,13 @@ impl OnChainConfigPayload {
     }
 
     pub fn get<T: OnChainConfig>(&self) -> Result<T> {
-        let bytes = self
-            .configs
-            .get(&T::CONFIG_ID)
-            .ok_or_else(|| format_err!("[on-chain cfg] config not in payload"))?;
-        T::deserialize_into_config(bytes)
-    }
-
-    pub fn configs(&self) -> &HashMap<ConfigID, Vec<u8>> {
-        &self.configs
-    }
-}
-
-impl fmt::Display for OnChainConfigPayload {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut config_ids = "".to_string();
-        for id in self.configs.keys() {
-            config_ids += &id.to_string();
-        }
-        write!(
-            f,
-            "OnChainConfigPayload [epoch: {}, configs: {}]",
-            self.epoch, config_ids
-        )
+        self.provider.get()
     }
 }
 
 /// Trait to be implemented by a storage type from which to read on-chain configs
 pub trait ConfigStorage {
-    fn fetch_config(&self, access_path: AccessPath) -> Option<Vec<u8>>;
+    fn fetch_config(&self, access_path: AccessPath) -> Option<Bytes>;
 }
 
 /// Trait to be implemented by a Rust struct representation of an on-chain config
@@ -177,6 +177,15 @@ pub trait OnChainConfig: Send + Sync + DeserializeOwned {
 
     fn struct_tag() -> StructTag {
         struct_tag_for_config(Self::CONFIG_ID)
+    }
+}
+
+impl<S: StateView> ConfigStorage for S {
+    fn fetch_config(&self, access_path: AccessPath) -> Option<Bytes> {
+        let state_key = StateKey::access_path(access_path);
+        self.get_state_value(&state_key)
+            .ok()?
+            .map(|s| s.bytes().clone())
     }
 }
 

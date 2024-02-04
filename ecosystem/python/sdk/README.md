@@ -5,7 +5,7 @@
 
 This provides basic functionalities to interact with [Aptos](https:/github.com/aptos-labs/aptos-core/). Get started [here](https://aptos.dev/guides/system-integrators-guide/#getting-started).
 
-Currently this is still in development and may not be suitable for production purposes.
+Currently, this is still in development and may not be suitable for production purposes.
 
 Note: The sync client is deprecated, please only start new projects using the async client. Feature contributions to the sync client will be rejected.
 
@@ -22,11 +22,18 @@ poetry install
 make test
 ```
 
-## E2E testing
+## E2E testing and Using the Aptos CLI
+
+* Download the [Aptos CLI](https://aptos.dev/tools/aptos-cli/install-cli/).
+* Set the environment variable `APTOS_CLI_PATH` to the full path of the CLI.
+* `make examples_cli`
+
+We of course allow you to do this a bit more manually by:
+
 First, run a local testnet (run this from the root of aptos-core):
 
 ```bash
-cargo run -p aptos -- node run-local-testnet --with-faucet --faucet-port 8081 --force-restart --assume-yes
+cargo run -p aptos -- node run-local-testnet --force-restart --assume-yes
 ```
 
 Next, tell the end-to-end tests to talk to this locally running testnet:
@@ -44,10 +51,26 @@ make examples
 
 Note: These end-to-end tests are tested against a node built from the same commit as part of CI, not devnet. For examples tested against devnet, see `developer-docs-site/static/examples/python/` from the root of the repo.
 
+### Integration Testing Using the Aptos CLI
+```bash
+make examples_cli
+```
+
 ## Autoformatting
 ```bash
 make fmt
 ```
+
+## Autolinting
+```bash
+make lint
+```
+
+## Package Publishing
+
+* Download the [Aptos CLI](https://aptos.dev/tools/aptos-cli/install-cli/).
+* Set the environment variable `APTOS_CLI_PATH` to the full path of the CLI.
+* `poetry run python -m aptos_sdk.cli` and set the appropriate command-line parameters
 
 ## Generating types
 The Python `openapi-python-client` tool cannot parse references. Therefore there are three options:

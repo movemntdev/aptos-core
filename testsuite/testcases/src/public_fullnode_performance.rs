@@ -7,17 +7,20 @@ use crate::{
     NetworkLoadTest,
 };
 use anyhow::Error;
+use aptos_config::config::OverrideNodeConfig;
 use aptos_forge::{
     NetworkContext, NetworkTest, Result, Swarm, SwarmChaos, SwarmCpuStress, SwarmNetEm, Test,
 };
 use aptos_logger::info;
 use aptos_sdk::move_types::account_address::AccountAddress;
 use aptos_types::PeerId;
+use itertools::{EitherOrBoth, Itertools};
 use rand::{
     rngs::{OsRng, StdRng},
     seq::SliceRandom,
     Rng, SeedableRng,
 };
+use std::iter::once;
 use tokio::runtime::Runtime;
 
 /// A simple test that adds multiple public fullnodes (PFNs) to the swarm
@@ -25,17 +28,19 @@ use tokio::runtime::Runtime;
 /// be configured for all nodes in the swarm.
 #[derive(Default)]
 pub struct PFNPerformance {
+    num_pfns: u64,
     add_cpu_chaos: bool,
     add_network_emulation: bool,
     shuffle_rng_seed: [u8; 32],
 }
 
 impl PFNPerformance {
-    pub fn new(add_cpu_chaos: bool, add_network_emulation: bool) -> Self {
+    pub fn new(num_pfns: u64, add_cpu_chaos: bool, add_network_emulation: bool) -> Self {
         // Create a random seed for the shuffle RNG
         let shuffle_rng_seed: [u8; 32] = OsRng.gen();
 
         Self {
+            num_pfns,
             add_cpu_chaos,
             add_network_emulation,
             shuffle_rng_seed,
@@ -56,7 +61,7 @@ impl PFNPerformance {
     /// is added to all validators, VFNs and PFNs in the swarm.
     fn create_network_emulation_chaos(&self, swarm: &mut dyn Swarm) -> SwarmNetEm {
         // Gather and shuffle all peers IDs (so that we get random network emulation)
-        let shuffled_peer_ids = self.gather_and_shuffle_peer_ids(swarm);
+        let shuffled_peer_ids = self.gather_and_shuffle_peer_ids_with_colocation(swarm);
 
         // Create network emulation chaos for the swarm
         create_multi_region_swarm_network_chaos(shuffled_peer_ids, None)
@@ -78,6 +83,31 @@ impl PFNPerformance {
 
         all_peer_ids
     }
+
+    /// Gathers and shuffles all peer IDs in the swarm, colocating VFNs with their validator
+    fn gather_and_shuffle_peer_ids_with_colocation(
+        &self,
+        swarm: &mut dyn Swarm,
+    ) -> Vec<Vec<AccountAddress>> {
+        // Identify the validators and fullnodes in the swarm
+        let validator_peer_ids = swarm.validators().map(|v| v.peer_id()).collect::<Vec<_>>();
+        let fullnode_peer_ids = swarm.full_nodes().map(|v| v.peer_id()).collect::<Vec<_>>();
+        let (vfn_peer_ids, pfn_peer_ids) =
+            fullnode_peer_ids.split_at(fullnode_peer_ids.len() - self.num_pfns as usize);
+        let mut vfn_and_vn_ids: Vec<_> = validator_peer_ids
+            .iter()
+            .zip_longest(vfn_peer_ids)
+            .map(|either_or_both| match either_or_both {
+                EitherOrBoth::Both(validator, vfn) => vec![*validator, *vfn],
+                EitherOrBoth::Left(validator) => vec![*validator],
+                EitherOrBoth::Right(_) => panic!("Unexpected"),
+            })
+            .collect();
+        vfn_and_vn_ids.shuffle(&mut StdRng::from_seed(self.shuffle_rng_seed));
+
+        // All PFNs in the first region
+        once(pfn_peer_ids.to_vec()).chain(vfn_and_vn_ids).collect()
+    }
 }
 
 impl Test for PFNPerformance {
@@ -97,8 +127,7 @@ impl NetworkLoadTest for PFNPerformance {
     /// the swarm; and (ii) use those PFNs as the load destination.
     fn setup(&self, ctx: &mut NetworkContext) -> Result<LoadDestination> {
         // Add the PFNs to the swarm
-        let num_pfns = 7;
-        let pfn_peer_ids = create_and_add_pfns(ctx, num_pfns)?;
+        let pfn_peer_ids = create_and_add_pfns(ctx, self.num_pfns)?;
 
         // Add CPU chaos to the swarm
         if self.add_cpu_chaos {
@@ -148,10 +177,11 @@ fn create_and_add_pfns(ctx: &mut NetworkContext, num_pfns: u64) -> Result<Vec<Pe
             // Create a config for the PFN. Note: this needs to be done here
             // because the config will generate a unique peer ID for the PFN.
             let pfn_config = swarm.get_default_pfn_node_config();
+            let pfn_override_config = OverrideNodeConfig::new_with_default_base(pfn_config);
 
             // Add the PFN to the swarm
             let peer_id = runtime
-                .block_on(swarm.add_full_node(&pfn_version, pfn_config))
+                .block_on(swarm.add_full_node(&pfn_version, pfn_override_config))
                 .unwrap();
 
             // Verify the PFN was added

@@ -9,9 +9,9 @@ use crate::{
         state_value::StateValueSchema,
     },
 };
-use anyhow::Result;
 use aptos_logger::info;
 use aptos_schemadb::{ReadOptions, SchemaBatch, DB};
+use aptos_storage_interface::Result;
 use aptos_types::transaction::Version;
 use std::sync::Arc;
 
@@ -68,5 +68,9 @@ impl StateKvShardPruner {
         )?;
 
         self.db_shard.write_schemas(batch)
+    }
+
+    pub(in crate::pruner) fn shard_id(&self) -> u8 {
+        self.shard_id
     }
 }

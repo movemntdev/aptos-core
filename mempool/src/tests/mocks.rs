@@ -29,7 +29,8 @@ use aptos_network::{
 };
 use aptos_storage_interface::{mock::MockDbReaderWriter, DbReaderWriter};
 use aptos_types::{
-    mempool_status::MempoolStatusCode, on_chain_config::OnChainConfigPayload,
+    mempool_status::MempoolStatusCode,
+    on_chain_config::{InMemoryOnChainConfig, OnChainConfigPayload},
     transaction::SignedTransaction,
 };
 use aptos_vm_validator::{
@@ -37,12 +38,15 @@ use aptos_vm_validator::{
 };
 use futures::channel::mpsc;
 use maplit::hashmap;
-use std::{collections::HashMap, sync::Arc};
-use tokio::runtime::{Handle, Runtime};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
+use tokio::runtime::Handle;
 
 /// Mock of a running instance of shared mempool.
 pub struct MockSharedMempool {
-    _runtime: Option<Runtime>,
+    _runtime: Option<Handle>,
     _handle: Option<Handle>,
     pub ac_client: MempoolClientSender,
     pub mempool: Arc<Mutex<CoreMempool>>,
@@ -55,21 +59,30 @@ impl MockSharedMempool {
     /// Returns the runtime on which the shared mempool is running
     /// and the channel through which shared mempool receives client events.
     pub fn new() -> Self {
-        let runtime = aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
-        let _entered_runtime = runtime.enter();
+        // Create the shared mempool
         let (ac_client, mempool, quorum_store_sender, mempool_notifier) = Self::start(
-            runtime.handle(),
+            &Handle::current(),
             &DbReaderWriter::new(MockDbReaderWriter),
             MockVMValidator,
         );
         Self {
-            _runtime: Some(runtime),
+            _runtime: Some(Handle::current()),
             _handle: None,
             ac_client,
             mempool,
             consensus_to_mempool_sender: quorum_store_sender,
             mempool_notifier,
         }
+    }
+
+    /// Creates a mock shared mempool and runtime
+    pub fn new_with_runtime() -> Self {
+        // Create a runtime
+        let runtime = aptos_runtimes::spawn_named_runtime("shared-mem".into(), None);
+        let _entered_runtime = runtime.enter();
+
+        // Create and return the shared mempool
+        Self::new()
     }
 
     /// Creates a mock of a running instance of shared mempool inside a tokio runtime;
@@ -117,7 +130,7 @@ impl MockSharedMempool {
         let (ac_client, client_events) = mpsc::channel(1_024);
         let (quorum_store_sender, quorum_store_receiver) = mpsc::channel(1_024);
         let (mempool_notifier, mempool_listener) =
-            aptos_mempool_notifications::new_mempool_notifier_listener_pair();
+            aptos_mempool_notifications::new_mempool_notifier_listener_pair(100);
         let (reconfig_sender, reconfig_events) = aptos_channel::new(QueueStyle::LIFO, 1, None);
         let reconfig_event_subscriber = ReconfigNotificationListener {
             notification_receiver: reconfig_events,
@@ -125,7 +138,10 @@ impl MockSharedMempool {
         reconfig_sender
             .push((), ReconfigNotification {
                 version: 1,
-                on_chain_configs: OnChainConfigPayload::new(1, Arc::new(HashMap::new())),
+                on_chain_configs: OnChainConfigPayload::new(
+                    1,
+                    InMemoryOnChainConfig::new(HashMap::new()),
+                ),
             })
             .unwrap();
         let peers_and_metadata = PeersAndMetadata::new(&[NetworkId::Validator]);
@@ -183,7 +199,7 @@ impl MockSharedMempool {
     pub fn get_txns(&self, size: u64) -> Vec<SignedTransaction> {
         let pool = self.mempool.lock();
         // assume txn size is less than 100kb
-        pool.get_batch(size, size * 102400, true, false, vec![])
+        pool.get_batch(size, size * 102400, true, false, BTreeMap::new())
     }
 
     pub fn remove_txn(&self, txn: &SignedTransaction) {

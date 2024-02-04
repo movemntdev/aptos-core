@@ -58,6 +58,7 @@ group "all" {
     "telemetry-service",
     "indexer-grpc",
     "validator-testing",
+    "nft-metadata-crawler",
   ])
 }
 
@@ -68,7 +69,8 @@ group "forge-images" {
 target "debian-base" {
   dockerfile = "docker/builder/debian-base.Dockerfile"
   contexts = {
-    debian = "docker-image://debian:bullseye@sha256:3b6053ca925336c804e2d3f080af177efcdc9f51198a627569bfc7c7e730ef7e"
+    # Run `docker buildx imagetools inspect debian:bullseye` to find the latest multi-platform hash
+    debian = "docker-image://debian:bullseye@sha256:71f0e09d55a4042ddee1f114a0838d99266e185bf33e71f15c15bf6b9545a9a0"
   }
 }
 
@@ -77,7 +79,8 @@ target "builder-base" {
   target     = "builder-base"
   context    = "."
   contexts = {
-    rust = "docker-image://rust:1.70.0-bullseye@sha256:b9331b83517a41d3c0d5dceb4ac83f3fc2c1b6d9781d8284d783ba04a7efd9ca"
+    # Run `docker buildx imagetools inspect rust:1.74.1-bullseye` to find the latest multi-platform hash
+    rust = "docker-image://rust:1.74.1-bullseye@sha256:698e0acd00a30c8842887c3792c5c68e1d23565cfcc11d0203dbe4eeb31213c0"
   }
   args = {
     PROFILE            = "${PROFILE}"
@@ -112,11 +115,23 @@ target "tools-builder" {
   ]
 }
 
+target "indexer-builder" {
+  dockerfile = "docker/builder/builder.Dockerfile"
+  target     = "indexer-builder"
+  contexts = {
+    builder-base = "target:builder-base"
+  }
+  secret = [
+    "id=GIT_CREDENTIALS"
+  ]
+}
+
 target "_common" {
   contexts = {
     debian-base   = "target:debian-base"
     node-builder  = "target:aptos-node-builder"
     tools-builder = "target:tools-builder"
+    indexer-builder = "target:indexer-builder"
   }
   labels = {
     "org.label-schema.schema-version" = "1.0",
@@ -211,6 +226,15 @@ target "indexer-grpc" {
   target     = "indexer-grpc"
   cache-to   = generate_cache_to("indexer-grpc")
   tags       = generate_tags("indexer-grpc")
+}
+
+target "nft-metadata-crawler" {
+  inherits   = ["_common"]
+  target     = "nft-metadata-crawler"
+  dockerfile = "docker/builder/nft-metadata-crawler.Dockerfile"
+  tags       = generate_tags("nft-metadata-crawler")
+  cache-from = generate_cache_from("nft-metadata-crawler")
+  cache-to   = generate_cache_to("nft-metadata-crawler")
 }
 
 function "generate_cache_from" {

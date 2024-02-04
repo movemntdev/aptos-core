@@ -1,15 +1,16 @@
 /// This module implements the knight token (non-fungible token) including the
 /// functions create the collection and the knight tokens, and the function to feed a
 /// knight token with food tokens to increase the knight's health point.
-module token_objects::knight {
-    use std::option;
-    use std::string::{Self, String};
+module knight::knight {
     use aptos_framework::event;
     use aptos_framework::object::{Self, Object};
     use aptos_token_objects::collection;
     use aptos_token_objects::property_map;
     use aptos_token_objects::token;
-    use token_objects::food::{Self, FoodToken};
+    use std::option;
+    use std::signer;
+    use std::string::{Self, String};
+    use knight::food::{Self, FoodToken};
 
     /// The token does not exist
     const ETOKEN_DOES_NOT_EXIST: u64 = 1;
@@ -46,8 +47,6 @@ module token_objects::knight {
         mutator_ref: token::MutatorRef,
         /// Used to mutate properties
         property_mutator_ref: property_map::MutatorRef,
-        /// Used to emit HealthUpdateEvent
-        health_update_events: event::EventHandle<HealthUpdateEvent>,
         /// the base URI of the token
         base_uri: String,
     }
@@ -58,8 +57,10 @@ module token_objects::knight {
         value: u64,
     }
 
+    #[event]
     /// The health update event
-    struct HealthUpdateEvent has drop, store {
+    struct HealthUpdate has drop, store {
+        token: address,
         old_health: u64,
         new_health: u64,
     }
@@ -80,7 +81,7 @@ module token_objects::knight {
     #[view]
     /// Returns the knight token address by name
     public fun knight_token_address(knight_token_name: String): address {
-        token::create_token_address(&@token_objects, &string::utf8(KNIGHT_COLLECTION_NAME), &knight_token_name)
+        token::create_token_address(&@knight, &string::utf8(KNIGHT_COLLECTION_NAME), &knight_token_name)
     }
 
     /// Mints an knight token. This function mints a new knight token and transfers it to the
@@ -115,8 +116,10 @@ module token_objects::knight {
         let property_mutator_ref = property_map::generate_mutator_ref(&constructor_ref);
 
         // Transfers the token to the `soul_bound_to` address
-        let linear_transfer_ref = object::generate_linear_transfer_ref(&transfer_ref);
-        object::transfer_with_ref(linear_transfer_ref, receiver);
+        if (receiver != signer::address_of(creator)) {
+            let linear_transfer_ref = object::generate_linear_transfer_ref(&transfer_ref);
+            object::transfer_with_ref(linear_transfer_ref, receiver);
+        };
 
         // Initializes the knight health point as 0
         move_to(&object_signer, HealthPoint { value: 1 });
@@ -137,11 +140,10 @@ module token_objects::knight {
             1,
         );
 
-        // Publishes the KnightToken resource with the refs and the event handle for `HealthUpdateEvent`.
+        // Publishes the KnightToken resource with the refs.
         let knight_token = KnightToken {
             mutator_ref,
             property_mutator_ref,
-            health_update_events: object::new_event_handle(&object_signer),
             base_uri
         };
         move_to(&object_signer, knight_token);
@@ -157,7 +159,12 @@ module token_objects::knight {
         feed_food(from, meat_token, to, amount);
     }
 
-    public entry fun feed_food(from: &signer, food: Object<FoodToken>, to: Object<KnightToken>, amount: u64) acquires HealthPoint, KnightToken {
+    public entry fun feed_food(
+        from: &signer,
+        food: Object<FoodToken>,
+        to: Object<KnightToken>,
+        amount: u64
+    ) acquires HealthPoint, KnightToken {
         food::burn_food(from, food, amount);
 
         let restoration_amount = food::restoration_value(food) * amount;
@@ -173,9 +180,9 @@ module token_objects::knight {
         // Updates the health point in the property map.
         property_map::update_typed(property_mutator_ref, &string::utf8(HEALTH_POINT_PROPERTY_NAME), new_health_point);
 
-        event::emit_event(
-            &mut knight.health_update_events,
-            HealthUpdateEvent {
+        event::emit(
+            HealthUpdate {
+                token: knight_token_address,
                 old_health: old_health_point,
                 new_health: new_health_point,
             }
@@ -188,7 +195,11 @@ module token_objects::knight {
             CONDITION_GOOD
         };
         // Updates the condition in the property map.
-        property_map::update_typed(property_mutator_ref, &string::utf8(CONDITION_PROPERTY_NAME), string::utf8(new_condition));
+        property_map::update_typed(
+            property_mutator_ref,
+            &string::utf8(CONDITION_PROPERTY_NAME),
+            string::utf8(new_condition)
+        );
 
         // Updates the token URI based on the new condition.
         let uri = knight.base_uri;
@@ -215,13 +226,10 @@ module token_objects::knight {
         );
     }
 
-    #[test_only]
-    use std::signer;
-
-    #[test(creator = @token_objects, user1 = @0x456)]
+    #[test(creator = @knight, user1 = @0x456)]
     public fun test_knight(creator: &signer, user1: &signer) acquires HealthPoint, KnightToken {
-        // This test assumes that the creator's address is equal to @token_objects.
-        assert!(signer::address_of(creator) == @token_objects, 0);
+        // This test assumes that the creator's address is equal to @knight.
+        assert!(signer::address_of(creator) == @knight, 0);
 
         // ---------------------------------------------------------------------
         // Creator creates the collection, and mints corn and meat tokens in it.

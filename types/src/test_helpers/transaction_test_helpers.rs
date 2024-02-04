@@ -4,20 +4,25 @@
 
 use crate::{
     account_address::AccountAddress,
+    block_executor::config::BlockExecutorConfigFromOnchain,
     chain_id::ChainId,
     transaction::{
-        authenticator::AccountAuthenticator, Module, RawTransaction, RawTransactionWithData,
-        Script, SignedTransaction, Transaction, TransactionPayload,
+        authenticator::AccountAuthenticator,
+        signature_verified_transaction::{
+            into_signature_verified_block, SignatureVerifiedTransaction,
+        },
+        Module, RawTransaction, RawTransactionWithData, Script, SignedTransaction, Transaction,
+        TransactionPayload,
     },
 };
-use aptos_crypto::{ed25519::*, traits::*, HashValue};
+use aptos_crypto::{ed25519::*, traits::*};
 
 const MAX_GAS_AMOUNT: u64 = 1_000_000;
 const TEST_GAS_PRICE: u64 = 100;
 
-// The block gas limit parameter for executor tests
-pub const BLOCK_GAS_LIMIT: Option<u64> = Some(1000);
-// pub const BLOCK_GAS_LIMIT: Option<u64> = None;
+// The block executor onchain config (gas limit parameters) for executor tests
+pub const TEST_BLOCK_EXECUTOR_ONCHAIN_CONFIG: BlockExecutorConfigFromOnchain =
+    BlockExecutorConfigFromOnchain::on_but_large_for_test();
 
 static EMPTY_SCRIPT: &[u8] = include_bytes!("empty_script.mv");
 
@@ -243,12 +248,27 @@ pub fn get_test_txn_with_chain_id(
     SignedTransaction::new(raw_txn, public_key, signature)
 }
 
-pub fn block(
-    mut user_txns: Vec<Transaction>,
-    maybe_block_gas_limit: Option<u64>,
-) -> Vec<Transaction> {
-    if maybe_block_gas_limit.is_none() {
-        user_txns.push(Transaction::StateCheckpoint(HashValue::random()));
-    }
-    user_txns
+pub fn block(user_txns: Vec<Transaction>) -> Vec<SignatureVerifiedTransaction> {
+    into_signature_verified_block(user_txns)
+}
+
+pub fn get_test_raw_transaction(
+    sender: AccountAddress,
+    sequence_number: u64,
+    payload: Option<TransactionPayload>,
+    expiration_timestamp_secs: Option<u64>,
+    gas_unit_price: Option<u64>,
+    max_gas_amount: Option<u64>,
+) -> RawTransaction {
+    RawTransaction::new(
+        sender,
+        sequence_number,
+        payload.unwrap_or_else(|| {
+            TransactionPayload::Script(Script::new(EMPTY_SCRIPT.to_vec(), vec![], vec![]))
+        }),
+        max_gas_amount.unwrap_or(MAX_GAS_AMOUNT),
+        gas_unit_price.unwrap_or(TEST_GAS_PRICE),
+        expiration_timestamp_secs.unwrap_or(expiration_time(10)),
+        ChainId::test(),
+    )
 }

@@ -1,5 +1,5 @@
 
-<a name="0x1_managed_coin"></a>
+<a id="0x1_managed_coin"></a>
 
 # Module `0x1::managed_coin`
 
@@ -15,6 +15,8 @@ By utilizing this current module, a developer can create his own coin and care l
 -  [Function `mint`](#0x1_managed_coin_mint)
 -  [Function `register`](#0x1_managed_coin_register)
 -  [Specification](#@Specification_1)
+    -  [High-level Requirements](#high-level-req)
+    -  [Module-level Specification](#module-level-spec)
     -  [Function `burn`](#@Specification_1_burn)
     -  [Function `initialize`](#@Specification_1_initialize)
     -  [Function `mint`](#@Specification_1_mint)
@@ -29,7 +31,7 @@ By utilizing this current module, a developer can create his own coin and care l
 
 
 
-<a name="0x1_managed_coin_Capabilities"></a>
+<a id="0x1_managed_coin_Capabilities"></a>
 
 ## Resource `Capabilities`
 
@@ -70,12 +72,12 @@ The resource is stored on the account that initialized coin <code>CoinType</code
 
 </details>
 
-<a name="@Constants_0"></a>
+<a id="@Constants_0"></a>
 
 ## Constants
 
 
-<a name="0x1_managed_coin_ENO_CAPABILITIES"></a>
+<a id="0x1_managed_coin_ENO_CAPABILITIES"></a>
 
 Account has no capabilities (burn/mint).
 
@@ -85,7 +87,7 @@ Account has no capabilities (burn/mint).
 
 
 
-<a name="0x1_managed_coin_burn"></a>
+<a id="0x1_managed_coin_burn"></a>
 
 ## Function `burn`
 
@@ -123,7 +125,7 @@ Withdraw an <code>amount</code> of coin <code>CoinType</code> from <code><a href
 
 </details>
 
-<a name="0x1_managed_coin_initialize"></a>
+<a id="0x1_managed_coin_initialize"></a>
 
 ## Function `initialize`
 
@@ -167,7 +169,7 @@ Mint and Burn Capabilities will be stored under <code><a href="account.md#0x1_ac
 
 </details>
 
-<a name="0x1_managed_coin_mint"></a>
+<a id="0x1_managed_coin_mint"></a>
 
 ## Function `mint`
 
@@ -205,7 +207,7 @@ Create new coins <code>CoinType</code> and deposit them into dst_addr's account.
 
 </details>
 
-<a name="0x1_managed_coin_register"></a>
+<a id="0x1_managed_coin_register"></a>
 
 ## Function `register`
 
@@ -231,10 +233,78 @@ Required if user wants to start accepting deposits of <code>CoinType</code> in h
 
 </details>
 
-<a name="@Specification_1"></a>
+<a id="@Specification_1"></a>
 
 ## Specification
 
+
+
+
+<a id="high-level-req"></a>
+
+### High-level Requirements
+
+<table>
+<tr>
+<th>No.</th><th>Requirement</th><th>Criticality</th><th>Implementation</th><th>Enforcement</th>
+</tr>
+
+<tr>
+<td>1</td>
+<td>The initializing account should hold the capabilities to operate the coin.</td>
+<td>Critical</td>
+<td>The capabilities are stored under the initializing account under the Capabilities resource, which is distinct for a distinct type of coin.</td>
+<td>Enforced via <a href="#high-level-req-1">initialize</a>.</td>
+</tr>
+
+<tr>
+<td>2</td>
+<td>A new coin should be properly initialized.</td>
+<td>High</td>
+<td>In the initialize function, a new coin is initialized via the coin module with the specified properties.</td>
+<td>Enforced via <a href="coin.md#high-level-req-2">initialize_internal</a>.</td>
+</tr>
+
+<tr>
+<td>3</td>
+<td>Minting/Burning should only be done by the account who hold the valid capabilities.</td>
+<td>High</td>
+<td>The mint and burn capabilities are moved under the initializing account and retrieved, while minting/burning</td>
+<td>Enforced via: <a href="#high-level-req-3.1">initialize</a>, <a href="#high-level-req-3.2">burn</a>, <a href="#high-level-req-3.3">mint</a>.</td>
+</tr>
+
+<tr>
+<td>4</td>
+<td>If the total supply of coins is being monitored, burn and mint operations will appropriately adjust the total supply.</td>
+<td>High</td>
+<td>The coin::burn and coin::mint functions, when tracking the supply, adjusts the total coin supply accordingly.</td>
+<td>Enforced via <a href="coin.md#high-level-req-4">TotalSupplyNoChange</a>.</td>
+</tr>
+
+<tr>
+<td>5</td>
+<td>Before burning coins, exact amount of coins are withdrawn.</td>
+<td>High</td>
+<td>After utilizing the coin::withdraw function to withdraw coins, they are then burned, and the function ensures the precise return of the initially specified coin amount.</td>
+<td>Enforced via <a href="coin.md#high-level-req-5">burn_from</a>.</td>
+</tr>
+
+<tr>
+<td>6</td>
+<td>Minted coins are deposited to the provided destination address.</td>
+<td>High</td>
+<td>After the coins are minted via coin::mint they are deposited into the coinstore of the destination address.</td>
+<td>Enforced via <a href="#high-level-req-6">mint</a>.</td>
+</tr>
+
+</table>
+
+
+
+
+<a id="module-level-spec"></a>
+
+### Module-level Specification
 
 
 <pre><code><b>pragma</b> verify = <b>true</b>;
@@ -243,7 +313,7 @@ Required if user wants to start accepting deposits of <code>CoinType</code> in h
 
 
 
-<a name="@Specification_1_burn"></a>
+<a id="@Specification_1_burn"></a>
 
 ### Function `burn`
 
@@ -258,24 +328,21 @@ Required if user wants to start accepting deposits of <code>CoinType</code> in h
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="managed_coin.md#0x1_managed_coin_Capabilities">Capabilities</a>&lt;CoinType&gt;&gt;(account_addr);
 <b>let</b> coin_store = <b>global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;&gt;(account_addr);
 <b>let</b> balance = coin_store.<a href="coin.md#0x1_coin">coin</a>.value;
+// This enforces <a id="high-level-req-3.2" href="#high-level-req">high-level requirement 3</a> and <a id="high-level-req-4.1" href="#high-level-req">high-level requirement 4</a>:
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;&gt;(account_addr);
 <b>aborts_if</b> coin_store.frozen;
 <b>aborts_if</b> balance &lt; amount;
 <b>let</b> addr =  <a href="../../aptos-stdlib/doc/type_info.md#0x1_type_info_type_of">type_info::type_of</a>&lt;CoinType&gt;().account_address;
 <b>let</b> maybe_supply = <b>global</b>&lt;<a href="coin.md#0x1_coin_CoinInfo">coin::CoinInfo</a>&lt;CoinType&gt;&gt;(addr).supply;
-<b>aborts_if</b> amount &lt;= 0;
+<b>aborts_if</b> amount == 0;
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="coin.md#0x1_coin_CoinInfo">coin::CoinInfo</a>&lt;CoinType&gt;&gt;(addr);
-<b>aborts_if</b> <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_is_some">option::is_some</a>(maybe_supply) && <a href="optional_aggregator.md#0x1_optional_aggregator_is_parallelizable">optional_aggregator::is_parallelizable</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_borrow">option::borrow</a>(maybe_supply))
-    && <a href="aggregator.md#0x1_aggregator_spec_aggregator_get_val">aggregator::spec_aggregator_get_val</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_borrow">option::borrow</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_borrow">option::borrow</a>(maybe_supply).<a href="aggregator.md#0x1_aggregator">aggregator</a>)) &lt;
-    amount;
-<b>aborts_if</b> <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_is_some">option::is_some</a>(maybe_supply) && !<a href="optional_aggregator.md#0x1_optional_aggregator_is_parallelizable">optional_aggregator::is_parallelizable</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_borrow">option::borrow</a>(maybe_supply))
-    && <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_borrow">option::borrow</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_borrow">option::borrow</a>(maybe_supply).integer).value &lt;
-    amount;
+<b>include</b> <a href="coin.md#0x1_coin_CoinSubAbortsIf">coin::CoinSubAbortsIf</a>&lt;CoinType&gt; { amount:amount };
+<b>ensures</b> <a href="coin.md#0x1_coin_supply">coin::supply</a>&lt;CoinType&gt; == <b>old</b>(<a href="coin.md#0x1_coin_supply">coin::supply</a>&lt;CoinType&gt;) - amount;
 </code></pre>
 
 
 
-<a name="@Specification_1_initialize"></a>
+<a id="@Specification_1_initialize"></a>
 
 ### Function `initialize`
 
@@ -295,12 +362,13 @@ The Capabilities<CoinType> should be under the signer after creating;
 <b>aborts_if</b> !<a href="../../aptos-stdlib/../move-stdlib/doc/string.md#0x1_string_spec_internal_check_utf8">string::spec_internal_check_utf8</a>(name);
 <b>aborts_if</b> !<a href="../../aptos-stdlib/../move-stdlib/doc/string.md#0x1_string_spec_internal_check_utf8">string::spec_internal_check_utf8</a>(symbol);
 <b>aborts_if</b> <b>exists</b>&lt;<a href="managed_coin.md#0x1_managed_coin_Capabilities">Capabilities</a>&lt;CoinType&gt;&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(<a href="account.md#0x1_account">account</a>));
+// This enforces <a id="high-level-req-1" href="#high-level-req">high-level requirement 1</a> and <a id="high-level-req-3.1" href="#high-level-req">high-level requirement 3</a>:
 <b>ensures</b> <b>exists</b>&lt;<a href="managed_coin.md#0x1_managed_coin_Capabilities">Capabilities</a>&lt;CoinType&gt;&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(<a href="account.md#0x1_account">account</a>));
 </code></pre>
 
 
 
-<a name="@Specification_1_mint"></a>
+<a id="@Specification_1_mint"></a>
 
 ### Function `mint`
 
@@ -314,15 +382,22 @@ The <code>dst_addr</code> should not be frozen.
 
 
 <pre><code><b>let</b> account_addr = <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(<a href="account.md#0x1_account">account</a>);
+// This enforces <a id="high-level-req-3.3" href="#high-level-req">high-level requirement 3</a>:
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="managed_coin.md#0x1_managed_coin_Capabilities">Capabilities</a>&lt;CoinType&gt;&gt;(account_addr);
+<b>let</b> addr = <a href="../../aptos-stdlib/doc/type_info.md#0x1_type_info_type_of">type_info::type_of</a>&lt;CoinType&gt;().account_address;
+<b>aborts_if</b> (amount != 0) && !<b>exists</b>&lt;<a href="coin.md#0x1_coin_CoinInfo">coin::CoinInfo</a>&lt;CoinType&gt;&gt;(addr);
 <b>let</b> coin_store = <b>global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;&gt;(dst_addr);
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;&gt;(dst_addr);
 <b>aborts_if</b> coin_store.frozen;
+<b>include</b> <a href="coin.md#0x1_coin_CoinAddAbortsIf">coin::CoinAddAbortsIf</a>&lt;CoinType&gt;;
+<b>ensures</b> <a href="coin.md#0x1_coin_supply">coin::supply</a>&lt;CoinType&gt; == <b>old</b>(<a href="coin.md#0x1_coin_supply">coin::supply</a>&lt;CoinType&gt;) + amount;
+// This enforces <a id="high-level-req-6" href="#high-level-req">high-level requirement 6</a>:
+<b>ensures</b> <b>global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;&gt;(dst_addr).<a href="coin.md#0x1_coin">coin</a>.value == <b>old</b>(<b>global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;&gt;(dst_addr)).<a href="coin.md#0x1_coin">coin</a>.value + amount;
 </code></pre>
 
 
 
-<a name="@Specification_1_register"></a>
+<a id="@Specification_1_register"></a>
 
 ### Function `register`
 
@@ -341,7 +416,8 @@ Updating <code>Account.guid_creation_num</code> will not overflow.
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;&gt;(account_addr) && acc.guid_creation_num + 2 &gt; MAX_U64;
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;&gt;(account_addr) && !<b>exists</b>&lt;<a href="account.md#0x1_account_Account">account::Account</a>&gt;(account_addr);
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;&gt;(account_addr) && !<a href="../../aptos-stdlib/doc/type_info.md#0x1_type_info_spec_is_struct">type_info::spec_is_struct</a>&lt;CoinType&gt;();
+<b>ensures</b> <b>exists</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;CoinType&gt;&gt;(account_addr);
 </code></pre>
 
 
-[move-book]: https://aptos.dev/guides/move-guides/book/SUMMARY
+[move-book]: https://aptos.dev/move/book/SUMMARY

@@ -20,12 +20,17 @@ use getrandom::getrandom;
 use module_generation::generate_module;
 use move_binary_format::{
     access::ModuleAccess,
+    errors::PartialVMError,
     file_format::{
         AbilitySet, CompiledModule, FunctionDefinitionIndex, SignatureToken, StructHandleIndex,
     },
 };
 use move_bytecode_verifier::verify_module;
-use move_compiler::{compiled_unit::AnnotatedCompiledUnit, Compiler};
+use move_compiler::{
+    compiled_unit::AnnotatedCompiledUnit,
+    shared::{known_attributes::KnownAttribute, Flags},
+    Compiler,
+};
 use move_core_types::{
     account_address::AccountAddress,
     effects::{ChangeSet, Op},
@@ -59,6 +64,8 @@ static STORAGE_WITH_MOVE_STDLIB: Lazy<InMemoryStorage> = Lazy::new(|| {
         move_stdlib::move_stdlib_files(),
         vec![],
         move_stdlib::move_stdlib_named_addresses(),
+        Flags::empty().set_skip_attribute_checks(true), // Not much point in checking it here.
+        KnownAttribute::get_all_attribute_names(),
     )
     .build_and_report()
     .unwrap();
@@ -126,7 +133,7 @@ fn execute_function_in_module(
     idx: FunctionDefinitionIndex,
     ty_args: Vec<TypeTag>,
     args: Vec<Vec<u8>>,
-    storage: &impl MoveResolver,
+    storage: &impl MoveResolver<PartialVMError>,
 ) -> Result<(), VMStatus> {
     let module_id = module.self_id();
     let entry_name = {
@@ -145,7 +152,7 @@ fn execute_function_in_module(
         let mut blob = vec![];
         module.serialize(&mut blob).unwrap();
         changeset
-            .add_module_op(module_id.clone(), Op::New(blob))
+            .add_module_op(module_id.clone(), Op::New(blob.into()))
             .unwrap();
         let delta_storage = DeltaStorage::new(storage, &changeset);
         let mut sess = vm.new_session(&delta_storage);

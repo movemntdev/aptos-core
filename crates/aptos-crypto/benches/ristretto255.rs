@@ -45,7 +45,7 @@ fn benchmark_groups(c: &mut Criterion) {
 
     //for n in 1..=128 {
     //for n in [256, 512, 1024, 2048, 4096] {
-    for n in [8192, 16384, 32768] {
+    for n in [2, 8192, 16384, 32768] {
         multi_scalar_mul(&mut group, n);
     }
 
@@ -71,7 +71,7 @@ fn multi_scalar_mul<M: Measurement>(g: &mut BenchmarkGroup<M>, n: usize) {
             |(points, scalars)| {
                 RistrettoPoint::vartime_multiscalar_mul(
                     scalars.iter(),
-                    points.iter().collect::<Vec<&RistrettoPoint>>().into_iter(),
+                    points.iter().collect::<Vec<&RistrettoPoint>>(),
                 )
             },
         )

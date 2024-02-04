@@ -1,16 +1,14 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{assert_success, AptosPackageHooks};
+use crate::{assert_success, build_package, AptosPackageHooks};
 use anyhow::Error;
-use aptos::move_tool::MemberId;
 use aptos_cached_packages::aptos_stdlib;
-use aptos_crypto::{ed25519::Ed25519PrivateKey, PrivateKey, Uniform};
 use aptos_framework::{natives::code::PackageMetadata, BuildOptions, BuiltPackage};
-use aptos_gas::{
+use aptos_gas_profiling::TransactionGasLog;
+use aptos_gas_schedule::{
     AptosGasParameters, FromOnChainGasSchedule, InitialGasSchedule, ToOnChainGasSchedule,
 };
-use aptos_gas_profiling::TransactionGasLog;
 use aptos_language_e2e_tests::{
     account::{Account, AccountData},
     executor::FakeExecutor,
@@ -18,8 +16,9 @@ use aptos_language_e2e_tests::{
 use aptos_types::{
     access_path::AccessPath,
     account_address::AccountAddress,
-    account_config::{AccountResource, CORE_CODE_ADDRESS},
+    account_config::{AccountResource, CoinStoreResource, CORE_CODE_ADDRESS},
     contract_event::ContractEvent,
+    move_utils::MemberId,
     on_chain_config::{FeatureFlag, GasScheduleV2, OnChainConfig},
     state_store::{
         state_key::StateKey,
@@ -30,21 +29,31 @@ use aptos_types::{
         TransactionPayload, TransactionStatus,
     },
 };
+use aptos_vm::{data_cache::AsMoveResolver, AptosVM};
+use claims::assert_ok;
 use move_core_types::{
     language_storage::{StructTag, TypeTag},
     move_resource::MoveStructType,
     value::MoveValue,
 };
 use move_package::package_hooks::register_package_hooks;
+use once_cell::sync::Lazy;
 use project_root::get_project_root;
-use rand::{
-    rngs::{OsRng, StdRng},
-    Rng, SeedableRng,
-};
+use proptest::strategy::{BoxedStrategy, Just, Strategy};
 use serde::{de::DeserializeOwned, Serialize};
-use std::{collections::BTreeMap, path::Path};
+use std::{
+    collections::{BTreeMap, HashMap},
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+};
+
+// Code representing successful transaction, used for run_block_in_parts_and_check
+pub const SUCCESS: u64 = 0;
 
 const DEFAULT_GAS_UNIT_PRICE: u64 = 100;
+
+static CACHED_BUILT_PACKAGES: Lazy<Mutex<HashMap<PathBuf, Arc<anyhow::Result<BuiltPackage>>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 /// A simple test harness for defining Move e2e tests.
 ///
@@ -68,9 +77,19 @@ pub struct MoveHarness {
     txn_seq_no: BTreeMap<AccountAddress, u64>,
 
     default_gas_unit_price: u64,
+    max_gas_per_txn: u64,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum BlockSplit {
+    Whole,
+    SingleTxnPerBlock,
+    SplitIntoThree { first_len: usize, second_len: usize },
 }
 
 impl MoveHarness {
+    const DEFAULT_MAX_GAS_PER_TXN: u64 = 2_000_000;
+
     /// Creates a new harness.
     pub fn new() -> Self {
         register_package_hooks(Box::new(AptosPackageHooks {}));
@@ -78,6 +97,17 @@ impl MoveHarness {
             executor: FakeExecutor::from_head_genesis(),
             txn_seq_no: BTreeMap::default(),
             default_gas_unit_price: DEFAULT_GAS_UNIT_PRICE,
+            max_gas_per_txn: Self::DEFAULT_MAX_GAS_PER_TXN,
+        }
+    }
+
+    pub fn new_with_executor(executor: FakeExecutor) -> Self {
+        register_package_hooks(Box::new(AptosPackageHooks {}));
+        Self {
+            executor,
+            txn_seq_no: BTreeMap::default(),
+            default_gas_unit_price: DEFAULT_GAS_UNIT_PRICE,
+            max_gas_per_txn: Self::DEFAULT_MAX_GAS_PER_TXN,
         }
     }
 
@@ -87,6 +117,7 @@ impl MoveHarness {
             executor: FakeExecutor::from_head_genesis_with_count(count),
             txn_seq_no: BTreeMap::default(),
             default_gas_unit_price: DEFAULT_GAS_UNIT_PRICE,
+            max_gas_per_txn: Self::DEFAULT_MAX_GAS_PER_TXN,
         }
     }
 
@@ -96,6 +127,7 @@ impl MoveHarness {
             executor: FakeExecutor::from_testnet_genesis(),
             txn_seq_no: BTreeMap::default(),
             default_gas_unit_price: DEFAULT_GAS_UNIT_PRICE,
+            max_gas_per_txn: Self::DEFAULT_MAX_GAS_PER_TXN,
         }
     }
 
@@ -114,7 +146,15 @@ impl MoveHarness {
             executor: FakeExecutor::from_mainnet_genesis(),
             txn_seq_no: BTreeMap::default(),
             default_gas_unit_price: DEFAULT_GAS_UNIT_PRICE,
+            max_gas_per_txn: Self::DEFAULT_MAX_GAS_PER_TXN,
         }
+    }
+
+    pub fn store_and_fund_account(&mut self, acc: &Account, balance: u64, seq_num: u64) -> Account {
+        let data = AccountData::with_account(acc.clone(), balance, seq_num);
+        self.executor.add_account_data(&data);
+        self.txn_seq_no.insert(*acc.address(), seq_num);
+        data.account().clone()
     }
 
     /// Creates an account for the given static address. This address needs to be static so
@@ -123,23 +163,13 @@ impl MoveHarness {
         // The below will use the genesis keypair but that should be fine.
         let acc = Account::new_genesis_account(addr);
         // Mint the account 10M Aptos coins (with 8 decimals).
-        let data = AccountData::with_account(acc, 1_000_000_000_000_000, 10);
-        self.executor.add_account_data(&data);
-        self.txn_seq_no.insert(addr, 10);
-        data.account().clone()
+        self.store_and_fund_account(&acc, 1_000_000_000_000_000, 10)
     }
 
     // Creates an account with a randomly generated address and key pair
     pub fn new_account_with_key_pair(&mut self) -> Account {
-        let mut rng = StdRng::from_seed(OsRng.gen());
-
-        let privkey = Ed25519PrivateKey::generate(&mut rng);
-        let pubkey = privkey.public_key();
-        let acc = Account::with_keypair(privkey, pubkey);
-        let data = AccountData::with_account(acc.clone(), 1_000_000_000_000_000, 0);
-        self.executor.add_account_data(&data);
-        self.txn_seq_no.insert(*acc.address(), 0);
-        data.account().clone()
+        // Mint the account 10M Aptos coins (with 8 decimals).
+        self.store_and_fund_account(&Account::new(), 1_000_000_000_000_000, 0)
     }
 
     pub fn new_account_with_balance_and_sequence_number(
@@ -147,15 +177,7 @@ impl MoveHarness {
         balance: u64,
         sequence_number: u64,
     ) -> Account {
-        let mut rng = StdRng::from_seed(OsRng.gen());
-
-        let privkey = Ed25519PrivateKey::generate(&mut rng);
-        let pubkey = privkey.public_key();
-        let acc = Account::with_keypair(privkey, pubkey);
-        let data = AccountData::with_account(acc.clone(), balance, sequence_number);
-        self.executor.add_account_data(&data);
-        self.txn_seq_no.insert(*acc.address(), sequence_number);
-        data.account().clone()
+        self.store_and_fund_account(&Account::new(), balance, sequence_number)
     }
 
     /// Gets the account where the Aptos framework is installed (0x1).
@@ -168,6 +190,7 @@ impl MoveHarness {
         let output = self.executor.execute_transaction(txn);
         if matches!(output.status(), TransactionStatus::Keep(_)) {
             self.executor.apply_write_set(output.write_set());
+            self.executor.append_events(output.events().to_vec());
         }
         output
     }
@@ -201,6 +224,20 @@ impl MoveHarness {
         result
     }
 
+    /// Runs a block of signed transactions. On success, applies the write set.
+    pub fn run_block_get_output(
+        &mut self,
+        txn_block: Vec<SignedTransaction>,
+    ) -> Vec<TransactionOutput> {
+        let result = assert_ok!(self.executor.execute_block(txn_block));
+        for output in &result {
+            if matches!(output.status(), TransactionStatus::Keep(_)) {
+                self.executor.apply_write_set(output.write_set());
+            }
+        }
+        result
+    }
+
     /// Creates a transaction, based on provided payload.
     pub fn create_transaction_payload(
         &mut self,
@@ -214,7 +251,7 @@ impl MoveHarness {
         account
             .transaction()
             .sequence_number(seq_no)
-            .max_gas_amount(2_000_000)
+            .max_gas_amount(self.max_gas_per_txn)
             .gas_unit_price(self.default_gas_unit_price)
             .payload(payload)
             .sign()
@@ -319,19 +356,16 @@ impl MoveHarness {
         output.gas_used()
     }
 
-    /// Creates a transaction which publishes the Move Package found at the given path on behalf
+    /// Creates a transaction which publishes the passed already-built Move Package on behalf
     /// of the given account.
     ///
     /// The passed function allows to manipulate the generated metadata for testing purposes.
-    pub fn create_publish_package(
+    pub fn create_publish_built_package(
         &mut self,
         account: &Account,
-        path: &Path,
-        options: Option<BuildOptions>,
+        package: &BuiltPackage,
         mut patch_metadata: impl FnMut(&mut PackageMetadata),
     ) -> SignedTransaction {
-        let package = BuiltPackage::build(path.to_owned(), options.unwrap_or_default())
-            .expect("building package must succeed");
         let code = package.extract_code();
         let mut metadata = package
             .extract_metadata()
@@ -344,6 +378,52 @@ impl MoveHarness {
                 code,
             ),
         )
+    }
+
+    /// Creates a transaction which publishes the Move Package found at the given path on behalf
+    /// of the given account.
+    ///
+    /// The passed function allows to manipulate the generated metadata for testing purposes.
+    pub fn create_publish_package(
+        &mut self,
+        account: &Account,
+        path: &Path,
+        options: Option<BuildOptions>,
+        patch_metadata: impl FnMut(&mut PackageMetadata),
+    ) -> SignedTransaction {
+        let package = build_package(path.to_owned(), options.unwrap_or_default())
+            .expect("building package must succeed");
+        self.create_publish_built_package(account, &package, patch_metadata)
+    }
+
+    pub fn create_publish_package_cache_building(
+        &mut self,
+        account: &Account,
+        path: &Path,
+        patch_metadata: impl FnMut(&mut PackageMetadata),
+    ) -> SignedTransaction {
+        let package_arc = {
+            let mut cache = CACHED_BUILT_PACKAGES.lock().unwrap();
+
+            Arc::clone(cache.entry(path.to_owned()).or_insert_with(|| {
+                Arc::new(build_package(path.to_owned(), BuildOptions::default()))
+            }))
+        };
+        let package_ref = package_arc
+            .as_ref()
+            .as_ref()
+            .expect("building package must succeed");
+        self.create_publish_built_package(account, package_ref, patch_metadata)
+    }
+
+    /// Runs transaction which publishes the Move Package.
+    pub fn publish_package_cache_building(
+        &mut self,
+        account: &Account,
+        path: &Path,
+    ) -> TransactionStatus {
+        let txn = self.create_publish_package_cache_building(account, path, |_| {});
+        self.run(txn)
     }
 
     /// Runs transaction which publishes the Move Package.
@@ -431,12 +511,17 @@ impl MoveHarness {
             .run_block_with_metadata(proposer, failed_proposer_indices, txns)
     }
 
+    pub fn get_events(&self) -> &[ContractEvent] {
+        self.executor.get_events()
+    }
+
     pub fn read_state_value(&self, state_key: &StateKey) -> Option<StateValue> {
         self.executor.read_state_value(state_key)
     }
 
     pub fn read_state_value_bytes(&self, state_key: &StateKey) -> Option<Vec<u8>> {
-        self.read_state_value(state_key).map(StateValue::into_bytes)
+        self.read_state_value(state_key)
+            .map(|val| val.bytes().to_vec())
     }
 
     /// Reads the raw, serialized data of a resource.
@@ -467,7 +552,7 @@ impl MoveHarness {
         &self,
         addr: &AccountAddress,
         struct_tag: StructTag,
-    ) -> Option<Option<StateValueMetadata>> {
+    ) -> Option<StateValueMetadata> {
         self.read_state_value(&StateKey::access_path(
             AccessPath::resource_access_path(*addr, struct_tag).expect("access path in test"),
         ))
@@ -503,6 +588,12 @@ impl MoveHarness {
         self.read_resource_raw(addr, struct_tag).is_some()
     }
 
+    pub fn read_aptos_balance(&self, addr: &AccountAddress) -> u64 {
+        self.read_resource::<CoinStoreResource>(addr, CoinStoreResource::struct_tag())
+            .unwrap()
+            .coin()
+    }
+
     /// Write the resource data `T`.
     pub fn set_resource<T: Serialize>(
         &mut self,
@@ -531,25 +622,24 @@ impl MoveHarness {
             ]);
     }
 
-    /// Increase maximal transaction size.
-    pub fn increase_transaction_size(&mut self) {
+    fn override_one_gas_param(&mut self, param: &str, param_value: u64) {
         // TODO: The AptosGasParameters::zeros() schedule doesn't do what we want, so
         // explicitly manipulating gas entries. Wasn't obvious from the gas code how to
         // do this differently then below, so perhaps improve this...
         let entries = AptosGasParameters::initial()
-            .to_on_chain_gas_schedule(aptos_gas::LATEST_GAS_FEATURE_VERSION);
+            .to_on_chain_gas_schedule(aptos_gas_schedule::LATEST_GAS_FEATURE_VERSION);
         let entries = entries
             .into_iter()
             .map(|(name, val)| {
-                if name == "txn.max_transaction_size_in_bytes" {
-                    (name, 1000 * 1024)
+                if name == param {
+                    (name, param_value)
                 } else {
                     (name, val)
                 }
             })
             .collect::<Vec<_>>();
         let gas_schedule = GasScheduleV2 {
-            feature_version: aptos_gas::LATEST_GAS_FEATURE_VERSION,
+            feature_version: aptos_gas_schedule::LATEST_GAS_FEATURE_VERSION,
             entries,
         };
         let schedule_bytes = bcs::to_bytes(&gas_schedule).expect("bcs");
@@ -562,6 +652,15 @@ impl MoveHarness {
                     .simple_serialize()
                     .unwrap(),
             ]);
+    }
+
+    pub fn modify_gas_scaling(&mut self, gas_scaling_factor: u64) {
+        self.override_one_gas_param("txn.gas_unit_scaling_factor", gas_scaling_factor);
+    }
+
+    /// Increase maximal transaction size.
+    pub fn increase_transaction_size(&mut self) {
+        self.override_one_gas_param("txn.max_transaction_size_in_bytes", 1000 * 1024);
     }
 
     pub fn sequence_number(&self, addr: &AccountAddress) -> u64 {
@@ -603,6 +702,10 @@ impl MoveHarness {
         );
     }
 
+    pub fn new_vm(&self) -> AptosVM {
+        AptosVM::new(&self.executor.data_store().as_move_resolver())
+    }
+
     pub fn set_default_gas_unit_price(&mut self, gas_unit_price: u64) {
         self.default_gas_unit_price = gas_unit_price;
     }
@@ -615,6 +718,120 @@ impl MoveHarness {
     ) -> Result<Vec<Vec<u8>>, Error> {
         self.executor
             .execute_view_function(fun.module_id, fun.member_id, type_args, arguments)
+    }
+
+    /// Splits transactions into blocks based on passed `block_split``, and
+    /// checks whether each transaction aborted based on passed in
+    /// move abort code (if >0), or succeeded (if ==0).
+    /// `txn_block` is vector of (abort code, transaction) tuples.
+    ///
+    /// This is useful when testing that different block boundaries
+    /// work correctly.
+    pub fn run_block_in_parts_and_check(
+        &mut self,
+        block_split: BlockSplit,
+        txn_block: Vec<(u64, SignedTransaction)>,
+    ) -> Vec<TransactionOutput> {
+        fn run_and_check_block(
+            harness: &mut MoveHarness,
+            txn_block: Vec<(u64, SignedTransaction)>,
+            offset: usize,
+        ) -> Vec<TransactionOutput> {
+            use crate::assert_abort_ref;
+
+            if txn_block.is_empty() {
+                return vec![];
+            }
+            let (errors, txns): (Vec<_>, Vec<_>) = txn_block.into_iter().unzip();
+            println!(
+                "=== Running block from {} with {} tnx ===",
+                offset,
+                txns.len()
+            );
+            let outputs = harness.run_block_get_output(txns);
+            for (idx, (error, output)) in errors.into_iter().zip(outputs.iter()).enumerate() {
+                if error == SUCCESS {
+                    assert_success!(
+                        output.status().clone(),
+                        "Didn't succeed on txn {}, with block starting at {}",
+                        idx + offset,
+                        offset,
+                    );
+                } else {
+                    assert_abort_ref!(
+                        output.status(),
+                        error,
+                        "Error code missmatch on txn {} that should've failed, with block starting at {}. Expected {}, gotten {:?}",
+                        idx + offset,
+                        offset,
+                        error,
+                        output.status(),
+                    );
+                }
+            }
+            outputs
+        }
+
+        match block_split {
+            BlockSplit::Whole => run_and_check_block(self, txn_block, 0),
+            BlockSplit::SingleTxnPerBlock => {
+                let mut outputs = vec![];
+                for (idx, (error, status)) in txn_block.into_iter().enumerate() {
+                    outputs.append(&mut run_and_check_block(self, vec![(error, status)], idx));
+                }
+                outputs
+            },
+            BlockSplit::SplitIntoThree {
+                first_len,
+                second_len,
+            } => {
+                assert!(first_len + second_len <= txn_block.len());
+                let (left, rest) = txn_block.split_at(first_len);
+                let (mid, right) = rest.split_at(second_len);
+
+                let mut outputs = vec![];
+                outputs.append(&mut run_and_check_block(self, left.to_vec(), 0));
+                outputs.append(&mut run_and_check_block(self, mid.to_vec(), first_len));
+                outputs.append(&mut run_and_check_block(
+                    self,
+                    right.to_vec(),
+                    first_len + second_len,
+                ));
+                outputs
+            },
+        }
+    }
+
+    pub fn set_max_gas_per_txn(&mut self, max_gas_per_txn: u64) {
+        self.max_gas_per_txn = max_gas_per_txn
+    }
+}
+
+impl BlockSplit {
+    pub fn arbitrary(len: usize) -> BoxedStrategy<BlockSplit> {
+        // skip last choice if lenght is not big enough for it.
+        (0..(if len > 1 { 3 } else { 2 }))
+            .prop_flat_map(move |enum_type| {
+                // making running a test with a full block likely
+                match enum_type {
+                    0 => Just(BlockSplit::Whole).boxed(),
+                    1 => Just(BlockSplit::SingleTxnPerBlock).boxed(),
+                    _ => {
+                        // First is non-empty, and not the whole block here: [1, len)
+                        (1usize..len)
+                            .prop_flat_map(move |first| {
+                                // Second is non-empty, but can finish the block: [1, len - first]
+                                (Just(first), 1usize..len - first + 1)
+                            })
+                            .prop_map(|(first, second)| BlockSplit::SplitIntoThree {
+                                first_len: first,
+                                second_len: second,
+                            })
+                            .boxed()
+                    },
+                }
+            })
+            .boxed()
     }
 }
 
@@ -654,16 +871,55 @@ impl MoveHarness {
 /// Helper to assert transaction is successful
 #[macro_export]
 macro_rules! assert_success {
-    ($s:expr) => {{
-        use aptos_types::transaction::*;
-        assert_eq!($s, TransactionStatus::Keep(ExecutionStatus::Success))
+    ($s:expr $(,)?) => {{
+        assert_eq!($s, aptos_types::transaction::TransactionStatus::Keep(
+            aptos_types::transaction::ExecutionStatus::Success))
+    }};
+    ($s:expr, $($arg:tt)+) => {{
+        assert_eq!(
+            $s,
+            aptos_types::transaction::TransactionStatus::Keep(
+                aptos_types::transaction::ExecutionStatus::Success),
+            $($arg)+
+        )
+    }};
+}
+
+/// Helper to assert transaction resulted in OUT_OF_GAS error
+#[macro_export]
+macro_rules! assert_out_of_gas {
+    ($s:expr $(,)?) => {{
+        assert_eq!($s, aptos_types::transaction::TransactionStatus::Keep(
+            aptos_types::transaction::ExecutionStatus::OutOfGas))
+    }};
+    ($s:expr, $($arg:tt)+) => {{
+        assert_eq!(
+            $s,
+            aptos_types::transaction::TransactionStatus::Keep(
+                aptos_types::transaction::ExecutionStatus::OutOfGas),
+            $($arg)+
+        )
     }};
 }
 
 /// Helper to assert transaction aborts.
+/// TODO merge/replace with assert_abort_ref
 #[macro_export]
 macro_rules! assert_abort {
-    ($s:expr, $c:pat) => {{
+    // identity needs to be before pattern (both with and without message),
+    // as if we pass variable - it matches the pattern arm, but value is not used, but overriden.
+    // Opposite order and test_asserts_variable_used / test_asserts_variable_used_with_message tests
+    // would fail
+    ($s:expr, $c:ident $(,)?) => {{
+        assert!(matches!(
+            $s,
+            aptos_types::transaction::TransactionStatus::Keep(
+                aptos_types::transaction::ExecutionStatus::MoveAbort { code, .. }
+            )
+            if code == $c,
+        ));
+    }};
+    ($s:expr, $c:pat $(,)?) => {{
         assert!(matches!(
             $s,
             aptos_types::transaction::TransactionStatus::Keep(
@@ -671,23 +927,100 @@ macro_rules! assert_abort {
             ),
         ));
     }};
+    ($s:expr, $c:ident, $($arg:tt)+) => {{
+        assert!(
+            matches!(
+                $s,
+                aptos_types::transaction::TransactionStatus::Keep(
+                    aptos_types::transaction::ExecutionStatus::MoveAbort { code, .. }
+                )
+                if code == $c,
+            ),
+            $($arg)+
+        );
+    }};
+    ($s:expr, $c:pat, $($arg:tt)+) => {{
+        assert!(
+            matches!(
+                $s,
+                aptos_types::transaction::TransactionStatus::Keep(
+                    aptos_types::transaction::ExecutionStatus::MoveAbort { code: $c, .. }
+                ),
+            ),
+            $($arg)+
+        );
+    }};
+}
+
+/// Helper to assert transaction aborts.
+/// Takes reference, as then we can get a better error message.
+#[macro_export]
+macro_rules! assert_abort_ref {
+    // identity needs to be before pattern (both with and without message),
+    // as if we pass variable - it matches the pattern arm, but value is not used, but overriden.
+    // Opposite order and test_asserts_variable_used / test_asserts_variable_used_with_message tests
+    // would fail
+    ($s:expr, $c:ident $(,)?) => {{
+        claims::assert_matches!(
+            $s,
+            &aptos_types::transaction::TransactionStatus::Keep(
+                aptos_types::transaction::ExecutionStatus::MoveAbort { code, .. }
+            )
+            if code == $c,
+        );
+    }};
+    ($s:expr, $c:pat $(,)?) => {{
+        claims::assert_matches!(
+            $s,
+            &aptos_types::transaction::TransactionStatus::Keep(
+                aptos_types::transaction::ExecutionStatus::MoveAbort { code: $c, .. }
+            )
+        );
+    }};
+    ($s:expr, $c:ident, $($arg:tt)+) => {{
+        claims::assert_matches!(
+            $s,
+            &aptos_types::transaction::TransactionStatus::Keep(
+                aptos_types::transaction::ExecutionStatus::MoveAbort { code, .. }
+            )
+            if code == $c,
+            $($arg)+
+        );
+    }};
+    ($s:expr, $c:pat, $($arg:tt)+) => {{
+        claims::assert_matches!(
+            $s,
+            &aptos_types::transaction::TransactionStatus::Keep(
+                aptos_types::transaction::ExecutionStatus::MoveAbort { code: $c, .. }
+            ),
+            $($arg)+
+        );
+    }};
 }
 
 /// Helper to assert vm status code.
 #[macro_export]
 macro_rules! assert_vm_status {
-    ($s:expr, $c:expr) => {{
+    ($s:expr, $c:expr $(,)?) => {{
         use aptos_types::transaction::*;
         assert_eq!(
             $s,
             TransactionStatus::Keep(ExecutionStatus::MiscellaneousError(Some($c)))
         );
     }};
+    ($s:expr, $c:expr, $($arg:tt)+) => {{
+        use aptos_types::transaction::*;
+        assert_eq!(
+            $s,
+            TransactionStatus::Keep(ExecutionStatus::MiscellaneousError(Some($c))),
+            $($arg)+,
+        );
+    }};
 }
 
 #[macro_export]
 macro_rules! assert_move_abort {
-    ($s:expr, $c:ident) => {{
+    ($s:expr, $c:ident $(,)?) => {{
         use aptos_types::transaction::*;
         assert!(match $s {
             TransactionStatus::Keep(ExecutionStatus::MoveAbort {
@@ -698,4 +1031,81 @@ macro_rules! assert_move_abort {
             _ => false,
         });
     }};
+    ($s:expr, $c:ident, $($arg:tt)+) => {{
+        use aptos_types::transaction::*;
+        assert!(
+            match $s {
+                TransactionStatus::Keep(ExecutionStatus::MoveAbort {
+                    location: _,
+                    code: _,
+                    info,
+                }) => info == $c,
+                _ => false,
+            },
+            $($arg)+
+        );
+    }};
+}
+
+#[cfg(test)]
+mod tests {
+    use aptos_types::transaction::{ExecutionStatus, TransactionStatus};
+    use move_core_types::vm_status::AbortLocation;
+
+    #[test]
+    fn test_asserts() {
+        let success = TransactionStatus::Keep(ExecutionStatus::Success);
+
+        let abort_13 = TransactionStatus::Keep(ExecutionStatus::MoveAbort {
+            code: 13,
+            location: AbortLocation::Script,
+            info: None,
+        });
+
+        assert_success!(success);
+        assert_success!(success,);
+        assert_success!(success, "success");
+        assert_success!(success, "message {}", 0);
+        assert_success!(success, "message {}", 0,);
+
+        let x = 13;
+        assert_abort!(abort_13, 13);
+        assert_abort!(abort_13, 13,);
+        assert_abort!(abort_13, x);
+        assert_abort!(abort_13, _);
+        assert_abort!(abort_13, 13 | 14);
+        assert_abort!(abort_13, 13, "abort");
+        assert_abort!(abort_13, 13, "abort {}", 0);
+        assert_abort!(abort_13, x, "abort");
+        assert_abort!(abort_13, x, "abort {}", 0);
+        assert_abort!(abort_13, _, "abort");
+        assert_abort!(abort_13, 13 | 14, "abort");
+        assert_abort!(abort_13, 13 | 14, "abort",);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_asserts_variable_used() {
+        let abort_13 = TransactionStatus::Keep(ExecutionStatus::MoveAbort {
+            code: 13,
+            location: AbortLocation::Script,
+            info: None,
+        });
+
+        let x = 14;
+        assert_abort!(abort_13, x);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_asserts_variable_used_with_message() {
+        let abort_13 = TransactionStatus::Keep(ExecutionStatus::MoveAbort {
+            code: 13,
+            location: AbortLocation::Script,
+            info: None,
+        });
+
+        let x = 14;
+        assert_abort!(abort_13, x, "abort");
+    }
 }

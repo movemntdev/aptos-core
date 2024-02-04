@@ -1,5 +1,5 @@
 
-<a name="@Move_Stdlib_Modules_0"></a>
+<a id="@Move_Stdlib_Modules_0"></a>
 
 # Move Stdlib Modules
 
@@ -8,7 +8,7 @@ This is the reference documentation of the Move standard library.
 For on overview of the Move language, see the [Move Book][move-book].
 
 
-<a name="@Index_1"></a>
+<a id="@Index_1"></a>
 
 ## Index
 
@@ -26,4 +26,4 @@ For on overview of the Move language, see the [Move Book][move-book].
 -  [`0x1::vector`](vector.md#0x1_vector)
 
 
-[move-book]: https://aptos.dev/guides/move-guides/book/SUMMARY
+[move-book]: https://aptos.dev/move/book/SUMMARY

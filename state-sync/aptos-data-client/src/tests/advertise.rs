@@ -2,101 +2,261 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
+    client::AptosDataClient,
     error::Error,
     interface::AptosDataClientInterface,
     peer_states::calculate_optimal_chunk_sizes,
+    poller,
+    priority::PeerPriority,
     tests::{mock::MockNetwork, utils},
 };
-use aptos_config::config::AptosDataClientConfig;
-use aptos_network::protocols::wire::handshake::v1::ProtocolId;
+use aptos_config::{config::AptosDataClientConfig, network_id::PeerNetworkId};
 use aptos_storage_service_types::{
     requests::{DataRequest, TransactionsWithProofRequest},
-    responses::{DataResponse, StorageServiceResponse},
+    responses::{CompleteDataRange, DataResponse, StorageServerSummary, StorageServiceResponse},
 };
-use aptos_types::transaction::TransactionListWithProof;
+use aptos_types::transaction::{TransactionListWithProof, Version};
 use claims::assert_matches;
-use std::time::Duration;
 
 #[tokio::test]
 async fn request_works_only_when_data_available() {
-    ::aptos_logger::Logger::init_for_testing();
-    let (mut mock_network, mock_time, client, poller) = MockNetwork::new(None, None, None);
+    // Ensure the properties hold for all peer priorities
+    for peer_priority in PeerPriority::get_all_ordered_priorities() {
+        // Create a base config for a validator
+        let base_config = utils::create_validator_base_config();
 
-    tokio::spawn(poller.start_poller());
+        // Create the mock network, mock time, client and poller
+        let data_client_config = AptosDataClientConfig::default();
+        let (mut mock_network, mut mock_time, client, poller) =
+            MockNetwork::new(Some(base_config), Some(data_client_config), None);
 
-    // This request should fail because no peers are currently connected
-    let request_timeout = client.get_response_timeout_ms();
-    let error = client
-        .get_transactions_with_proof(100, 50, 100, false, request_timeout)
-        .await
-        .unwrap_err();
-    assert_matches!(error, Error::DataIsUnavailable(_));
+        // Start the poller
+        tokio::spawn(poller::start_poller(poller));
 
-    // Add a connected peer
-    let expected_peer = mock_network.add_peer(true);
+        // Request transactions and verify the request fails (no peers are connected)
+        fetch_transactions_and_verify_failure(&data_client_config, &client, 100, true).await;
 
-    // Requesting some txns now will still fail since no peers are advertising
-    // availability for the desired range.
-    let error = client
-        .get_transactions_with_proof(100, 50, 100, false, request_timeout)
-        .await
-        .unwrap_err();
-    assert_matches!(error, Error::DataIsUnavailable(_));
+        // Add a connected peer
+        let (peer, network_id) = utils::add_peer_to_network(peer_priority, &mut mock_network);
 
-    // Advance time so the poller sends a data summary request
-    tokio::task::yield_now().await;
-    mock_time.advance_async(Duration::from_millis(1_000)).await;
+        // Verify the peer's state has not been updated
+        let peer_to_states = client.get_peer_states().get_peer_to_states();
+        assert!(peer_to_states.is_empty());
 
-    // Receive their request and fulfill it
-    let network_request = mock_network.next_request().await.unwrap();
-    assert_eq!(network_request.peer_network_id, expected_peer);
-    assert_eq!(network_request.protocol_id, ProtocolId::StorageServiceRpc);
-    assert!(network_request.storage_service_request.use_compression);
-    assert_matches!(
-        network_request.storage_service_request.data_request,
-        DataRequest::GetStorageServerSummary
-    );
+        // Request transactions and verify the request fails (no peers are advertising data)
+        fetch_transactions_and_verify_failure(&data_client_config, &client, 100, false).await;
 
-    let summary = utils::create_storage_summary(200);
-    let data_response = DataResponse::StorageServerSummary(summary);
-    network_request
-        .response_sender
-        .send(Ok(StorageServiceResponse::new(data_response, true).unwrap()));
+        // Advance time so the poller sends a data summary request
+        utils::advance_polling_timer(&mut mock_time, &data_client_config).await;
 
-    // Let the poller finish processing the response
-    tokio::task::yield_now().await;
+        // Get and verify the received network request
+        let network_request = utils::get_network_request(&mut mock_network, network_id).await;
+        assert_eq!(network_request.peer_network_id, peer);
 
-    // Handle the client's transactions request
-    tokio::spawn(async move {
-        let network_request = mock_network.next_request().await.unwrap();
+        // Handle the request
+        let storage_summary = utils::create_storage_summary(200);
+        utils::handle_storage_summary_request(network_request, storage_summary.clone());
 
-        assert_eq!(network_request.peer_network_id, expected_peer);
-        assert_eq!(network_request.protocol_id, ProtocolId::StorageServiceRpc);
-        assert!(network_request.storage_service_request.use_compression);
-        assert_matches!(
-            network_request.storage_service_request.data_request,
-            DataRequest::GetTransactionsWithProof(TransactionsWithProofRequest {
-                start_version: 50,
-                end_version: 100,
-                proof_version: 100,
-                include_events: false,
-            })
-        );
+        // Let the poller finish processing the response
+        tokio::task::yield_now().await;
 
-        let data_response =
-            DataResponse::TransactionsWithProof(TransactionListWithProof::new_empty());
+        // Handle the client's transaction request
+        tokio::spawn(async move {
+            // Verify the received network request
+            let network_request = utils::get_network_request(&mut mock_network, network_id).await;
+            assert_matches!(
+                network_request.storage_service_request.data_request,
+                DataRequest::GetTransactionsWithProof(TransactionsWithProofRequest {
+                    start_version: 0,
+                    end_version: 100,
+                    proof_version: 100,
+                    include_events: false,
+                })
+            );
+
+            // Fulfill the request
+            utils::handle_transactions_request(network_request, true);
+        });
+
+        // Verify the peer's state has been updated
+        let peer_state = peer_to_states.get(&peer).unwrap().value().clone();
+        let peer_storage_summary = peer_state
+            .get_storage_summary_if_not_ignored()
+            .unwrap()
+            .clone();
+        assert_eq!(peer_storage_summary, storage_summary);
+
+        // Request transactions and verify the request succeeds
+        let request_timeout = data_client_config.response_timeout_ms;
+        let response = client
+            .get_transactions_with_proof(100, 0, 100, false, request_timeout)
+            .await
+            .unwrap();
+        assert_eq!(response.payload, TransactionListWithProof::new_empty());
+    }
+}
+
+#[tokio::test]
+async fn update_global_data_summary() {
+    // Create a base config for a validator
+    let base_config = utils::create_validator_base_config();
+
+    // Create the mock network, mock time, client and poller
+    let data_client_config = AptosDataClientConfig::default();
+    let (mut mock_network, mut mock_time, client, poller) =
+        MockNetwork::new(Some(base_config), Some(data_client_config), None);
+
+    // Start the poller
+    tokio::spawn(poller::start_poller(poller));
+
+    // Verify the global data summary is empty
+    let global_data_summary = client.get_global_data_summary();
+    assert!(global_data_summary.is_empty());
+
+    // Add several peers of different priorities and advertise data for them
+    let mut advertised_peer_versions = vec![];
+    for (index, peer_priority) in PeerPriority::get_all_ordered_priorities()
+        .iter()
+        .enumerate()
+    {
+        // Add the peer
+        let (_, network_id) = utils::add_peer_to_network(*peer_priority, &mut mock_network);
+
+        // Advance time so the poller sends a data summary request
+        utils::advance_polling_timer(&mut mock_time, &data_client_config).await;
+
+        // Create the peer's storage summary
+        let peer_version = ((index + 1) * 10000) as u64;
+        let storage_summary = utils::create_storage_summary(peer_version);
+        advertised_peer_versions.push(peer_version);
+
+        // Handle the peer's data summary request
+        let network_request = utils::get_network_request(&mut mock_network, network_id).await;
+        let data_response = DataResponse::StorageServerSummary(storage_summary.clone());
         network_request
             .response_sender
             .send(Ok(StorageServiceResponse::new(data_response, true).unwrap()));
-    });
 
-    // The client's request should succeed since a peer finally has advertised
-    // data for this range.
-    let response = client
-        .get_transactions_with_proof(100, 50, 100, false, request_timeout)
-        .await
-        .unwrap();
-    assert_eq!(response.payload, TransactionListWithProof::new_empty());
+        // Advance time so the poller updates the global data summary
+        utils::advance_polling_timer(&mut mock_time, &data_client_config).await;
+
+        // Verify that the advertised data ranges are valid
+        verify_advertised_transaction_data(&client, peer_version, index + 1, true);
+    }
+
+    // Verify that the advertised data ranges are all present
+    for (index, peer_version) in advertised_peer_versions.iter().enumerate() {
+        let is_highest_version = index == advertised_peer_versions.len() - 1;
+        verify_advertised_transaction_data(
+            &client,
+            *peer_version,
+            advertised_peer_versions.len(),
+            is_highest_version,
+        );
+    }
+}
+
+#[tokio::test]
+async fn update_peer_states() {
+    // Create a base config for a validator
+    let base_config = utils::create_validator_base_config();
+
+    // Create the mock network, mock time, client and poller
+    let data_client_config = AptosDataClientConfig::default();
+    let (mut mock_network, mut mock_time, client, poller) =
+        MockNetwork::new(Some(base_config), Some(data_client_config), None);
+
+    // Start the poller
+    tokio::spawn(poller::start_poller(poller));
+
+    // Add a high priority peer
+    let (high_priority_peer, high_priority_network) =
+        utils::add_peer_to_network(PeerPriority::HighPriority, &mut mock_network);
+
+    // Verify that we have no peer states
+    let peer_to_states = client.get_peer_states().get_peer_to_states();
+    assert!(peer_to_states.is_empty());
+
+    // Advance time so the poller sends a data summary request for the peer
+    utils::advance_polling_timer(&mut mock_time, &data_client_config).await;
+
+    // Handle the high priority peer's data summary request
+    let network_request =
+        utils::get_network_request(&mut mock_network, high_priority_network).await;
+    let high_priority_storage_summary = utils::create_storage_summary(1111);
+    utils::handle_storage_summary_request(network_request, high_priority_storage_summary.clone());
+
+    // Let the poller finish processing the responses
+    tokio::task::yield_now().await;
+
+    // Verify that the high priority peer's state has been updated
+    verify_peer_state(&client, high_priority_peer, high_priority_storage_summary);
+
+    // Add a medium priority peer
+    let (medium_priority_peer, medium_priority_network) =
+        utils::add_peer_to_network(PeerPriority::MediumPriority, &mut mock_network);
+
+    // Advance time so the poller sends a data summary request for both peers
+    utils::advance_polling_timer(&mut mock_time, &data_client_config).await;
+
+    // Handle the high priority peer's data summary request
+    let network_request =
+        utils::get_network_request(&mut mock_network, high_priority_network).await;
+    let high_priority_storage_summary = utils::create_storage_summary(2222);
+    utils::handle_storage_summary_request(network_request, high_priority_storage_summary.clone());
+
+    // Handle the medium peer's data summary request
+    let network_request =
+        utils::get_network_request(&mut mock_network, medium_priority_network).await;
+    let medium_priority_storage_summary = utils::create_storage_summary(3333);
+    utils::handle_storage_summary_request(network_request, medium_priority_storage_summary.clone());
+
+    // Let the poller finish processing the responses
+    tokio::task::yield_now().await;
+
+    // Verify that the peer's states have been set
+    verify_peer_state(&client, high_priority_peer, high_priority_storage_summary);
+    verify_peer_state(
+        &client,
+        medium_priority_peer,
+        medium_priority_storage_summary,
+    );
+
+    // Add a low priority peer
+    let (low_priority_peer, low_priority_network) =
+        utils::add_peer_to_network(PeerPriority::LowPriority, &mut mock_network);
+
+    // Advance time so the poller sends a data summary request for all peers
+    utils::advance_polling_timer(&mut mock_time, &data_client_config).await;
+
+    // Handle the high priority peer's data summary request
+    let network_request =
+        utils::get_network_request(&mut mock_network, high_priority_network).await;
+    let high_priority_storage_summary = utils::create_storage_summary(4444);
+    utils::handle_storage_summary_request(network_request, high_priority_storage_summary.clone());
+
+    // Handle the medium peer's data summary request
+    let network_request =
+        utils::get_network_request(&mut mock_network, medium_priority_network).await;
+    let medium_priority_storage_summary = utils::create_storage_summary(5555);
+    utils::handle_storage_summary_request(network_request, medium_priority_storage_summary.clone());
+
+    // Handle the low priority peer's data summary request
+    let network_request = utils::get_network_request(&mut mock_network, low_priority_network).await;
+    let low_priority_storage_summary = utils::create_storage_summary(6666);
+    utils::handle_storage_summary_request(network_request, low_priority_storage_summary.clone());
+
+    // Let the poller finish processing the responses
+    tokio::task::yield_now().await;
+
+    // Verify that the peer's states have been set
+    verify_peer_state(&client, high_priority_peer, high_priority_storage_summary);
+    verify_peer_state(
+        &client,
+        medium_priority_peer,
+        medium_priority_storage_summary,
+    );
+    verify_peer_state(&client, low_priority_peer, low_priority_storage_summary);
 }
 
 #[tokio::test]
@@ -156,4 +316,76 @@ async fn optimal_chunk_size_calculations() {
         optimal_chunk_sizes.transaction_chunk_size
     );
     assert_eq!(400, optimal_chunk_sizes.transaction_output_chunk_size);
+}
+
+/// Requests transactions up to the specified version and verifies the request fails
+async fn fetch_transactions_and_verify_failure(
+    data_client_config: &AptosDataClientConfig,
+    data_client: &AptosDataClient,
+    version: u64,
+    no_connected_peers: bool,
+) {
+    // Request the transactions with proof
+    let request_timeout = data_client_config.response_timeout_ms;
+    let error = data_client
+        .get_transactions_with_proof(version, 0, version, false, request_timeout)
+        .await
+        .unwrap_err();
+
+    // Verify the error is correct
+    if no_connected_peers {
+        assert_matches!(error, Error::NoConnectedPeers(_));
+    } else {
+        assert_matches!(error, Error::DataIsUnavailable(_));
+    }
+}
+
+/// Verifies that the advertised transaction data is valid
+fn verify_advertised_transaction_data(
+    client: &AptosDataClient,
+    advertised_version: Version,
+    expected_num_advertisements: usize,
+    is_highest_version: bool,
+) {
+    // Get the advertised data
+    let global_data_summary = client.get_global_data_summary();
+    let advertised_data = global_data_summary.advertised_data;
+
+    // Verify the number of advertised entries
+    assert_eq!(
+        advertised_data.transactions.len(),
+        expected_num_advertisements
+    );
+
+    // Verify that the advertised transaction data contains an entry for the given version
+    assert!(advertised_data
+        .transactions
+        .contains(&CompleteDataRange::new(0, advertised_version).unwrap()));
+
+    // Verify that the highest synced ledger info is valid (if this is the highest advertised version)
+    if is_highest_version {
+        let highest_synced_ledger_info = advertised_data.highest_synced_ledger_info().unwrap();
+        assert_eq!(
+            highest_synced_ledger_info.ledger_info().version(),
+            advertised_version
+        );
+    }
+}
+
+/// Verifies that the peer's state is valid (i.e., the storage summary is correct)
+fn verify_peer_state(
+    client: &AptosDataClient,
+    peer: PeerNetworkId,
+    expected_storage_summary: StorageServerSummary,
+) {
+    // Get the peer's state
+    let peer_to_states = client.get_peer_states().get_peer_to_states();
+    let peer_state = peer_to_states.get(&peer).unwrap().value().clone();
+
+    // Verify that the peer's storage summary is valid
+    let peer_storage_summary = peer_state
+        .get_storage_summary_if_not_ignored()
+        .unwrap()
+        .clone();
+    assert_eq!(peer_storage_summary, expected_storage_summary);
 }

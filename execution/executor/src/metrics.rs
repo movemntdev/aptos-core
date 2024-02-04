@@ -79,6 +79,29 @@ pub static APTOS_EXECUTOR_EXECUTE_BLOCK_SECONDS: Lazy<Histogram> = Lazy::new(|| 
     .unwrap()
 });
 
+pub static APTOS_EXECUTOR_LEDGER_UPDATE_SECONDS: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(
+        // metric name
+        "aptos_executor_ledger_update_seconds",
+        // metric description
+        "The total time spent in ledger update in the block executor.",
+        exponential_buckets(/*start=*/ 1e-3, /*factor=*/ 2.0, /*count=*/ 20).unwrap(),
+    )
+    .unwrap()
+});
+
+pub static APTOS_CHUNK_EXECUTOR_OTHER_SECONDS: Lazy<HistogramVec> = Lazy::new(|| {
+    register_histogram_vec!(
+        // metric name
+        "aptos_chunk_executor_other_seconds",
+        // metric description
+        "The time spent in seconds of others in chunk executor.",
+        &["name"],
+        exponential_buckets(/*start=*/ 1e-3, /*factor=*/ 2.0, /*count=*/ 20).unwrap(),
+    )
+    .unwrap()
+});
+
 pub static APTOS_EXECUTOR_VM_EXECUTE_CHUNK_SECONDS: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!(
         // metric name
@@ -184,6 +207,15 @@ pub static APTOS_PROCESSED_USER_TRANSACTIONS_CORE_EVENTS: Lazy<IntCounterVec> = 
         "aptos_processed_user_transactions_core_events",
         "Counter of processed EntryFunction user transaction for core address by method",
         &["is_detailed", "process", "account", "creation_number"]
+    )
+    .unwrap()
+});
+
+pub static APTOS_PROCESSED_TXNS_OUTPUT_SIZE: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(
+        "aptos_processed_txns_output_size",
+        "Histogram of transaction outputs",
+        exponential_buckets(/*start=*/ 1.0, /*factor=*/ 2.0, /*count=*/ 25).unwrap()
     )
     .unwrap()
 });

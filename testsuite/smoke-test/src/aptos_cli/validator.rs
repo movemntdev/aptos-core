@@ -1,7 +1,10 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{smoke_test_environment::SwarmBuilder, test_utils::MAX_CATCH_UP_WAIT_SECS};
+use crate::{
+    smoke_test_environment::SwarmBuilder,
+    test_utils::{create_and_fund_account, MAX_CATCH_UP_WAIT_SECS},
+};
 use aptos::{
     account::create::DEFAULT_FUNDED_COINS,
     common::types::TransactionSummary,
@@ -12,27 +15,36 @@ use aptos::{
     test::{CliTestFramework, ValidatorPerformance},
 };
 use aptos_bitvec::BitVec;
+use aptos_cached_packages::aptos_stdlib;
 use aptos_crypto::{bls12381, ed25519::Ed25519PrivateKey, x25519, ValidCryptoMaterialStringExt};
-use aptos_forge::{reconfig, LocalSwarm, NodeExt, Swarm, SwarmExt};
+use aptos_forge::{reconfig, wait_for_all_nodes_to_catchup, LocalSwarm, NodeExt, Swarm, SwarmExt};
 use aptos_genesis::config::HostAndPort;
 use aptos_keygen::KeyGen;
+use aptos_logger::info;
 use aptos_rest_client::{Client, State};
 use aptos_types::{
     account_config::CORE_CODE_ADDRESS,
     network_address::DnsName,
     on_chain_config::{
-        ConsensusConfigV1, LeaderReputationType, OnChainConsensusConfig, ProposerAndVoterConfig,
-        ProposerElectionType, ValidatorSet,
+        ConsensusConfigV1, ExecutionConfigV1, LeaderReputationType, OnChainConsensusConfig,
+        OnChainExecutionConfig, ProposerAndVoterConfig, ProposerElectionType,
+        TransactionShufflerType, ValidatorSet,
     },
     PeerId,
 };
-use std::{collections::HashMap, convert::TryFrom, fmt::Write, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    convert::TryFrom,
+    fmt::Write,
+    sync::Arc,
+    time::Duration,
+};
 
 #[tokio::test]
 async fn test_analyze_validators() {
     let (mut swarm, cli, _faucet) = SwarmBuilder::new_local(1)
         .with_aptos()
-        .with_init_config(Arc::new(|_i, _conf, genesis_stake_amount| {
+        .with_init_genesis_stake(Arc::new(|_i, genesis_stake_amount| {
             *genesis_stake_amount = 100000;
         }))
         .build_with_cli(0)
@@ -172,8 +184,8 @@ async fn check_vote_to_elected(swarm: &mut LocalSwarm) -> (Option<u64>, Option<u
     (first_vote, first_elected)
 }
 
-#[ignore]
 #[tokio::test]
+#[ignore]
 async fn test_onchain_config_change() {
     let (mut swarm, mut cli, _faucet) = SwarmBuilder::new_local(4)
         .with_init_config(Arc::new(|_, conf, _| {
@@ -186,6 +198,8 @@ async fn test_onchain_config_change() {
             let inner = match genesis_config.consensus_config.clone() {
                 OnChainConsensusConfig::V1(inner) => inner,
                 OnChainConsensusConfig::V2(inner) => inner,
+                OnChainConsensusConfig::V3(inner) => inner.main,
+                _ => unimplemented!(),
             };
 
             let leader_reputation_type =
@@ -243,6 +257,7 @@ async fn test_onchain_config_change() {
     let inner = match current_consensus_config {
         OnChainConsensusConfig::V1(inner) => inner,
         OnChainConsensusConfig::V2(inner) => inner,
+        _ => unimplemented!(),
     };
     let leader_reputation_type =
         if let ProposerElectionType::LeaderReputation(leader_reputation_type) =
@@ -340,6 +355,171 @@ async fn test_onchain_config_change() {
     assert!(first_elected_new.unwrap() < 40);
 }
 
+#[tokio::test]
+#[ignore]
+// This test is ignored because it is very long running
+async fn test_onchain_shuffling_change() {
+    let (mut swarm, mut cli, _faucet) = SwarmBuilder::new_local(2)
+        .with_aptos()
+        .build_with_cli(0)
+        .await;
+
+    let root_cli_index = cli.add_account_with_address_to_cli(
+        swarm.root_key(),
+        swarm.chain_info().root_account().address(),
+    );
+
+    let rest_client = swarm.validators().next().unwrap().rest_client();
+
+    let current_execution_config: OnChainExecutionConfig = bcs::from_bytes(
+        &rest_client
+            .get_account_resource_bcs::<Vec<u8>>(
+                CORE_CODE_ADDRESS,
+                "0x1::execution_config::ExecutionConfig",
+            )
+            .await
+            .unwrap()
+            .into_inner(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        current_execution_config.transaction_shuffler_type(),
+        TransactionShufflerType::SenderAwareV2(32),
+    );
+
+    assert_reordering(&mut swarm, true).await;
+
+    let execution_config_with_shuffling = OnChainExecutionConfig::V1(ExecutionConfigV1 {
+        transaction_shuffler_type: TransactionShufflerType::NoShuffling,
+    });
+
+    let update_execution_config_script = format!(
+        r#"
+    script {{
+        use aptos_framework::aptos_governance;
+        use aptos_framework::execution_config;
+        fun main(core_resources: &signer) {{
+            let framework_signer = aptos_governance::get_signer_testnet_only(core_resources, @0000000000000000000000000000000000000000000000000000000000000001);
+            let config_bytes = {};
+            execution_config::set(&framework_signer, config_bytes);
+        }}
+    }}
+    "#,
+        generate_blob(&bcs::to_bytes(&execution_config_with_shuffling).unwrap())
+    );
+
+    cli.run_script(root_cli_index, &update_execution_config_script)
+        .await
+        .unwrap();
+
+    let updated_execution_config: OnChainExecutionConfig = bcs::from_bytes(
+        &rest_client
+            .get_account_resource_bcs::<Vec<u8>>(
+                CORE_CODE_ADDRESS,
+                "0x1::execution_config::ExecutionConfig",
+            )
+            .await
+            .unwrap()
+            .into_inner(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        updated_execution_config.transaction_shuffler_type(),
+        TransactionShufflerType::NoShuffling,
+    );
+
+    assert_reordering(&mut swarm, false).await;
+}
+
+async fn assert_reordering(swarm: &mut dyn Swarm, expected_reordering: bool) {
+    swarm
+        .aptos_public_info()
+        .sync_root_account_sequence_number()
+        .await;
+    let transaction_factory = swarm.aptos_public_info().transaction_factory();
+
+    let clients = swarm.get_all_nodes_clients_with_names();
+
+    let dst = create_and_fund_account(swarm, 10000000000).await;
+
+    let mut accounts = vec![];
+    let mut txns = vec![];
+    for _ in 0..2 {
+        let account = create_and_fund_account(swarm, 10000000000).await;
+
+        for _ in 0..5 {
+            let txn = account.sign_with_transaction_builder(
+                transaction_factory.payload(aptos_stdlib::aptos_coin_transfer(dst.address(), 10)),
+            );
+            txns.push(txn);
+        }
+        accounts.push(account);
+    }
+
+    let result = clients[0]
+        .1
+        .submit_batch_bcs(&txns)
+        .await
+        .unwrap()
+        .into_inner();
+    info!("result: {:?}", result);
+
+    for txn in &txns {
+        clients[0].1.wait_for_signed_transaction(txn).await.unwrap();
+    }
+
+    wait_for_all_nodes_to_catchup(&clients, Duration::from_secs(30))
+        .await
+        .unwrap();
+
+    let committed_order = clients[0]
+        .1
+        .get_transactions_bcs(None, Some(1000))
+        .await
+        .unwrap()
+        .into_inner();
+
+    info!(
+        "dst: {}, senders: {:?}",
+        dst.address(),
+        accounts.iter().map(|a| a.address()).collect::<Vec<_>>()
+    );
+    let mut block_txns = vec![];
+    for txn in committed_order {
+        match txn.transaction {
+            aptos_types::transaction::Transaction::UserTransaction(txn) => {
+                info!("from {}, seq_num {}", txn.sender(), txn.sequence_number());
+                block_txns.push(txn);
+            },
+            aptos_types::transaction::Transaction::BlockMetadata(b) => {
+                info!("block metadata {}", b.round());
+
+                let senders = accounts.iter().map(|a| a.address()).collect::<HashSet<_>>();
+                let mut changes = 0;
+                for i in 1..block_txns.len() {
+                    if block_txns[i - 1].sender() != block_txns[i].sender()
+                        && senders.contains(&block_txns[i].sender())
+                    {
+                        changes += 1;
+                    }
+                }
+                info!("block_txns.len: {}, changes: {}", block_txns.len(), changes);
+
+                if changes > 1 {
+                    assert!(expected_reordering, "changes: {}", changes);
+                }
+                if block_txns.len() >= 4 && changes == 1 {
+                    assert!(!expected_reordering, "changes: {}", changes)
+                }
+                block_txns.clear();
+            },
+            _ => {},
+        }
+    }
+}
+
 pub(crate) fn generate_blob(data: &[u8]) -> String {
     let mut buf = String::new();
 
@@ -363,7 +543,7 @@ async fn test_large_total_stake() {
     // just barelly below u64::MAX
     const BASE: u64 = 10_000_000_000_000_000_000;
     let (mut swarm, mut cli, _faucet) = SwarmBuilder::new_local(4)
-        .with_init_config(Arc::new(|_, _, genesis_stake_amount| {
+        .with_init_genesis_stake(Arc::new(|_, genesis_stake_amount| {
             // make sure we have quorum
             *genesis_stake_amount = BASE;
         }))
@@ -429,12 +609,13 @@ async fn test_nodes_rewards() {
     const BASE: u64 = 3600u64 * 24 * 365 * 10 * 100;
 
     let (mut swarm, mut cli, _faucet) = SwarmBuilder::new_local(4)
-        .with_init_config(Arc::new(|i, conf, genesis_stake_amount| {
+        .with_init_config(Arc::new(|_, conf, _| {
             // reduce timeout, as we will have dead node during rounds
             conf.consensus.round_initial_timeout_ms = 200;
             conf.consensus.quorum_store_poll_time_ms = 100;
             conf.api.failpoints_enabled = true;
-
+        }))
+        .with_init_genesis_stake(Arc::new(|i, genesis_stake_amount| {
             // make sure we have quorum
             *genesis_stake_amount = if i < 2 { 10 * BASE } else { BASE };
         }))
@@ -858,10 +1039,12 @@ async fn test_register_and_update_validator() {
 async fn test_join_and_leave_validator() {
     let (mut swarm, mut cli, _faucet) = SwarmBuilder::new_local(1)
         .with_aptos()
-        .with_init_config(Arc::new(|_i, conf, genesis_stake_amount| {
+        .with_init_config(Arc::new(|_i, conf, _| {
             // reduce timeout, as we will have dead node during rounds
             conf.consensus.round_initial_timeout_ms = 200;
             conf.consensus.quorum_store_poll_time_ms = 100;
+        }))
+        .with_init_genesis_stake(Arc::new(|_i, genesis_stake_amount| {
             *genesis_stake_amount = 100000;
         }))
         .with_init_genesis_config(Arc::new(|genesis_config| {
@@ -1020,10 +1203,12 @@ async fn test_join_and_leave_validator() {
 async fn test_owner_create_and_delegate_flow() {
     let (mut swarm, mut cli, _faucet) = SwarmBuilder::new_local(1)
         .with_aptos()
-        .with_init_config(Arc::new(|_i, conf, genesis_stake_amount| {
+        .with_init_config(Arc::new(|_i, conf, _| {
             // reduce timeout, as we will have dead node during rounds
             conf.consensus.round_initial_timeout_ms = 200;
             conf.consensus.quorum_store_poll_time_ms = 100;
+        }))
+        .with_init_genesis_stake(Arc::new(|_i, genesis_stake_amount| {
             // enough for quorum
             *genesis_stake_amount = 5000000;
         }))

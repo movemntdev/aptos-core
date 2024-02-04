@@ -1,5 +1,5 @@
 
-<a name="0x1_resource_account"></a>
+<a id="0x1_resource_account"></a>
 
 # Module `0x1::resource_account`
 
@@ -7,31 +7,33 @@ A resource account is used to manage resources independent of an account managed
 This contains several utilities to make using resource accounts more effective.
 
 
-<a name="@Resource_Accounts_to_manage_liquidity_pools_0"></a>
+<a id="@Resource_Accounts_to_manage_liquidity_pools_0"></a>
 
 ### Resource Accounts to manage liquidity pools
 
 
 A dev wishing to use resource accounts for a liquidity pool, would likely do the following:
+
 1. Create a new account using <code><a href="resource_account.md#0x1_resource_account_create_resource_account">resource_account::create_resource_account</a></code>. This creates the
 account, stores the <code>signer_cap</code> within a <code><a href="resource_account.md#0x1_resource_account_Container">resource_account::Container</a></code>, and rotates the key to
-the current accounts authentication key or a provided authentication key.
-2. Define the LiquidityPool module's address to be the same as the resource account.
-3. Construct a transaction package publishing transaction for the resource account using the
+the current account's authentication key or a provided authentication key.
+2. Define the liquidity pool module's address to be the same as the resource account.
+3. Construct a package-publishing transaction for the resource account using the
 authentication key used in step 1.
-4. In the LiquidityPool module's <code>init_module</code> function, call <code>retrieve_resource_account_cap</code>
-which will retrive the <code>signer_cap</code> and rotate the resource account's authentication key to
+4. In the liquidity pool module's <code>init_module</code> function, call <code>retrieve_resource_account_cap</code>
+which will retrieve the <code>signer_cap</code> and rotate the resource account's authentication key to
 <code>0x0</code>, effectively locking it off.
-5. When adding a new coin, the liquidity pool will load the capability and hence the signer to
-register and store new LiquidityCoin resources.
+5. When adding a new coin, the liquidity pool will load the capability and hence the <code><a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a></code> to
+register and store new <code>LiquidityCoin</code> resources.
 
 Code snippets to help:
+
 ```
-fun init_module(resource: &signer) {
+fun init_module(resource_account: &signer) {
 let dev_address = @DEV_ADDR;
-let signer_cap = retrieve_resource_account_cap(resource, dev_address);
+let signer_cap = retrieve_resource_account_cap(resource_account, dev_address);
 let lp = LiquidityPoolInfo { signer_cap: signer_cap, ... };
-move_to(resource, lp);
+move_to(resource_account, lp);
 }
 ```
 
@@ -46,7 +48,7 @@ move_to(&create_signer_with_capability(&lp.cap), LiquidityCoin<X, Y>{ mint, burn
 }
 ```
 
-<a name="@Resource_accounts_to_manage_an_account_for_module_publishing_(i.e.,_contract_account)_1"></a>
+<a id="@Resource_accounts_to_manage_an_account_for_module_publishing_(i.e.,_contract_account)_1"></a>
 
 ### Resource accounts to manage an account for module publishing (i.e., contract account)
 
@@ -83,6 +85,8 @@ module.resource_signer_cap = option::some(resource_signer_cap);
 -  [Function `rotate_account_authentication_key_and_store_capability`](#0x1_resource_account_rotate_account_authentication_key_and_store_capability)
 -  [Function `retrieve_resource_account_cap`](#0x1_resource_account_retrieve_resource_account_cap)
 -  [Specification](#@Specification_3)
+    -  [High-level Requirements](#high-level-req)
+    -  [Module-level Specification](#module-level-spec)
     -  [Function `create_resource_account`](#@Specification_3_create_resource_account)
     -  [Function `create_resource_account_and_fund`](#@Specification_3_create_resource_account_and_fund)
     -  [Function `create_resource_account_and_publish_package`](#@Specification_3_create_resource_account_and_publish_package)
@@ -102,7 +106,7 @@ module.resource_signer_cap = option::some(resource_signer_cap);
 
 
 
-<a name="0x1_resource_account_Container"></a>
+<a id="0x1_resource_account_Container"></a>
 
 ## Resource `Container`
 
@@ -129,12 +133,12 @@ module.resource_signer_cap = option::some(resource_signer_cap);
 
 </details>
 
-<a name="@Constants_2"></a>
+<a id="@Constants_2"></a>
 
 ## Constants
 
 
-<a name="0x1_resource_account_ZERO_AUTH_KEY"></a>
+<a id="0x1_resource_account_ZERO_AUTH_KEY"></a>
 
 
 
@@ -143,7 +147,7 @@ module.resource_signer_cap = option::some(resource_signer_cap);
 
 
 
-<a name="0x1_resource_account_ECONTAINER_NOT_PUBLISHED"></a>
+<a id="0x1_resource_account_ECONTAINER_NOT_PUBLISHED"></a>
 
 Container resource not found in account
 
@@ -153,7 +157,7 @@ Container resource not found in account
 
 
 
-<a name="0x1_resource_account_EUNAUTHORIZED_NOT_OWNER"></a>
+<a id="0x1_resource_account_EUNAUTHORIZED_NOT_OWNER"></a>
 
 The resource account was not created by the specified source account
 
@@ -163,7 +167,7 @@ The resource account was not created by the specified source account
 
 
 
-<a name="0x1_resource_account_create_resource_account"></a>
+<a id="0x1_resource_account_create_resource_account"></a>
 
 ## Function `create_resource_account`
 
@@ -200,7 +204,7 @@ or the source accounts current auth key.
 
 </details>
 
-<a name="0x1_resource_account_create_resource_account_and_fund"></a>
+<a id="0x1_resource_account_create_resource_account_and_fund"></a>
 
 ## Function `create_resource_account_and_fund`
 
@@ -242,7 +246,7 @@ used for resource accounts that need access to <code>Coin&lt;AptosCoin&gt;</code
 
 </details>
 
-<a name="0x1_resource_account_create_resource_account_and_publish_package"></a>
+<a id="0x1_resource_account_create_resource_account_and_publish_package"></a>
 
 ## Function `create_resource_account_and_publish_package`
 
@@ -280,7 +284,7 @@ this account and leaves the signer cap readily available for pickup.
 
 </details>
 
-<a name="0x1_resource_account_rotate_account_authentication_key_and_store_capability"></a>
+<a id="0x1_resource_account_rotate_account_authentication_key_and_store_capability"></a>
 
 ## Function `rotate_account_authentication_key_and_store_capability`
 
@@ -323,7 +327,7 @@ this account and leaves the signer cap readily available for pickup.
 
 </details>
 
-<a name="0x1_resource_account_retrieve_resource_account_cap"></a>
+<a id="0x1_resource_account_retrieve_resource_account_cap"></a>
 
 ## Function `retrieve_resource_account_cap`
 
@@ -370,10 +374,94 @@ the SignerCapability.
 
 </details>
 
-<a name="@Specification_3"></a>
+<a id="@Specification_3"></a>
 
 ## Specification
 
+
+
+
+<a id="high-level-req"></a>
+
+### High-level Requirements
+
+<table>
+<tr>
+<th>No.</th><th>Requirement</th><th>Criticality</th><th>Implementation</th><th>Enforcement</th>
+</tr>
+
+<tr>
+<td>1</td>
+<td>The length of the authentication key must be 32 bytes.</td>
+<td>Medium</td>
+<td>The rotate_authentication_key_internal function ensures that the authentication key passed to it is of 32 bytes.</td>
+<td>Formally verified via <a href="#high-level-req-1">RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIf</a>.</td>
+</tr>
+
+<tr>
+<td>2</td>
+<td>The Container structure must exist in the origin account in order to rotate the authentication key of a resource account and to store its signer capability.</td>
+<td>High</td>
+<td>The rotate_account_authentication_key_and_store_capability function makes sure the Container structure exists under the origin account.</td>
+<td>Formally verified via <a href="#high-level-req-2">rotate_account_authentication_key_and_store_capability</a>.</td>
+</tr>
+
+<tr>
+<td>3</td>
+<td>The resource account is registered for the Aptos coin.</td>
+<td>High</td>
+<td>The create_resource_account_and_fund ensures the newly created resource account is registered to receive the AptosCoin.</td>
+<td>Formally verified via <a href="#high-level-req-3">create_resource_account_and_fund</a>.</td>
+</tr>
+
+<tr>
+<td>4</td>
+<td>It is not possible to store two capabilities for the same resource address.</td>
+<td>Medium</td>
+<td>The rotate_account_authentication_key_and_store_capability will abort if the resource signer capability for the given resource address already exists in container.store.</td>
+<td>Formally verified via <a href="#high-level-req-4">rotate_account_authentication_key_and_store_capability</a>.</td>
+</tr>
+
+<tr>
+<td>5</td>
+<td>If provided, the optional authentication key is used for key rotation.</td>
+<td>Low</td>
+<td>The rotate_account_authentication_key_and_store_capability function will use optional_auth_key if it is provided as a parameter.</td>
+<td>Formally verified via <a href="#high-level-req-5">rotate_account_authentication_key_and_store_capability</a>.</td>
+</tr>
+
+<tr>
+<td>6</td>
+<td>The container stores the resource accounts' signer capabilities.</td>
+<td>Low</td>
+<td>retrieve_resource_account_cap will abort if there is no Container structure assigned to source_addr.</td>
+<td>Formally verified via <a href="#high-level-req-6">retreive_resource_account_cap</a>.</td>
+</tr>
+
+<tr>
+<td>7</td>
+<td>Resource account may retrieve the signer capability if it was previously added to its container.</td>
+<td>High</td>
+<td>retrieve_resource_account_cap will abort if the container of source_addr doesn't store the signer capability for the given resource.</td>
+<td>Formally verified via <a href="#high-level-req-7">retrieve_resource_account_cap</a>.</td>
+</tr>
+
+<tr>
+<td>8</td>
+<td>Retrieving the last signer capability from the container must result in the container being removed.</td>
+<td>Low</td>
+<td>retrieve_resource_account_cap will remove the container if the retrieved signer_capability was the last one stored under it.</td>
+<td>Formally verified via <a href="#high-level-req-8">retrieve_resource_account_cap</a>.</td>
+</tr>
+
+</table>
+
+
+
+
+<a id="module-level-spec"></a>
+
+### Module-level Specification
 
 
 <pre><code><b>pragma</b> verify = <b>true</b>;
@@ -382,7 +470,7 @@ the SignerCapability.
 
 
 
-<a name="@Specification_3_create_resource_account"></a>
+<a id="@Specification_3_create_resource_account"></a>
 
 ### Function `create_resource_account`
 
@@ -400,7 +488,7 @@ the SignerCapability.
 
 
 
-<a name="@Specification_3_create_resource_account_and_fund"></a>
+<a id="@Specification_3_create_resource_account_and_fund"></a>
 
 ### Function `create_resource_account_and_fund`
 
@@ -418,12 +506,13 @@ the SignerCapability.
 <b>include</b> <a href="aptos_account.md#0x1_aptos_account_GuidAbortsIf">aptos_account::GuidAbortsIf</a>&lt;AptosCoin&gt;{<b>to</b>: resource_addr};
 <b>include</b> <a href="resource_account.md#0x1_resource_account_RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIfWithoutAccountLimit">RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIfWithoutAccountLimit</a>;
 <b>aborts_if</b> <a href="coin.md#0x1_coin_is_account_registered">coin::is_account_registered</a>&lt;AptosCoin&gt;(resource_addr) && coin_store_resource.frozen;
+// This enforces <a id="high-level-req-3" href="#high-level-req">high-level requirement 3</a>:
 <b>ensures</b> <b>exists</b>&lt;aptos_framework::coin::CoinStore&lt;AptosCoin&gt;&gt;(resource_addr);
 </code></pre>
 
 
 
-<a name="@Specification_3_create_resource_account_and_publish_package"></a>
+<a id="@Specification_3_create_resource_account_and_publish_package"></a>
 
 ### Function `create_resource_account_and_publish_package`
 
@@ -443,7 +532,7 @@ the SignerCapability.
 
 
 
-<a name="@Specification_3_rotate_account_authentication_key_and_store_capability"></a>
+<a id="@Specification_3_rotate_account_authentication_key_and_store_capability"></a>
 
 ### Function `rotate_account_authentication_key_and_store_capability`
 
@@ -455,8 +544,11 @@ the SignerCapability.
 
 
 <pre><code><b>let</b> resource_addr = <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(resource);
+// This enforces <a id="high-level-req-1" href="#high-level-req">high-level requirement 1</a>:
 <b>include</b> <a href="resource_account.md#0x1_resource_account_RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIf">RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIf</a>;
+// This enforces <a id="high-level-req-2" href="#high-level-req">high-level requirement 2</a>:
 <b>ensures</b> <b>exists</b>&lt;<a href="resource_account.md#0x1_resource_account_Container">Container</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(origin));
+// This enforces <a id="high-level-req-5" href="#high-level-req">high-level requirement 5</a>:
 <b>ensures</b> <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_length">vector::length</a>(optional_auth_key) != 0 ==&gt;
     <b>global</b>&lt;aptos_framework::account::Account&gt;(resource_addr).authentication_key == optional_auth_key;
 </code></pre>
@@ -464,7 +556,7 @@ the SignerCapability.
 
 
 
-<a name="0x1_resource_account_RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIf"></a>
+<a id="0x1_resource_account_RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIf"></a>
 
 
 <pre><code><b>schema</b> <a href="resource_account.md#0x1_resource_account_RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIf">RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIf</a> {
@@ -475,16 +567,19 @@ the SignerCapability.
     <b>let</b> container = <b>global</b>&lt;<a href="resource_account.md#0x1_resource_account_Container">Container</a>&gt;(source_addr);
     <b>let</b> get = len(optional_auth_key) == 0;
     <b>aborts_if</b> get && !<b>exists</b>&lt;Account&gt;(source_addr);
+    // This enforces <a id="high-level-req-4" href="#high-level-req">high-level requirement 4</a>:
     <b>aborts_if</b> <b>exists</b>&lt;<a href="resource_account.md#0x1_resource_account_Container">Container</a>&gt;(source_addr) && <a href="../../aptos-stdlib/doc/simple_map.md#0x1_simple_map_spec_contains_key">simple_map::spec_contains_key</a>(container.store, resource_addr);
     <b>aborts_if</b> get && !(<b>exists</b>&lt;Account&gt;(resource_addr) && len(<b>global</b>&lt;Account&gt;(source_addr).authentication_key) == 32);
     <b>aborts_if</b> !get && !(<b>exists</b>&lt;Account&gt;(resource_addr) && len(optional_auth_key) == 32);
+    <b>ensures</b> <a href="../../aptos-stdlib/doc/simple_map.md#0x1_simple_map_spec_contains_key">simple_map::spec_contains_key</a>(<b>global</b>&lt;<a href="resource_account.md#0x1_resource_account_Container">Container</a>&gt;(source_addr).store, resource_addr);
+    <b>ensures</b> <b>exists</b>&lt;<a href="resource_account.md#0x1_resource_account_Container">Container</a>&gt;(source_addr);
 }
 </code></pre>
 
 
 
 
-<a name="0x1_resource_account_RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIfWithoutAccountLimit"></a>
+<a id="0x1_resource_account_RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIfWithoutAccountLimit"></a>
 
 
 <pre><code><b>schema</b> <a href="resource_account.md#0x1_resource_account_RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIfWithoutAccountLimit">RotateAccountAuthenticationKeyAndStoreCapabilityAbortsIfWithoutAccountLimit</a> {
@@ -502,12 +597,14 @@ the SignerCapability.
     <b>aborts_if</b> <b>exists</b>&lt;<a href="resource_account.md#0x1_resource_account_Container">Container</a>&gt;(source_addr) && <a href="../../aptos-stdlib/doc/simple_map.md#0x1_simple_map_spec_contains_key">simple_map::spec_contains_key</a>(container.store, resource_addr);
     <b>aborts_if</b> get && len(<b>global</b>&lt;<a href="account.md#0x1_account_Account">account::Account</a>&gt;(source_addr).authentication_key) != 32;
     <b>aborts_if</b> !get && len(optional_auth_key) != 32;
+    <b>ensures</b> <a href="../../aptos-stdlib/doc/simple_map.md#0x1_simple_map_spec_contains_key">simple_map::spec_contains_key</a>(<b>global</b>&lt;<a href="resource_account.md#0x1_resource_account_Container">Container</a>&gt;(source_addr).store, resource_addr);
+    <b>ensures</b> <b>exists</b>&lt;<a href="resource_account.md#0x1_resource_account_Container">Container</a>&gt;(source_addr);
 }
 </code></pre>
 
 
 
-<a name="@Specification_3_retrieve_resource_account_cap"></a>
+<a id="@Specification_3_retrieve_resource_account_cap"></a>
 
 ### Function `retrieve_resource_account_cap`
 
@@ -518,14 +615,18 @@ the SignerCapability.
 
 
 
-<pre><code><b>aborts_if</b> !<b>exists</b>&lt;<a href="resource_account.md#0x1_resource_account_Container">Container</a>&gt;(source_addr);
+<pre><code>// This enforces <a id="high-level-req-6" href="#high-level-req">high-level requirement 6</a>:
+<b>aborts_if</b> !<b>exists</b>&lt;<a href="resource_account.md#0x1_resource_account_Container">Container</a>&gt;(source_addr);
 <b>let</b> resource_addr = <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(resource);
 <b>let</b> container = <b>global</b>&lt;<a href="resource_account.md#0x1_resource_account_Container">Container</a>&gt;(source_addr);
+// This enforces <a id="high-level-req-7" href="#high-level-req">high-level requirement 7</a>:
 <b>aborts_if</b> !<a href="../../aptos-stdlib/doc/simple_map.md#0x1_simple_map_spec_contains_key">simple_map::spec_contains_key</a>(container.store, resource_addr);
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="account.md#0x1_account_Account">account::Account</a>&gt;(resource_addr);
+// This enforces <a id="high-level-req-8" href="#high-level-req">high-level requirement 8</a>:
 <b>ensures</b> <a href="../../aptos-stdlib/doc/simple_map.md#0x1_simple_map_spec_contains_key">simple_map::spec_contains_key</a>(<b>old</b>(<b>global</b>&lt;<a href="resource_account.md#0x1_resource_account_Container">Container</a>&gt;(source_addr)).store, resource_addr) &&
-<a href="../../aptos-stdlib/doc/simple_map.md#0x1_simple_map_spec_len">simple_map::spec_len</a>(<b>old</b>(<b>global</b>&lt;<a href="resource_account.md#0x1_resource_account_Container">Container</a>&gt;(source_addr)).store) == 1 ==&gt; !<b>exists</b>&lt;<a href="resource_account.md#0x1_resource_account_Container">Container</a>&gt;(source_addr);
+    <a href="../../aptos-stdlib/doc/simple_map.md#0x1_simple_map_spec_len">simple_map::spec_len</a>(<b>old</b>(<b>global</b>&lt;<a href="resource_account.md#0x1_resource_account_Container">Container</a>&gt;(source_addr)).store) == 1 ==&gt; !<b>exists</b>&lt;<a href="resource_account.md#0x1_resource_account_Container">Container</a>&gt;(source_addr);
+<b>ensures</b> <b>exists</b>&lt;<a href="resource_account.md#0x1_resource_account_Container">Container</a>&gt;(source_addr) ==&gt; !<a href="../../aptos-stdlib/doc/simple_map.md#0x1_simple_map_spec_contains_key">simple_map::spec_contains_key</a>(<b>global</b>&lt;<a href="resource_account.md#0x1_resource_account_Container">Container</a>&gt;(source_addr).store, resource_addr);
 </code></pre>
 
 
-[move-book]: https://aptos.dev/guides/move-guides/book/SUMMARY
+[move-book]: https://aptos.dev/move/book/SUMMARY

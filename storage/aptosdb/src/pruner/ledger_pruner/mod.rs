@@ -22,11 +22,14 @@ use crate::{
             write_set_pruner::WriteSetPruner,
         },
     },
-    EventStore, TransactionStore,
+    transaction_store::TransactionStore,
 };
-use anyhow::Result;
+use anyhow::anyhow;
+use aptos_experimental_runtimes::thread_manager::THREAD_MANAGER;
 use aptos_logger::info;
+use aptos_storage_interface::Result;
 use aptos_types::transaction::{AtomicVersion, Version};
+use rayon::prelude::*;
 use std::{
     cmp::min,
     sync::{atomic::Ordering, Arc},
@@ -67,10 +70,13 @@ impl DBPruner for LedgerPruner {
             self.ledger_metadata_pruner
                 .prune(progress, current_batch_target_version)?;
 
-            // NOTE: If necessary, this can be done in parallel.
-            self.sub_pruners
-                .iter()
-                .try_for_each(|pruner| pruner.prune(progress, current_batch_target_version))?;
+            THREAD_MANAGER.get_background_pool().install(|| {
+                self.sub_pruners.par_iter().try_for_each(|sub_pruner| {
+                    sub_pruner
+                        .prune(progress, current_batch_target_version)
+                        .map_err(|err| anyhow!("{} failed to prune: {err}", sub_pruner.name()))
+                })
+            })?;
 
             progress = current_batch_target_version;
             self.record_progress(progress);
@@ -122,8 +128,7 @@ impl LedgerPruner {
         let transaction_store = Arc::new(TransactionStore::new(Arc::clone(&ledger_db)));
 
         let event_store_pruner = Box::new(EventStorePruner::new(
-            Arc::new(EventStore::new(ledger_db.event_db_arc())),
-            ledger_db.event_db_arc(),
+            Arc::clone(&ledger_db),
             metadata_progress,
         )?);
         let transaction_accumulator_pruner = Box::new(TransactionAccumulatorPruner::new(
@@ -138,7 +143,7 @@ impl LedgerPruner {
         )?);
         let transaction_pruner = Box::new(TransactionPruner::new(
             Arc::clone(&transaction_store),
-            ledger_db.transaction_db_arc(),
+            Arc::clone(&ledger_db),
             metadata_progress,
         )?);
         let write_set_pruner = Box::new(WriteSetPruner::new(

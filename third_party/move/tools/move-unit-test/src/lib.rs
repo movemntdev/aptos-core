@@ -13,7 +13,7 @@ use move_command_line_common::files::verify_and_create_named_address_mapping;
 use move_compiler::{
     self,
     diagnostics::{self, codes::Severity},
-    shared::{self, NumericalAddress},
+    shared::{self, known_attributes::KnownAttribute, NumericalAddress},
     unit_test::{self, TestPlan},
     Compiler, Flags, PASS_CFGIR,
 };
@@ -161,11 +161,15 @@ impl UnitTestingConfig {
     ) -> Option<TestPlan> {
         let addresses =
             verify_and_create_named_address_mapping(self.named_address_values.clone()).ok()?;
-        let (files, comments_and_compiler_res) =
-            Compiler::from_files(source_files, deps, addresses)
-                .set_flags(Flags::testing())
-                .run::<PASS_CFGIR>()
-                .unwrap();
+        let (files, comments_and_compiler_res) = Compiler::from_files(
+            source_files,
+            deps,
+            addresses,
+            Flags::testing().set_skip_attribute_checks(false),
+            KnownAttribute::get_all_attribute_names(),
+        )
+        .run::<PASS_CFGIR>()
+        .unwrap();
         let (_, compiler) =
             diagnostics::unwrap_or_report_diagnostics(&files, comments_and_compiler_res);
 
@@ -200,8 +204,8 @@ impl UnitTestingConfig {
         } = self.compile_to_test_plan(deps.clone(), vec![])?;
 
         let mut test_plan = self.compile_to_test_plan(self.source_files.clone(), deps)?;
-        test_plan.module_info.extend(module_info.into_iter());
-        test_plan.files.extend(files.into_iter());
+        test_plan.module_info.extend(module_info);
+        test_plan.files.extend(files);
         Some(test_plan)
     }
 

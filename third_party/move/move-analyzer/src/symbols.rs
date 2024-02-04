@@ -1,6 +1,8 @@
 // Copyright (c) The Move Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+#![allow(clippy::non_canonical_partial_ord_impl)]
+
 //! This module is responsible for building symbolication information on top of compiler's typed
 //! AST, in particular identifier definitions to be used for implementing go-to-def and
 //! go-to-references language server commands.
@@ -75,7 +77,10 @@ use move_compiler::{
     PASS_TYPING,
 };
 use move_ir_types::location::*;
-use move_package::compilation::build_plan::BuildPlan;
+use move_package::{
+    compilation::{build_plan::BuildPlan, compiled_package::unimplemented_v2_driver},
+    CompilerConfig,
+};
 use move_symbol_pool::Symbol;
 use std::{
     cmp,
@@ -165,12 +170,13 @@ struct StructDef {
     field_defs: Vec<FieldDef>,
 }
 
-#[derive(Derivative, Debug, Clone, PartialEq, Eq)]
-#[derivative(PartialOrd, Ord)]
+#[derive(Derivative)]
+#[derivative(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
 pub struct FunctionDef {
     name: Symbol,
     start: Position,
     attrs: Vec<String>,
+    #[derivative(PartialEq = "ignore")]
     #[derivative(PartialOrd = "ignore")]
     #[derivative(Ord = "ignore")]
     ident_type: IdentType,
@@ -519,10 +525,7 @@ impl UseDef {
             col_end,
         };
 
-        references
-            .entry(def_loc)
-            .or_insert_with(BTreeSet::new)
-            .insert(use_loc);
+        references.entry(def_loc).or_default().insert(use_loc);
         Self {
             col_start: use_start.character,
             col_end,
@@ -558,7 +561,7 @@ impl UseDefMap {
     }
 
     fn insert(&mut self, key: u32, val: UseDef) {
-        self.0.entry(key).or_insert_with(BTreeSet::new).insert(val);
+        self.0.entry(key).or_default().insert(val);
     }
 
     fn get(&self, key: u32) -> Option<BTreeSet<UseDef>> {
@@ -591,10 +594,7 @@ impl FunctionIdentTypeMap {
 impl Symbols {
     pub fn merge(&mut self, other: Self) {
         for (k, v) in other.references {
-            self.references
-                .entry(k)
-                .or_insert_with(BTreeSet::new)
-                .extend(v);
+            self.references.entry(k).or_default().extend(v);
         }
         self.file_use_defs.extend(other.file_use_defs);
         self.file_name_mapping.extend(other.file_name_mapping);
@@ -645,40 +645,45 @@ impl Symbolicator {
         let build_plan = BuildPlan::create(resolution_graph)?;
         let mut typed_ast = None;
         let mut diagnostics = None;
-        build_plan.compile_with_driver(&mut std::io::sink(), None, |compiler| {
-            let (files, compilation_result) = compiler.run::<PASS_TYPING>()?;
-            let (_, compiler) = match compilation_result {
-                Ok(v) => v,
-                Err(diags) => {
-                    let failure = true;
-                    diagnostics = Some((diags, failure));
-                    eprintln!("typed AST compilation failed");
-                    return Ok((files, vec![]));
-                },
-            };
-            eprintln!("compiled to typed AST");
-            let (compiler, typed_program) = compiler.into_ast();
-            typed_ast = Some(typed_program.clone());
-            eprintln!("compiling to bytecode");
-            let compilation_result = compiler.at_typing(typed_program).build();
-            let (units, diags) = match compilation_result {
-                Ok(v) => v,
-                Err(diags) => {
+        build_plan.compile_with_driver(
+            &mut std::io::sink(),
+            &CompilerConfig::default(),
+            |compiler| {
+                let (files, compilation_result) = compiler.run::<PASS_TYPING>()?;
+                let (_, compiler) = match compilation_result {
+                    Ok(v) => v,
+                    Err(diags) => {
+                        let failure = true;
+                        diagnostics = Some((diags, failure));
+                        eprintln!("typed AST compilation failed");
+                        return Ok((files, vec![]));
+                    },
+                };
+                eprintln!("compiled to typed AST");
+                let (compiler, typed_program) = compiler.into_ast();
+                typed_ast = Some(typed_program.clone());
+                eprintln!("compiling to bytecode");
+                let compilation_result = compiler.at_typing(typed_program).build();
+                let (units, diags) = match compilation_result {
+                    Ok(v) => v,
+                    Err(diags) => {
+                        let failure = false;
+                        diagnostics = Some((diags, failure));
+                        eprintln!("bytecode compilation failed");
+                        return Ok((files, vec![]));
+                    },
+                };
+                // warning diagnostics (if any) since compilation succeeded
+                if !diags.is_empty() {
+                    // assign only if non-empty, otherwise return None to reset previous diagnostics
                     let failure = false;
                     diagnostics = Some((diags, failure));
-                    eprintln!("bytecode compilation failed");
-                    return Ok((files, vec![]));
-                },
-            };
-            // warning diagnostics (if any) since compilation succeeded
-            if !diags.is_empty() {
-                // assign only if non-empty, otherwise return None to reset previous diagnostics
-                let failure = false;
-                diagnostics = Some((diags, failure));
-            }
-            eprintln!("compiled to bytecode");
-            Ok((files, units))
-        })?;
+                }
+                eprintln!("compiled to bytecode");
+                Ok((files, units))
+            },
+            unimplemented_v2_driver,
+        )?;
 
         let mut ide_diagnostics = lsp_empty_diagnostics(&file_name_mapping);
         if let Some((compiler_diagnostics, failure)) = diagnostics {

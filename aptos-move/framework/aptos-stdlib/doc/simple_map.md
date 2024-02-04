@@ -1,5 +1,5 @@
 
-<a name="0x1_simple_map"></a>
+<a id="0x1_simple_map"></a>
 
 # Module `0x1::simple_map`
 
@@ -58,7 +58,7 @@ This module provides a solution for unsorted maps, that is it has the properties
 
 
 
-<a name="0x1_simple_map_SimpleMap"></a>
+<a id="0x1_simple_map_SimpleMap"></a>
 
 ## Struct `SimpleMap`
 
@@ -85,7 +85,7 @@ This module provides a solution for unsorted maps, that is it has the properties
 
 </details>
 
-<a name="0x1_simple_map_Element"></a>
+<a id="0x1_simple_map_Element"></a>
 
 ## Struct `Element`
 
@@ -118,12 +118,12 @@ This module provides a solution for unsorted maps, that is it has the properties
 
 </details>
 
-<a name="@Constants_0"></a>
+<a id="@Constants_0"></a>
 
 ## Constants
 
 
-<a name="0x1_simple_map_EKEY_ALREADY_EXISTS"></a>
+<a id="0x1_simple_map_EKEY_ALREADY_EXISTS"></a>
 
 Map key already exists
 
@@ -133,7 +133,7 @@ Map key already exists
 
 
 
-<a name="0x1_simple_map_EKEY_NOT_FOUND"></a>
+<a id="0x1_simple_map_EKEY_NOT_FOUND"></a>
 
 Map key is not found
 
@@ -143,17 +143,7 @@ Map key is not found
 
 
 
-<a name="0x1_simple_map_EMISMATCHED_LENGTHS"></a>
-
-Lengths of keys and values do not match
-
-
-<pre><code><b>const</b> <a href="simple_map.md#0x1_simple_map_EMISMATCHED_LENGTHS">EMISMATCHED_LENGTHS</a>: u64 = 3;
-</code></pre>
-
-
-
-<a name="0x1_simple_map_length"></a>
+<a id="0x1_simple_map_length"></a>
 
 ## Function `length`
 
@@ -177,7 +167,7 @@ Lengths of keys and values do not match
 
 </details>
 
-<a name="0x1_simple_map_new"></a>
+<a id="0x1_simple_map_new"></a>
 
 ## Function `new`
 
@@ -204,7 +194,7 @@ Create an empty SimpleMap.
 
 </details>
 
-<a name="0x1_simple_map_new_from"></a>
+<a id="0x1_simple_map_new_from"></a>
 
 ## Function `new_from`
 
@@ -234,7 +224,7 @@ Create a SimpleMap from a vector of keys and values. The keys must be unique.
 
 </details>
 
-<a name="0x1_simple_map_create"></a>
+<a id="0x1_simple_map_create"></a>
 
 ## Function `create`
 
@@ -261,7 +251,7 @@ This function is deprecated, use <code>new</code> instead.
 
 </details>
 
-<a name="0x1_simple_map_borrow"></a>
+<a id="0x1_simple_map_borrow"></a>
 
 ## Function `borrow`
 
@@ -291,7 +281,7 @@ This function is deprecated, use <code>new</code> instead.
 
 </details>
 
-<a name="0x1_simple_map_borrow_mut"></a>
+<a id="0x1_simple_map_borrow_mut"></a>
 
 ## Function `borrow_mut`
 
@@ -321,7 +311,7 @@ This function is deprecated, use <code>new</code> instead.
 
 </details>
 
-<a name="0x1_simple_map_contains_key"></a>
+<a id="0x1_simple_map_contains_key"></a>
 
 ## Function `contains_key`
 
@@ -349,7 +339,7 @@ This function is deprecated, use <code>new</code> instead.
 
 </details>
 
-<a name="0x1_simple_map_destroy_empty"></a>
+<a id="0x1_simple_map_destroy_empty"></a>
 
 ## Function `destroy_empty`
 
@@ -374,7 +364,7 @@ This function is deprecated, use <code>new</code> instead.
 
 </details>
 
-<a name="0x1_simple_map_add"></a>
+<a id="0x1_simple_map_add"></a>
 
 ## Function `add`
 
@@ -406,7 +396,7 @@ Add a key/value pair to the map. The key must not already exist.
 
 </details>
 
-<a name="0x1_simple_map_add_all"></a>
+<a id="0x1_simple_map_add_all"></a>
 
 ## Function `add_all`
 
@@ -427,7 +417,6 @@ Add multiple key/value pairs to the map. The keys must not already exist.
     keys: <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;Key&gt;,
     values: <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;Value&gt;,
 ) {
-    <b>assert</b>!(<a href="../../move-stdlib/doc/vector.md#0x1_vector_length">vector::length</a>(&keys) == <a href="../../move-stdlib/doc/vector.md#0x1_vector_length">vector::length</a>(&values), <a href="../../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="simple_map.md#0x1_simple_map_EMISMATCHED_LENGTHS">EMISMATCHED_LENGTHS</a>));
     <a href="../../move-stdlib/doc/vector.md#0x1_vector_zip">vector::zip</a>(keys, values, |key, value| {
         <a href="simple_map.md#0x1_simple_map_add">add</a>(map, key, value);
     });
@@ -438,7 +427,7 @@ Add multiple key/value pairs to the map. The keys must not already exist.
 
 </details>
 
-<a name="0x1_simple_map_upsert"></a>
+<a id="0x1_simple_map_upsert"></a>
 
 ## Function `upsert`
 
@@ -465,7 +454,7 @@ Insert key/value pair or update an existing key to a new value
     <b>while</b> (i &lt; len) {
         <b>let</b> element = <a href="../../move-stdlib/doc/vector.md#0x1_vector_borrow">vector::borrow</a>(data, i);
         <b>if</b> (&element.key == &key) {
-            <a href="../../move-stdlib/doc/vector.md#0x1_vector_push_back">vector::push_back</a>(data, <a href="simple_map.md#0x1_simple_map_Element">Element</a> { key, value});
+            <a href="../../move-stdlib/doc/vector.md#0x1_vector_push_back">vector::push_back</a>(data, <a href="simple_map.md#0x1_simple_map_Element">Element</a> { key, value });
             <a href="../../move-stdlib/doc/vector.md#0x1_vector_swap">vector::swap</a>(data, i, len);
             <b>let</b> <a href="simple_map.md#0x1_simple_map_Element">Element</a> { key, value } = <a href="../../move-stdlib/doc/vector.md#0x1_vector_pop_back">vector::pop_back</a>(data);
             <b>return</b> (std::option::some(key), std::option::some(value))
@@ -481,7 +470,7 @@ Insert key/value pair or update an existing key to a new value
 
 </details>
 
-<a name="0x1_simple_map_keys"></a>
+<a id="0x1_simple_map_keys"></a>
 
 ## Function `keys`
 
@@ -509,7 +498,7 @@ Return all keys in the map. This requires keys to be copyable.
 
 </details>
 
-<a name="0x1_simple_map_values"></a>
+<a id="0x1_simple_map_values"></a>
 
 ## Function `values`
 
@@ -537,7 +526,7 @@ Return all values in the map. This requires values to be copyable.
 
 </details>
 
-<a name="0x1_simple_map_to_vec_pair"></a>
+<a id="0x1_simple_map_to_vec_pair"></a>
 
 ## Function `to_vec_pair`
 
@@ -559,7 +548,11 @@ Primarily used to destroy a map
     <b>let</b> keys: <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;Key&gt; = <a href="../../move-stdlib/doc/vector.md#0x1_vector_empty">vector::empty</a>();
     <b>let</b> values: <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;Value&gt; = <a href="../../move-stdlib/doc/vector.md#0x1_vector_empty">vector::empty</a>();
     <b>let</b> <a href="simple_map.md#0x1_simple_map_SimpleMap">SimpleMap</a> { data } = map;
-    <a href="../../move-stdlib/doc/vector.md#0x1_vector_for_each">vector::for_each</a>(data, |e| { <b>let</b> <a href="simple_map.md#0x1_simple_map_Element">Element</a> { key, value } = e; <a href="../../move-stdlib/doc/vector.md#0x1_vector_push_back">vector::push_back</a>(&<b>mut</b> keys, key); <a href="../../move-stdlib/doc/vector.md#0x1_vector_push_back">vector::push_back</a>(&<b>mut</b> values, value); });
+    <a href="../../move-stdlib/doc/vector.md#0x1_vector_for_each">vector::for_each</a>(data, |e| {
+        <b>let</b> <a href="simple_map.md#0x1_simple_map_Element">Element</a> { key, value } = e;
+        <a href="../../move-stdlib/doc/vector.md#0x1_vector_push_back">vector::push_back</a>(&<b>mut</b> keys, key);
+        <a href="../../move-stdlib/doc/vector.md#0x1_vector_push_back">vector::push_back</a>(&<b>mut</b> values, value);
+    });
     (keys, values)
 }
 </code></pre>
@@ -568,7 +561,7 @@ Primarily used to destroy a map
 
 </details>
 
-<a name="0x1_simple_map_destroy"></a>
+<a id="0x1_simple_map_destroy"></a>
 
 ## Function `destroy`
 
@@ -600,7 +593,7 @@ using lambdas to destroy the individual keys and values.
 
 </details>
 
-<a name="0x1_simple_map_remove"></a>
+<a id="0x1_simple_map_remove"></a>
 
 ## Function `remove`
 
@@ -632,7 +625,7 @@ Remove a key/value pair from the map. The key must exist.
 
 </details>
 
-<a name="0x1_simple_map_find"></a>
+<a id="0x1_simple_map_find"></a>
 
 ## Function `find`
 
@@ -650,12 +643,12 @@ Remove a key/value pair from the map. The key must exist.
 <pre><code><b>fun</b> <a href="simple_map.md#0x1_simple_map_find">find</a>&lt;Key: store, Value: store&gt;(
     map: &<a href="simple_map.md#0x1_simple_map_SimpleMap">SimpleMap</a>&lt;Key, Value&gt;,
     key: &Key,
-): <a href="../../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;u64&gt;{
+): <a href="../../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;u64&gt; {
     <b>let</b> leng = <a href="../../move-stdlib/doc/vector.md#0x1_vector_length">vector::length</a>(&map.data);
     <b>let</b> i = 0;
     <b>while</b> (i &lt; leng) {
         <b>let</b> element = <a href="../../move-stdlib/doc/vector.md#0x1_vector_borrow">vector::borrow</a>(&map.data, i);
-        <b>if</b> (&element.key == key){
+        <b>if</b> (&element.key == key) {
             <b>return</b> <a href="../../move-stdlib/doc/option.md#0x1_option_some">option::some</a>(i)
         };
         i = i + 1;
@@ -668,57 +661,12 @@ Remove a key/value pair from the map. The key must exist.
 
 </details>
 
-<a name="@Specification_1"></a>
+<a id="@Specification_1"></a>
 
 ## Specification
 
 
-
-<a name="0x1_simple_map_spec_len"></a>
-
-
-<pre><code><b>native</b> <b>fun</b> <a href="simple_map.md#0x1_simple_map_spec_len">spec_len</a>&lt;K, V&gt;(t: <a href="simple_map.md#0x1_simple_map_SimpleMap">SimpleMap</a>&lt;K, V&gt;): num;
-</code></pre>
-
-
-
-
-<a name="0x1_simple_map_spec_contains_key"></a>
-
-
-<pre><code><b>native</b> <b>fun</b> <a href="simple_map.md#0x1_simple_map_spec_contains_key">spec_contains_key</a>&lt;K, V&gt;(t: <a href="simple_map.md#0x1_simple_map_SimpleMap">SimpleMap</a>&lt;K, V&gt;, k: K): bool;
-</code></pre>
-
-
-
-
-<a name="0x1_simple_map_spec_set"></a>
-
-
-<pre><code><b>native</b> <b>fun</b> <a href="simple_map.md#0x1_simple_map_spec_set">spec_set</a>&lt;K, V&gt;(t: <a href="simple_map.md#0x1_simple_map_SimpleMap">SimpleMap</a>&lt;K, V&gt;, k: K, v: V): <a href="simple_map.md#0x1_simple_map_SimpleMap">SimpleMap</a>&lt;K, V&gt;;
-</code></pre>
-
-
-
-
-<a name="0x1_simple_map_spec_remove"></a>
-
-
-<pre><code><b>native</b> <b>fun</b> <a href="simple_map.md#0x1_simple_map_spec_remove">spec_remove</a>&lt;K, V&gt;(t: <a href="simple_map.md#0x1_simple_map_SimpleMap">SimpleMap</a>&lt;K, V&gt;, k: K): <a href="simple_map.md#0x1_simple_map_SimpleMap">SimpleMap</a>&lt;K, V&gt;;
-</code></pre>
-
-
-
-
-<a name="0x1_simple_map_spec_get"></a>
-
-
-<pre><code><b>native</b> <b>fun</b> <a href="simple_map.md#0x1_simple_map_spec_get">spec_get</a>&lt;K, V&gt;(t: <a href="simple_map.md#0x1_simple_map_SimpleMap">SimpleMap</a>&lt;K, V&gt;, k: K): V;
-</code></pre>
-
-
-
-<a name="@Specification_1_SimpleMap"></a>
+<a id="@Specification_1_SimpleMap"></a>
 
 ### Struct `SimpleMap`
 
@@ -757,7 +705,7 @@ Remove a key/value pair from the map. The key must exist.
 
 
 
-<a name="@Specification_1_length"></a>
+<a id="@Specification_1_length"></a>
 
 ### Function `length`
 
@@ -773,7 +721,7 @@ Remove a key/value pair from the map. The key must exist.
 
 
 
-<a name="@Specification_1_new"></a>
+<a id="@Specification_1_new"></a>
 
 ### Function `new`
 
@@ -785,11 +733,14 @@ Remove a key/value pair from the map. The key must exist.
 
 
 <pre><code><b>pragma</b> intrinsic;
+<b>pragma</b> opaque;
+<b>ensures</b> [abstract] <a href="simple_map.md#0x1_simple_map_spec_len">spec_len</a>(result) == 0;
+<b>ensures</b> [abstract] <b>forall</b> k: Key: !<a href="simple_map.md#0x1_simple_map_spec_contains_key">spec_contains_key</a>(result, k);
 </code></pre>
 
 
 
-<a name="@Specification_1_new_from"></a>
+<a id="@Specification_1_new_from"></a>
 
 ### Function `new_from`
 
@@ -801,11 +752,16 @@ Remove a key/value pair from the map. The key must exist.
 
 
 <pre><code><b>pragma</b> intrinsic;
+<b>pragma</b> opaque;
+<b>ensures</b> [abstract] <a href="simple_map.md#0x1_simple_map_spec_len">spec_len</a>(result) == len(keys);
+<b>ensures</b> [abstract] <b>forall</b> k: Key: <a href="simple_map.md#0x1_simple_map_spec_contains_key">spec_contains_key</a>(result, k) &lt;==&gt; <a href="../../move-stdlib/doc/vector.md#0x1_vector_spec_contains">vector::spec_contains</a>(keys, k);
+<b>ensures</b> [abstract] <b>forall</b> i in 0..len(keys):
+    <a href="simple_map.md#0x1_simple_map_spec_get">spec_get</a>(result, <a href="../../move-stdlib/doc/vector.md#0x1_vector_borrow">vector::borrow</a>(keys, i)) == <a href="../../move-stdlib/doc/vector.md#0x1_vector_borrow">vector::borrow</a>(values, i);
 </code></pre>
 
 
 
-<a name="@Specification_1_create"></a>
+<a id="@Specification_1_create"></a>
 
 ### Function `create`
 
@@ -822,7 +778,7 @@ Remove a key/value pair from the map. The key must exist.
 
 
 
-<a name="@Specification_1_borrow"></a>
+<a id="@Specification_1_borrow"></a>
 
 ### Function `borrow`
 
@@ -838,7 +794,7 @@ Remove a key/value pair from the map. The key must exist.
 
 
 
-<a name="@Specification_1_borrow_mut"></a>
+<a id="@Specification_1_borrow_mut"></a>
 
 ### Function `borrow_mut`
 
@@ -854,7 +810,7 @@ Remove a key/value pair from the map. The key must exist.
 
 
 
-<a name="@Specification_1_contains_key"></a>
+<a id="@Specification_1_contains_key"></a>
 
 ### Function `contains_key`
 
@@ -870,7 +826,7 @@ Remove a key/value pair from the map. The key must exist.
 
 
 
-<a name="@Specification_1_destroy_empty"></a>
+<a id="@Specification_1_destroy_empty"></a>
 
 ### Function `destroy_empty`
 
@@ -886,7 +842,7 @@ Remove a key/value pair from the map. The key must exist.
 
 
 
-<a name="@Specification_1_add"></a>
+<a id="@Specification_1_add"></a>
 
 ### Function `add`
 
@@ -902,7 +858,7 @@ Remove a key/value pair from the map. The key must exist.
 
 
 
-<a name="@Specification_1_add_all"></a>
+<a id="@Specification_1_add_all"></a>
 
 ### Function `add_all`
 
@@ -918,7 +874,7 @@ Remove a key/value pair from the map. The key must exist.
 
 
 
-<a name="@Specification_1_upsert"></a>
+<a id="@Specification_1_upsert"></a>
 
 ### Function `upsert`
 
@@ -941,7 +897,52 @@ Remove a key/value pair from the map. The key must exist.
 
 
 
-<a name="@Specification_1_keys"></a>
+
+<a id="0x1_simple_map_spec_len"></a>
+
+
+<pre><code><b>native</b> <b>fun</b> <a href="simple_map.md#0x1_simple_map_spec_len">spec_len</a>&lt;K, V&gt;(t: <a href="simple_map.md#0x1_simple_map_SimpleMap">SimpleMap</a>&lt;K, V&gt;): num;
+</code></pre>
+
+
+
+
+<a id="0x1_simple_map_spec_contains_key"></a>
+
+
+<pre><code><b>native</b> <b>fun</b> <a href="simple_map.md#0x1_simple_map_spec_contains_key">spec_contains_key</a>&lt;K, V&gt;(t: <a href="simple_map.md#0x1_simple_map_SimpleMap">SimpleMap</a>&lt;K, V&gt;, k: K): bool;
+</code></pre>
+
+
+
+
+<a id="0x1_simple_map_spec_set"></a>
+
+
+<pre><code><b>native</b> <b>fun</b> <a href="simple_map.md#0x1_simple_map_spec_set">spec_set</a>&lt;K, V&gt;(t: <a href="simple_map.md#0x1_simple_map_SimpleMap">SimpleMap</a>&lt;K, V&gt;, k: K, v: V): <a href="simple_map.md#0x1_simple_map_SimpleMap">SimpleMap</a>&lt;K, V&gt;;
+</code></pre>
+
+
+
+
+<a id="0x1_simple_map_spec_remove"></a>
+
+
+<pre><code><b>native</b> <b>fun</b> <a href="simple_map.md#0x1_simple_map_spec_remove">spec_remove</a>&lt;K, V&gt;(t: <a href="simple_map.md#0x1_simple_map_SimpleMap">SimpleMap</a>&lt;K, V&gt;, k: K): <a href="simple_map.md#0x1_simple_map_SimpleMap">SimpleMap</a>&lt;K, V&gt;;
+</code></pre>
+
+
+
+
+<a id="0x1_simple_map_spec_get"></a>
+
+
+<pre><code><b>native</b> <b>fun</b> <a href="simple_map.md#0x1_simple_map_spec_get">spec_get</a>&lt;K, V&gt;(t: <a href="simple_map.md#0x1_simple_map_SimpleMap">SimpleMap</a>&lt;K, V&gt;, k: K): V;
+</code></pre>
+
+
+
+<a id="@Specification_1_keys"></a>
 
 ### Function `keys`
 
@@ -957,7 +958,7 @@ Remove a key/value pair from the map. The key must exist.
 
 
 
-<a name="@Specification_1_values"></a>
+<a id="@Specification_1_values"></a>
 
 ### Function `values`
 
@@ -973,7 +974,7 @@ Remove a key/value pair from the map. The key must exist.
 
 
 
-<a name="@Specification_1_to_vec_pair"></a>
+<a id="@Specification_1_to_vec_pair"></a>
 
 ### Function `to_vec_pair`
 
@@ -995,7 +996,7 @@ Remove a key/value pair from the map. The key must exist.
 
 
 
-<a name="@Specification_1_remove"></a>
+<a id="@Specification_1_remove"></a>
 
 ### Function `remove`
 
@@ -1011,7 +1012,7 @@ Remove a key/value pair from the map. The key must exist.
 
 
 
-<a name="@Specification_1_find"></a>
+<a id="@Specification_1_find"></a>
 
 ### Function `find`
 
@@ -1026,4 +1027,4 @@ Remove a key/value pair from the map. The key must exist.
 </code></pre>
 
 
-[move-book]: https://aptos.dev/guides/move-guides/book/SUMMARY
+[move-book]: https://aptos.dev/move/book/SUMMARY

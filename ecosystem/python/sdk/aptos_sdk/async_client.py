@@ -8,10 +8,9 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from . import ed25519
 from .account import Account
 from .account_address import AccountAddress
-from .authenticator import Authenticator, Ed25519Authenticator, MultiAgentAuthenticator
+from .authenticator import Authenticator, MultiAgentAuthenticator
 from .bcs import Serializer
 from .metadata import Metadata
 from .transactions import (
@@ -76,24 +75,33 @@ class RestClient:
     #
 
     async def account(
-        self, account_address: AccountAddress, ledger_version: int = None
+        self, account_address: AccountAddress, ledger_version: Optional[int] = None
     ) -> Dict[str, str]:
-        """Returns the sequence number and authentication key for an account"""
+        """
+        Fetch the authentication key and the sequence number for an account address.
 
-        if not ledger_version:
-            request = f"{self.base_url}/accounts/{account_address}"
-        else:
-            request = f"{self.base_url}/accounts/{account_address}?ledger_version={ledger_version}"
-
-        response = await self.client.get(request)
+        :param account_address: Address of the account, with or without a '0x' prefix.
+        :param ledger_version: Ledger version to get state of account. If not provided, it will be the latest version.
+        :return: The authentication key and sequence number for the specified address.
+        """
+        response = await self._get(
+            endpoint=f"accounts/{account_address}",
+            params={"ledger_version": ledger_version},
+        )
         if response.status_code >= 400:
             raise ApiError(f"{response.text} - {account_address}", response.status_code)
         return response.json()
 
     async def account_balance(
-        self, account_address: AccountAddress, ledger_version: int = None
+        self, account_address: AccountAddress, ledger_version: Optional[int] = None
     ) -> int:
-        """Returns the test coin balance associated with the account"""
+        """
+        Fetch the Aptos coin balance associated with the account.
+
+        :param account_address: Address of the account, with or without a '0x' prefix.
+        :param ledger_version: Ledger version to get state of account. If not provided, it will be the latest version.
+        :return: The Aptos coin balance associated with the account
+        """
         resource = await self.account_resource(
             account_address,
             "0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>",
@@ -102,8 +110,15 @@ class RestClient:
         return int(resource["data"]["coin"]["value"])
 
     async def account_sequence_number(
-        self, account_address: AccountAddress, ledger_version: int = None
+        self, account_address: AccountAddress, ledger_version: Optional[int] = None
     ) -> int:
+        """
+        Fetch the current sequence number for an account address.
+
+        :param account_address: Address of the account, with or without a '0x' prefix.
+        :param ledger_version: Ledger version to get state of account. If not provided, it will be the latest version.
+        :return: The current sequence number for the specified address.
+        """
         account_res = await self.account(account_address, ledger_version)
         return int(account_res["sequence_number"])
 
@@ -111,16 +126,23 @@ class RestClient:
         self,
         account_address: AccountAddress,
         resource_type: str,
-        ledger_version: int = None,
+        ledger_version: Optional[int] = None,
     ) -> Dict[str, Any]:
-        if not ledger_version:
-            request = (
-                f"{self.base_url}/accounts/{account_address}/resource/{resource_type}"
-            )
-        else:
-            request = f"{self.base_url}/accounts/{account_address}/resource/{resource_type}?ledger_version={ledger_version}"
+        """
+        Retrieves an individual resource from a given account and at a specific ledger version.
 
-        response = await self.client.get(request)
+        The Aptos nodes prune account state history, via a configurable time window. If the requested ledger version
+        has been pruned, the server responds with a 410.
+
+        :param account_address: Address of the account, with or without a '0x' prefix.
+        :param resource_type: Name of struct to retrieve e.g. 0x1::account::Account.
+        :param ledger_version: Ledger version to get state of account. If not provided, it will be the latest version.
+        :return: An individual resource from a given account and at a specific ledger version.
+        """
+        response = await self._get(
+            endpoint=f"accounts/{account_address}/resource/{resource_type}",
+            params={"ledger_version": ledger_version},
+        )
         if response.status_code == 404:
             raise ResourceNotFound(resource_type, resource_type)
         if response.status_code >= 400:
@@ -130,18 +152,210 @@ class RestClient:
     async def account_resources(
         self,
         account_address: AccountAddress,
-        ledger_version: int = None,
+        ledger_version: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        if not ledger_version:
-            request = f"{self.base_url}/accounts/{account_address}/resources"
-        else:
-            request = f"{self.base_url}/accounts/{account_address}/resources?ledger_version={ledger_version}"
+        """
+        Retrieves all account resources for a given account and a specific ledger version.
 
-        response = await self.client.get(request)
+        The Aptos nodes prune account state history, via a configurable time window. If the requested ledger version
+        has been pruned, the server responds with a 410.
+
+        :param account_address: Address of the account, with or without a '0x' prefix.
+        :param ledger_version: Ledger version to get state of account. If not provided, it will be the latest version.
+        :return: All account resources for a given account and a specific ledger version.
+        """
+        response = await self._get(
+            endpoint=f"accounts/{account_address}/resources",
+            params={"ledger_version": ledger_version},
+        )
         if response.status_code == 404:
             raise AccountNotFound(f"{account_address}", account_address)
         if response.status_code >= 400:
             raise ApiError(f"{response.text} - {account_address}", response.status_code)
+        return response.json()
+
+    async def account_module(
+        self,
+        account_address: AccountAddress,
+        module_name: str,
+        ledger_version: Optional[int] = None,
+    ) -> dict:
+        """
+        Retrieves an individual module from a given account and at a specific ledger version.
+
+        The Aptos nodes prune account state history, via a configurable time window. If the requested ledger version
+        has been pruned, the server responds with a 410.
+
+        :param account_address: Address of the account, with or without a '0x' prefix.
+        :param module_name: Name of module to retrieve e.g. 'coin'
+        :param ledger_version: Ledger version to get state of account. If not provided, it will be the latest version.
+        :return: An individual module from a given account and at a specific ledger version
+        """
+        response = await self._get(
+            endpoint=f"accounts/{account_address}/module/{module_name}",
+            params={"ledger_version": ledger_version},
+        )
+        if response.status_code >= 400:
+            raise ApiError(f"{response.text} - {account_address}", response.status_code)
+
+        return response.json()
+
+    async def account_modules(
+        self,
+        account_address: AccountAddress,
+        ledger_version: Optional[int] = None,
+        limit: Optional[int] = None,
+        start: Optional[str] = None,
+    ) -> dict:
+        """
+        Retrieves all account modules' bytecode for a given account at a specific ledger version.
+
+        The Aptos nodes prune account state history, via a configurable time window. If the requested ledger version
+        has been pruned, the server responds with a 410.
+
+        :param account_address: Address of the account, with or without a '0x' prefix.
+        :param ledger_version: Ledger version to get state of account. If not provided, it will be the latest version.
+        :param limit: Max number of account modules to retrieve. If not provided, defaults to default page size.
+        :param start: Cursor specifying where to start for pagination.
+        :return: All account modules' bytecode for a given account at a specific ledger version.
+        """
+        response = await self._get(
+            endpoint=f"accounts/{account_address}/modules",
+            params={
+                "ledger_version": ledger_version,
+                "limit": limit,
+                "start": start,
+            },
+        )
+        if response.status_code == 404:
+            raise AccountNotFound(f"{account_address}", account_address)
+        if response.status_code >= 400:
+            raise ApiError(f"{response.text} - {account_address}", response.status_code)
+
+        return response.json()
+
+    #
+    # Blocks
+    #
+
+    async def blocks_by_height(
+        self,
+        block_height: int,
+        with_transactions: bool = False,
+    ) -> dict:
+        """
+        Fetch the transactions in a block and the corresponding block information.
+
+        Transactions are limited by max default transactions size. If not all transactions are present, the user will
+        need to query for the rest of the transactions via the get transactions API. If the block is pruned, it will
+        return a 410.
+
+        :param block_height: Block height to lookup. Starts at 0.
+        :param with_transactions: If set to true, include all transactions in the block.
+        :returns: Block information.
+        """
+        response = await self._get(
+            endpoint=f"blocks/by_height/{block_height}",
+            params={
+                "with_transactions": with_transactions,
+            },
+        )
+        if response.status_code >= 400:
+            raise ApiError(f"{response.text}", response.status_code)
+
+        return response.json()
+
+    async def blocks_by_version(
+        self,
+        version: int,
+        with_transactions: bool = False,
+    ) -> dict:
+        """
+        Fetch the transactions in a block and the corresponding block information, given a version in the block.
+
+        Transactions are limited by max default transactions size. If not all transactions are present, the user will
+        need to query for the rest of the transactions via the get transactions API. If the block is pruned, it will
+        return a 410.
+
+        :param version: Ledger version to lookup block information for.
+        :param with_transactions: If set to true, include all transactions in the block.
+        :returns: Block information.
+        """
+        response = await self._get(
+            endpoint=f"blocks/by_version/{version}",
+            params={
+                "with_transactions": with_transactions,
+            },
+        )
+        if response.status_code >= 400:
+            raise ApiError(f"{response.text}", response.status_code)
+
+        return response.json()
+
+    #
+    # Events
+    #
+
+    async def event_by_creation_number(
+        self,
+        account_address: AccountAddress,
+        creation_number: int,
+        limit: Optional[int] = None,
+        start: Optional[int] = None,
+    ) -> List[dict]:
+        """
+        Retrieve events corresponding to an account address and creation number indicating the event type emitted
+        to that account.
+
+        Creation numbers are monotonically increasing for each account address.
+
+        :param account_address: Address of the account, with or without a '0x' prefix.
+        :param creation_number: Creation number corresponding to the event stream originating from the given account.
+        :param limit: Max number of events to retrieve. If not provided, defaults to default page size.
+        :param start: Starting sequence number of events.If unspecified, by default will retrieve the most recent.
+        :returns: Events corresponding to an account address and creation number indicating the event type emitted
+        to that account.
+        """
+        response = await self._get(
+            endpoint=f"accounts/{account_address}/events/{creation_number}",
+            params={
+                "limit": limit,
+                "start": start,
+            },
+        )
+        if response.status_code >= 400:
+            raise ApiError(f"{response.text} - {account_address}", response.status_code)
+
+        return response.json()
+
+    async def events_by_event_handle(
+        self,
+        account_address: AccountAddress,
+        event_handle: str,
+        field_name: str,
+        limit: Optional[int] = None,
+        start: Optional[int] = None,
+    ) -> List[dict]:
+        """
+        Retrieve events corresponding to an account address, event handle (struct name) and field name.
+
+        :param account_address: Address of the account, with or without a '0x' prefix.
+        :param event_handle: Name of struct to lookup event handle e.g., '0x1::account::Account'.
+        :param field_name: Name of field to lookup event handle e.g., 'withdraw_events'
+        :param limit: Max number of events to retrieve. If not provided, defaults to default page size.
+        :param start: Starting sequence number of events.If unspecified, by default will retrieve the most recent.
+        :returns: Events corresponding to the provided account address, event handle and field name.
+        """
+        response = await self._get(
+            endpoint=f"accounts/{account_address}/events/{event_handle}/{field_name}",
+            params={
+                "limit": limit,
+                "start": start,
+            },
+        )
+        if response.status_code >= 400:
+            raise ApiError(f"{response.text} - {account_address}", response.status_code)
+
         return response.json()
 
     async def current_timestamp(self) -> float:
@@ -154,7 +368,7 @@ class RestClient:
         key_type: str,
         value_type: str,
         key: Any,
-        ledger_version: int = None,
+        ledger_version: Optional[int] = None,
     ) -> Any:
         if not ledger_version:
             request = f"{self.base_url}/tables/{handle}/item"
@@ -228,23 +442,22 @@ class RestClient:
     # Transactions
     #
 
-    async def simulate_transaction(
+    async def simulate_bcs_transaction(
         self,
-        transaction: RawTransaction,
-        sender: Account,
+        signed_transaction: SignedTransaction,
+        estimate_gas_usage: bool = False,
     ) -> Dict[str, Any]:
-        # Note that simulated transactions are not signed and have all 0 signatures!
-        authenticator = Authenticator(
-            Ed25519Authenticator(
-                sender.public_key(),
-                ed25519.Signature(b"\x00" * 64),
-            )
-        )
-        signed_transaction = SignedTransaction(transaction, authenticator)
-
         headers = {"Content-Type": "application/x.aptos.signed_transaction+bcs"}
+        params = {}
+        if estimate_gas_usage:
+            params = {
+                "estimate_gas_unit_price": "true",
+                "estimate_max_gas_amount": "true",
+            }
+
         response = await self.client.post(
             f"{self.base_url}/transactions/simulate",
+            params=params,
             headers=headers,
             content=signed_transaction.bytes(),
         )
@@ -252,6 +465,19 @@ class RestClient:
             raise ApiError(response.text, response.status_code)
 
         return response.json()
+
+    async def simulate_transaction(
+        self,
+        transaction: RawTransaction,
+        sender: Account,
+        estimate_gas_usage: bool = False,
+    ) -> Dict[str, Any]:
+        # Note that simulated transactions are not signed and have all 0 signatures!
+        authenticator = sender.sign_simulated_transaction(transaction)
+        return await self.simulate_bcs_transaction(
+            signed_transaction=SignedTransaction(transaction, authenticator),
+            estimate_gas_usage=estimate_gas_usage,
+        )
 
     async def submit_bcs_transaction(
         self, signed_transaction: SignedTransaction
@@ -310,9 +536,7 @@ class RestClient:
         return response.json()["hash"]
 
     async def transaction_pending(self, txn_hash: str) -> bool:
-        response = await self.client.get(
-            f"{self.base_url}/transactions/by_hash/{txn_hash}"
-        )
+        response = await self._get(endpoint=f"transactions/by_hash/{txn_hash}")
         # TODO(@davidiw): consider raising a different error here, since this is an ambiguous state
         if response.status_code == 404:
             return True
@@ -333,9 +557,8 @@ class RestClient:
             ), f"transaction {txn_hash} timed out"
             await asyncio.sleep(1)
             count += 1
-        response = await self.client.get(
-            f"{self.base_url}/transactions/by_hash/{txn_hash}"
-        )
+
+        response = await self._get(endpoint=f"transactions/by_hash/{txn_hash}")
         assert (
             "success" in response.json() and response.json()["success"]
         ), f"{response.text} - {txn_hash}"
@@ -344,15 +567,82 @@ class RestClient:
         self, address: AccountAddress, sequence_number: int
     ) -> bool:
         """Retrieve the state of a transaction by account and sequence number."""
-
-        response = await self.client.get(
-            f"{self.base_url}/accounts/{address}/transactions?limit=1&start={sequence_number}"
+        response = await self._get(
+            endpoint=f"accounts/{address}/transactions",
+            params={
+                "limit": 1,
+                "start": sequence_number,
+            },
         )
         if response.status_code >= 400:
             logging.info(f"k {response}")
             raise ApiError(response.text, response.status_code)
         data = response.json()
         return len(data) == 1 and data[0]["type"] != "pending_transaction"
+
+    async def transaction_by_hash(self, txn_hash: str) -> Dict[str, Any]:
+        response = await self._get(endpoint=f"transactions/by_hash/{txn_hash}")
+        if response.status_code >= 400:
+            raise ApiError(response.text, response.status_code)
+        return response.json()
+
+    async def transactions_by_account(
+        self,
+        account_address: AccountAddress,
+        limit: Optional[int] = None,
+        start: Optional[int] = None,
+    ) -> List[dict]:
+        """
+        Retrieves on-chain committed transactions from an account.
+
+        If the start version is too far in the past, a 410 will be returned. If no start version is given, it will
+        start at version 0.
+
+        To retrieve a pending transaction, use /transactions/by_hash.
+
+        :param account_address: Address of account with or without a 0x prefix.
+        :param limit: Max number of transactions to retrieve. If not provided, defaults to default page size.
+        :param start: Account sequence number to start list of transactions. Defaults to latest transactions.
+        :returns: List of on-chain committed transactions from the specified account.
+        """
+        response = await self._get(
+            endpoint=f"accounts/{account_address}/transactions",
+            params={
+                "limit": limit,
+                "start": start,
+            },
+        )
+        if response.status_code >= 400:
+            raise ApiError(response.text, response.status_code)
+
+        return response.json()
+
+    async def transactions(
+        self,
+        limit: Optional[int] = None,
+        start: Optional[int] = None,
+    ) -> List[dict]:
+        """
+        Retrieve on-chain committed transactions.
+
+        The page size and start ledger version can be provided to get a specific sequence of transactions. If the
+        version has been pruned, then a 410 will be returned. To retrieve a pending transaction,
+        use /transactions/by_hash.
+
+        :param limit: Max number of transactions to retrieve. If not provided, defaults to default page size.
+        :param start: Ledger version to start list of transactions. Defaults to showing the latest transactions.
+        """
+        response = await self._get(
+            endpoint="transactions",
+            params={
+                "limit": limit,
+                "start": start,
+            },
+        )
+        if response.status_code >= 400:
+            raise ApiError(response.text, response.status_code)
+
+        return response.json()
 
     #
     # Transaction helpers
@@ -377,19 +667,13 @@ class RestClient:
             [x.address() for x in secondary_accounts],
         )
 
-        keyed_txn = raw_transaction.keyed()
-
         authenticator = Authenticator(
             MultiAgentAuthenticator(
-                Authenticator(
-                    Ed25519Authenticator(sender.public_key(), sender.sign(keyed_txn))
-                ),
+                sender.sign_transaction(raw_transaction),
                 [
                     (
                         x.address(),
-                        Authenticator(
-                            Ed25519Authenticator(x.public_key(), x.sign(keyed_txn))
-                        ),
+                        x.sign_transaction(raw_transaction),
                     )
                     for x in secondary_accounts
                 ],
@@ -428,10 +712,7 @@ class RestClient:
         raw_transaction = await self.create_bcs_transaction(
             sender, payload, sequence_number
         )
-        signature = sender.sign(raw_transaction.keyed())
-        authenticator = Authenticator(
-            Ed25519Authenticator(sender.public_key(), signature)
-        )
+        authenticator = sender.sign_transaction(raw_transaction)
         return SignedTransaction(raw_transaction, authenticator)
 
     #
@@ -478,290 +759,95 @@ class RestClient:
         signed_transaction = await self.create_bcs_signed_transaction(
             sender, TransactionPayload(payload), sequence_number=sequence_number
         )
-        return await self.submit_bcs_transaction(signed_transaction)
+        return await self.submit_bcs_transaction(signed_transaction)  # <:!:bcs_transfer
 
-    # <:!:bcs_transfer
-
-    #
-    # Token transaction wrappers
-    #
-
-    # :!:>create_collection
-    async def create_collection(
-        self, account: Account, name: str, description: str, uri: str
-    ) -> str:  # <:!:create_collection
-        """Creates a new collection within the specified account"""
-
-        transaction_arguments = [
-            TransactionArgument(name, Serializer.str),
-            TransactionArgument(description, Serializer.str),
-            TransactionArgument(uri, Serializer.str),
-            TransactionArgument(U64_MAX, Serializer.u64),
-            TransactionArgument(
-                [False, False, False], Serializer.sequence_serializer(Serializer.bool)
-            ),
-        ]
-
-        payload = EntryFunction.natural(
-            "0x3::token",
-            "create_collection_script",
-            [],
-            transaction_arguments,
-        )
-
-        signed_transaction = await self.create_bcs_signed_transaction(
-            account, TransactionPayload(payload)
-        )
-        return await self.submit_bcs_transaction(signed_transaction)
-
-    # :!:>create_token
-    async def create_token(
-        self,
-        account: Account,
-        collection_name: str,
-        name: str,
-        description: str,
-        supply: int,
-        uri: str,
-        royalty_points_per_million: int,
-    ) -> str:  # <:!:create_token
-        transaction_arguments = [
-            TransactionArgument(collection_name, Serializer.str),
-            TransactionArgument(name, Serializer.str),
-            TransactionArgument(description, Serializer.str),
-            TransactionArgument(supply, Serializer.u64),
-            TransactionArgument(supply, Serializer.u64),
-            TransactionArgument(uri, Serializer.str),
-            TransactionArgument(account.address(), Serializer.struct),
-            # SDK assumes per million
-            TransactionArgument(1000000, Serializer.u64),
-            TransactionArgument(royalty_points_per_million, Serializer.u64),
-            TransactionArgument(
-                [False, False, False, False, False],
-                Serializer.sequence_serializer(Serializer.bool),
-            ),
-            TransactionArgument([], Serializer.sequence_serializer(Serializer.str)),
-            TransactionArgument(
-                [], Serializer.sequence_serializer(Serializer.to_bytes)
-            ),
-            TransactionArgument([], Serializer.sequence_serializer(Serializer.str)),
-        ]
-
-        payload = EntryFunction.natural(
-            "0x3::token",
-            "create_token_script",
-            [],
-            transaction_arguments,
-        )
-        signed_transaction = await self.create_bcs_signed_transaction(
-            account, TransactionPayload(payload)
-        )
-        return await self.submit_bcs_transaction(signed_transaction)
-
-    async def offer_token(
-        self,
-        account: Account,
-        receiver: AccountAddress,
-        creator: AccountAddress,
-        collection_name: str,
-        token_name: str,
-        property_version: int,
-        amount: int,
+    async def transfer_object(
+        self, owner: Account, object: AccountAddress, to: AccountAddress
     ) -> str:
         transaction_arguments = [
-            TransactionArgument(receiver, Serializer.struct),
-            TransactionArgument(creator, Serializer.struct),
-            TransactionArgument(collection_name, Serializer.str),
-            TransactionArgument(token_name, Serializer.str),
-            TransactionArgument(property_version, Serializer.u64),
-            TransactionArgument(amount, Serializer.u64),
+            TransactionArgument(object, Serializer.struct),
+            TransactionArgument(to, Serializer.struct),
         ]
 
         payload = EntryFunction.natural(
-            "0x3::token_transfers",
-            "offer_script",
+            "0x1::object",
+            "transfer_call",
             [],
             transaction_arguments,
         )
+
         signed_transaction = await self.create_bcs_signed_transaction(
-            account, TransactionPayload(payload)
-        )
-        return await self.submit_bcs_transaction(signed_transaction)
-
-    async def claim_token(
-        self,
-        account: Account,
-        sender: AccountAddress,
-        creator: AccountAddress,
-        collection_name: str,
-        token_name: str,
-        property_version: int,
-    ) -> str:
-        transaction_arguments = [
-            TransactionArgument(sender, Serializer.struct),
-            TransactionArgument(creator, Serializer.struct),
-            TransactionArgument(collection_name, Serializer.str),
-            TransactionArgument(token_name, Serializer.str),
-            TransactionArgument(property_version, Serializer.u64),
-        ]
-
-        payload = EntryFunction.natural(
-            "0x3::token_transfers",
-            "claim_script",
-            [],
-            transaction_arguments,
-        )
-        signed_transaction = await self.create_bcs_signed_transaction(
-            account, TransactionPayload(payload)
-        )
-        return await self.submit_bcs_transaction(signed_transaction)
-
-    async def direct_transfer_token(
-        self,
-        sender: Account,
-        receiver: Account,
-        creators_address: AccountAddress,
-        collection_name: str,
-        token_name: str,
-        property_version: int,
-        amount: int,
-    ) -> str:
-        transaction_arguments = [
-            TransactionArgument(creators_address, Serializer.struct),
-            TransactionArgument(collection_name, Serializer.str),
-            TransactionArgument(token_name, Serializer.str),
-            TransactionArgument(property_version, Serializer.u64),
-            TransactionArgument(amount, Serializer.u64),
-        ]
-
-        payload = EntryFunction.natural(
-            "0x3::token",
-            "direct_transfer_script",
-            [],
-            transaction_arguments,
-        )
-
-        signed_transaction = await self.create_multi_agent_bcs_transaction(
-            sender,
-            [receiver],
+            owner,
             TransactionPayload(payload),
         )
         return await self.submit_bcs_transaction(signed_transaction)
 
-    #
-    # Token accessors
-    #
-
-    async def get_token(
+    async def view(
         self,
-        owner: AccountAddress,
-        creator: AccountAddress,
-        collection_name: str,
-        token_name: str,
-        property_version: int,
-    ) -> Any:
-        resource = await self.account_resource(owner, "0x3::token::TokenStore")
-        token_store_handle = resource["data"]["tokens"]["handle"]
+        function: str,
+        type_arguments: List[str],
+        arguments: List[str],
+        ledger_version: Optional[int] = None,
+    ) -> bytes:
+        """
+        Execute a view Move function with the given parameters and return its execution result.
 
-        token_id = {
-            "token_data_id": {
-                "creator": creator.hex(),
-                "collection": collection_name,
-                "name": token_name,
+        The Aptos nodes prune account state history, via a configurable time window. If the requested ledger version
+        has been pruned, the server responds with a 410.
+
+        :param function: Entry function id is string representation of an entry function defined on-chain.
+        :param type_arguments: Type arguments of the function.
+        :param arguments: Arguments of the function.
+        :param ledger_version: Ledger version to get state of account. If not provided, it will be the latest version.
+        :returns: Execution result.
+        """
+        response = await self._post(
+            endpoint="view",
+            params={
+                "ledger_version": ledger_version,
             },
-            "property_version": str(property_version),
-        }
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+            data={
+                "function": function,
+                "type_arguments": type_arguments,
+                "arguments": arguments,
+            },
+        )
+        if response.status_code >= 400:
+            raise ApiError(response.text, response.status_code)
 
-        try:
-            return await self.get_table_item(
-                token_store_handle,
-                "0x3::token::TokenId",
-                "0x3::token::Token",
-                token_id,
-            )
-        except ApiError as e:
-            if e.status_code == 404:
-                return {
-                    "id": token_id,
-                    "amount": "0",
-                }
-            raise
+        return response.content
 
-    async def get_token_balance(
+    async def _post(
         self,
-        owner: AccountAddress,
-        creator: AccountAddress,
-        collection_name: str,
-        token_name: str,
-        property_version: int,
-    ) -> str:
-        info = await self.get_token(
-            owner, creator, collection_name, token_name, property_version
-        )
-        return info["amount"]
-
-    # :!:>read_token_data_table
-    async def get_token_data(
-        self,
-        creator: AccountAddress,
-        collection_name: str,
-        token_name: str,
-        property_version: int,
-    ) -> Any:
-        resource = await self.account_resource(creator, "0x3::token::Collections")
-        token_data_handle = resource["data"]["token_data"]["handle"]
-
-        token_data_id = {
-            "creator": creator.hex(),
-            "collection": collection_name,
-            "name": token_name,
-        }
-
-        return await self.get_table_item(
-            token_data_handle,
-            "0x3::token::TokenDataId",
-            "0x3::token::TokenData",
-            token_data_id,
-        )  # <:!:read_token_data_table
-
-    async def get_collection(
-        self, creator: AccountAddress, collection_name: str
-    ) -> Any:
-        resource = await self.account_resource(creator, "0x3::token::Collections")
-        token_data = resource["data"]["collection_data"]["handle"]
-
-        return await self.get_table_item(
-            token_data,
-            "0x1::string::String",
-            "0x3::token::CollectionData",
-            collection_name,
+        endpoint: str,
+        params: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, Any]] = None,
+        data: Optional[Dict[str, Any]] = None,
+    ) -> httpx.Response:
+        # format params:
+        params = {} if params is None else params
+        params = {key: val for key, val in params.items() if val is not None}
+        return await self.client.post(
+            url=f"{self.base_url}/{endpoint}",
+            params=params,
+            headers=headers,
+            json=data,
         )
 
-    #
-    # Package publishing
-    #
-
-    async def publish_package(
-        self, sender: Account, package_metadata: bytes, modules: List[bytes]
-    ) -> str:
-        transaction_arguments = [
-            TransactionArgument(package_metadata, Serializer.to_bytes),
-            TransactionArgument(
-                modules, Serializer.sequence_serializer(Serializer.to_bytes)
-            ),
-        ]
-
-        payload = EntryFunction.natural(
-            "0x1::code",
-            "publish_package_txn",
-            [],
-            transaction_arguments,
+    async def _get(
+        self, endpoint: str, params: Optional[Dict[str, Any]] = None
+    ) -> httpx.Response:
+        # format params:
+        params = {} if params is None else params
+        params = {key: val for key, val in params.items() if val is not None}
+        return await self.client.get(
+            url=f"{self.base_url}/{endpoint}",
+            params=params,
         )
-
-        signed_transaction = await self.create_bcs_signed_transaction(
-            sender, TransactionPayload(payload)
-        )
-        return await self.submit_bcs_transaction(signed_transaction)
 
 
 class FaucetClient:
@@ -769,24 +855,33 @@ class FaucetClient:
 
     base_url: str
     rest_client: RestClient
+    headers: Dict[str, str]
 
-    def __init__(self, base_url: str, rest_client: RestClient):
+    def __init__(
+        self, base_url: str, rest_client: RestClient, auth_token: Optional[str] = None
+    ):
         self.base_url = base_url
         self.rest_client = rest_client
+        self.headers = {}
+        if auth_token:
+            self.headers["Authorization"] = f"Bearer {auth_token}"
 
     async def close(self):
         await self.rest_client.close()
 
-    async def fund_account(self, address: str, amount: int):
+    async def fund_account(self, address: AccountAddress, amount: int):
         """This creates an account if it does not exist and mints the specified amount of
         coins into that account."""
-        response = await self.rest_client.client.post(
-            f"{self.base_url}/mint?amount={amount}&address={address}"
-        )
+        request = f"{self.base_url}/mint?amount={amount}&address={address}"
+        response = await self.rest_client.client.post(request, headers=self.headers)
         if response.status_code >= 400:
             raise ApiError(response.text, response.status_code)
         for txn_hash in response.json():
             await self.rest_client.wait_for_transaction(txn_hash)
+
+    async def healthy(self) -> bool:
+        response = await self.rest_client.client.get(self.base_url)
+        return "tap:ok" == response.text
 
 
 class ApiError(Exception):

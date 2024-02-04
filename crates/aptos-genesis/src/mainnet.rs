@@ -3,8 +3,8 @@
 
 use crate::{builder::GenesisConfiguration, config::ValidatorConfiguration};
 use aptos_config::config::{
-    RocksdbConfigs, BUFFERED_STATE_TARGET_ITEMS, DEFAULT_MAX_NUM_NODES_PER_LRU_CACHE_SHARD,
-    NO_OP_STORAGE_PRUNER_CONFIG,
+    RocksdbConfigs, StorageDirPaths, BUFFERED_STATE_TARGET_ITEMS,
+    DEFAULT_MAX_NUM_NODES_PER_LRU_CACHE_SHARD, NO_OP_STORAGE_PRUNER_CONFIG,
 };
 use aptos_db::AptosDB;
 use aptos_framework::ReleaseBundle;
@@ -134,13 +134,14 @@ impl MainnetGenesisInfo {
         let genesis = self.get_genesis();
         let path = TempPath::new();
         let aptosdb = AptosDB::open(
-            &path,
+            StorageDirPaths::from_path(path),
             false,
             NO_OP_STORAGE_PRUNER_CONFIG,
             RocksdbConfigs::default(),
-            false,
+            false, /* indexer */
             BUFFERED_STATE_TARGET_ITEMS,
             DEFAULT_MAX_NUM_NODES_PER_LRU_CACHE_SHARD,
+            false, /* indexer async v2 */
         )?;
         let db_rw = DbReaderWriter::new(aptosdb);
         aptos_executor::db_bootstrapper::generate_waypoint::<AptosVM>(&db_rw, genesis)

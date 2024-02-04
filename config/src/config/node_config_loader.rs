@@ -13,7 +13,6 @@ use aptos_types::{
     on_chain_config::OnChainConfig,
     state_store::state_key::{StateKey, StateKeyInner},
     transaction::{Transaction, WriteSetPayload},
-    write_set::WriteOp,
 };
 use serde_yaml::Value;
 use std::path::Path;
@@ -104,20 +103,36 @@ fn get_local_config_yaml<P: AsRef<Path>>(node_config_path: P) -> Result<Value, E
     Ok(local_config_yaml)
 }
 
+/// Extracts the node type and chain ID from the given node config
+/// and genesis transaction. If the chain ID cannot be extracted,
+/// None is returned.
+fn extract_node_type_and_chain_id(node_config: &NodeConfig) -> (NodeType, Option<ChainId>) {
+    // Get the node type from the node config
+    let node_type = NodeType::extract_from_config(node_config);
+
+    // Get the chain ID from the genesis transaction
+    match get_chain_id(node_config) {
+        Ok(chain_id) => (node_type, Some(chain_id)),
+        Err(error) => {
+            println!("Failed to extract the chain ID from the genesis transaction: {:?}! Continuing with None.", error);
+            (node_type, None)
+        },
+    }
+}
+
 /// Optimize and sanitize the node config for the current environment
 fn optimize_and_sanitize_node_config(
     node_config: &mut NodeConfig,
     local_config_yaml: Value,
 ) -> Result<(), Error> {
-    // Get the role and chain_id for the node
-    let node_type = NodeType::extract_from_config(node_config);
-    let chain_id = match get_chain_id(node_config) {
-        Ok(chain_id) => chain_id,
-        Err(error) => {
-            println!("Failed to get the chain ID from the genesis blob! Skipping config sanitization. Error: {:?}", error);
-            return Ok(());
-        },
-    };
+    // Extract the node type and chain ID from the node config
+    let (node_type, chain_id) = extract_node_type_and_chain_id(node_config);
+
+    // Print the extracted node type and chain ID
+    println!(
+        "Identified node type ({:?}) and chain ID ({:?}) from node config!",
+        node_type, chain_id
+    );
 
     // Optimize the node config
     NodeConfig::optimize(node_config, &local_config_yaml, node_type, chain_id)?;
@@ -126,7 +141,17 @@ fn optimize_and_sanitize_node_config(
     NodeConfig::sanitize(node_config, node_type, chain_id)
 }
 
-/// Get the chain ID for the node
+/// Sanitize the node config for the current environment
+pub fn sanitize_node_config(node_config: &mut NodeConfig) -> Result<(), Error> {
+    // Extract the node type and chain ID from the node config
+    let (node_type, chain_id) = extract_node_type_and_chain_id(node_config);
+
+    // Sanitize the node config
+    NodeConfig::sanitize(node_config, node_type, chain_id)
+}
+
+/// Get the chain ID for the node from the genesis transaction.
+/// If the chain ID cannot be extracted, an error is returned.
 fn get_chain_id(node_config: &NodeConfig) -> Result<ChainId, Error> {
     // TODO: can we make this less hacky?
 
@@ -158,17 +183,9 @@ fn get_chain_id(node_config: &NodeConfig) -> Result<ChainId, Error> {
             })?;
 
             // Extract the chain ID from the write op
-            let write_op_bytes = match write_op {
-                WriteOp::Creation(bytes) => bytes,
-                WriteOp::Modification(bytes) => bytes,
-                WriteOp::CreationWithMetadata { data, metadata: _ } => data,
-                WriteOp::ModificationWithMetadata { data, metadata: _ } => data,
-                _ => {
-                    return Err(Error::InvariantViolation(
-                        "The genesis transaction does not contain the correct write op for the chain ID!".into(),
-                    ));
-                },
-            };
+            let write_op_bytes = write_op.bytes().ok_or_else(|| Error::InvariantViolation(
+                "The genesis transaction does not contain the correct write op for the chain ID!".into(),
+            ))?;
             let chain_id = ChainId::deserialize_into_config(write_op_bytes).map_err(|error| {
                 Error::InvariantViolation(format!(
                     "Failed to deserialize the chain ID: {:?}",

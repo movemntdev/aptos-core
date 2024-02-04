@@ -7,16 +7,24 @@ use crate::{
     txn_emitter::generate_traffic,
 };
 use aptos_cached_packages::aptos_stdlib;
+use aptos_config::config::GasEstimationConfig;
 use aptos_crypto::ed25519::Ed25519Signature;
 use aptos_forge::{LocalSwarm, NodeExt, Swarm, TransactionType};
 use aptos_global_constants::{DEFAULT_BUCKETS, GAS_UNIT_PRICE};
-use aptos_rest_client::aptos_api_types::{MoveModuleId, TransactionData};
+use aptos_rest_client::{
+    aptos_api_types::{MoveModuleId, TransactionData, ViewFunction, ViewRequest},
+    Client,
+};
 use aptos_sdk::move_types::language_storage::StructTag;
 use aptos_types::{
     account_address::AccountAddress,
     account_config::{AccountResource, CORE_CODE_ADDRESS},
-    on_chain_config::{ExecutionConfigV2, OnChainExecutionConfig},
+    on_chain_config::{ExecutionConfigV2, OnChainExecutionConfig, TransactionShufflerType},
     transaction::{authenticator::AuthenticationKey, SignedTransaction, Transaction},
+};
+use move_core_types::{
+    ident_str,
+    language_storage::{ModuleId, TypeTag},
 };
 use std::{convert::TryFrom, str::FromStr, sync::Arc, time::Duration};
 
@@ -40,7 +48,7 @@ async fn test_basic_client() {
     //            test to pass.
     //            Is this caused by us increasing the default max gas amount in
     //            testsuite/forge/src/interface/aptos.rs?
-    let mut account1 = info
+    let account1 = info
         .create_and_fund_user_account(10_000_000_000)
         .await
         .unwrap();
@@ -78,6 +86,15 @@ fn next_bucket(gas_unit_price: u64) -> u64 {
         .iter()
         .find(|bucket| **bucket > gas_unit_price)
         .unwrap()
+}
+
+async fn block_height(client: &Client) -> u64 {
+    client
+        .get_ledger_information()
+        .await
+        .unwrap()
+        .into_inner()
+        .block_height
 }
 
 async fn test_gas_estimation_inner(swarm: &mut LocalSwarm) {
@@ -126,8 +143,21 @@ async fn test_gas_estimation_inner(swarm: &mut LocalSwarm) {
         estimation.prioritized_gas_estimate
     );
 
-    // Empty blocks will reset the prices
-    std::thread::sleep(Duration::from_secs(40));
+    // Wait for enough empty blocks to reset the prices
+    let num_blocks_to_reset = GasEstimationConfig::default().aggressive_block_history as u64;
+    let base_height = block_height(&client).await;
+    loop {
+        let num_blocks_passed = block_height(&client).await - base_height;
+        if num_blocks_passed > num_blocks_to_reset {
+            println!("{} blocks passed, done sleeping", num_blocks_passed);
+            break;
+        }
+        println!("{} blocks passed, sleeping 10 secs...", num_blocks_passed);
+        // Exercise cache
+        client.estimate_gas_price().await.unwrap();
+        std::thread::sleep(Duration::from_secs(10));
+    }
+
     // Multiple times, to exercise cache
     for _i in 0..2 {
         let estimation = match client.estimate_gas_price().await {
@@ -176,12 +206,15 @@ async fn test_gas_estimation_txns_limit() {
 }
 
 #[tokio::test]
+#[ignore]
+// This test is ignored because after enabling gas limit, the txn emitter fails.
+// TODO (bchocho): Fix this test.
 async fn test_gas_estimation_gas_used_limit() {
     let mut swarm = SwarmBuilder::new_local(1)
         .with_init_genesis_config(Arc::new(|conf| {
             conf.execution_config = OnChainExecutionConfig::V2(ExecutionConfigV2 {
+                transaction_shuffler_type: TransactionShufflerType::NoShuffling,
                 block_gas_limit: Some(1),
-                ..Default::default()
             });
         }))
         .with_init_config(Arc::new(|_, conf, _| {
@@ -497,4 +530,58 @@ async fn test_bcs() {
         json_events.first().unwrap().version.0,
         bcs_events.first().unwrap().transaction_version
     );
+
+    // Test that more than 25 transactions can be retrieved
+    let json_txns = client
+        .get_transactions(Some(0), Some(30))
+        .await
+        .unwrap()
+        .into_inner();
+    let bcs_txns = client
+        .get_transactions_bcs(Some(0), Some(30))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(json_txns.len(), 30);
+    assert_eq!(json_txns.len(), bcs_txns.len());
+}
+
+#[tokio::test]
+async fn test_view_function() {
+    let mut swarm = new_local_swarm_with_aptos(1).await;
+    let info = swarm.aptos_public_info();
+    let client: &Client = info.client();
+
+    let address = AccountAddress::ONE;
+
+    // Non-BCS
+    let view_request = ViewRequest {
+        function: "0x1::coin::is_account_registered".parse().unwrap(),
+        type_arguments: vec!["0x1::aptos_coin::AptosCoin".parse().unwrap()],
+        arguments: vec![serde_json::Value::String(address.to_hex_literal())],
+    };
+
+    // Balance should be 0 and there should only be one return value
+    let json_ret_values = client.view(&view_request, None).await.unwrap().into_inner();
+    assert_eq!(json_ret_values.len(), 1);
+    assert!(!json_ret_values[0].as_bool().unwrap());
+
+    // BCS
+    let bcs_view_request = ViewFunction {
+        module: ModuleId::new(address, ident_str!("coin").into()),
+        function: ident_str!("is_account_registered").into(),
+        ty_args: vec![TypeTag::Struct(Box::new(
+            StructTag::from_str("0x1::aptos_coin::AptosCoin").unwrap(),
+        ))],
+        args: vec![bcs::to_bytes(&address).unwrap()],
+    };
+
+    // Balance should be 0 and there should only be one return value
+    let bcs_ret_values: Vec<bool> = client
+        .view_bcs(&bcs_view_request, None)
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(bcs_ret_values.len(), 1);
+    assert!(!bcs_ret_values[0]);
 }

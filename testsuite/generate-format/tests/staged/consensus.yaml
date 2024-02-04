@@ -25,6 +25,16 @@ AccountAuthenticator:
               TYPENAME: MultiEd25519PublicKey
           - signature:
               TYPENAME: MultiEd25519Signature
+    2:
+      SingleKey:
+        STRUCT:
+          - authenticator:
+              TYPENAME: SingleKeyAuthenticator
+    3:
+      MultiKey:
+        STRUCT:
+          - authenticator:
+              TYPENAME: MultiKeyAuthenticator
 AggregateSignature:
   STRUCT:
     - validator_bitmask:
@@ -38,6 +48,47 @@ AggregateSignatureWithRounds:
         TYPENAME: AggregateSignature
     - rounds:
         SEQ: U64
+AnyPublicKey:
+  ENUM:
+    0:
+      Ed25519:
+        STRUCT:
+          - public_key:
+              TYPENAME: Ed25519PublicKey
+    1:
+      Secp256k1Ecdsa:
+        STRUCT:
+          - public_key:
+              TYPENAME: Secp256k1EcdsaPublicKey
+    2:
+      Secp256r1Ecdsa:
+        STRUCT:
+          - public_key:
+              TYPENAME: Secp256r1EcdsaPublicKey
+AnySignature:
+  ENUM:
+    0:
+      Ed25519:
+        STRUCT:
+          - signature:
+              TYPENAME: Ed25519Signature
+    1:
+      Secp256k1Ecdsa:
+        STRUCT:
+          - signature:
+              TYPENAME: Secp256k1EcdsaSignature
+    2:
+      WebAuthn:
+        STRUCT:
+          - signature:
+              TYPENAME: PartialAuthenticatorAssertionResponse
+AssertionSignature:
+  ENUM:
+    0:
+      Secp256r1Ecdsa:
+        STRUCT:
+          - signature:
+              TYPENAME: Secp256r1EcdsaSignature
 Batch:
   STRUCT:
     - batch_info:
@@ -80,6 +131,16 @@ BatchRequest:
         TYPENAME: AccountAddress
     - digest:
         TYPENAME: HashValue
+BatchResponse:
+  ENUM:
+    0:
+      Batch:
+        NEWTYPE:
+          TYPENAME: Batch
+    1:
+      NotFound:
+        NEWTYPE:
+          TYPENAME: LedgerInfoWithSignatures
 BitVec:
   STRUCT:
     - inner: BYTES
@@ -173,6 +234,10 @@ BlockType:
                   - TYPENAME: AccountAddress
     2:
       Genesis: UNIT
+    3:
+      ProposalExt:
+        NEWTYPE:
+          TYPENAME: ProposalExt
 ChainId:
   NEWTYPESTRUCT: U8
 ChangeSet:
@@ -186,6 +251,19 @@ CommitDecision:
   STRUCT:
     - ledger_info:
         TYPENAME: LedgerInfoWithSignatures
+CommitMessage:
+  ENUM:
+    0:
+      Vote:
+        NEWTYPE:
+          TYPENAME: CommitVote
+    1:
+      Decision:
+        NEWTYPE:
+          TYPENAME: CommitDecision
+    2:
+      Ack:
+        NEWTYPE: UNIT
 CommitVote:
   STRUCT:
     - author:
@@ -256,13 +334,29 @@ ConsensusMsg:
       DAGMessage:
         NEWTYPE:
           TYPENAME: DAGNetworkMessage
+    15:
+      CommitMessage:
+        NEWTYPE:
+          TYPENAME: CommitMessage
+    16:
+      RandGenMessage:
+        NEWTYPE:
+          TYPENAME: RandGenMessage
+    17:
+      BatchResponseV2:
+        NEWTYPE:
+          TYPENAME: BatchResponse
 ContractEvent:
   ENUM:
     0:
-      V0:
+      V1:
         NEWTYPE:
-          TYPENAME: ContractEventV0
-ContractEventV0:
+          TYPENAME: ContractEventV1
+    1:
+      V2:
+        NEWTYPE:
+          TYPENAME: ContractEventV2
+ContractEventV1:
   STRUCT:
     - key:
         TYPENAME: EventKey
@@ -270,10 +364,18 @@ ContractEventV0:
     - type_tag:
         TYPENAME: TypeTag
     - event_data: BYTES
+ContractEventV2:
+  STRUCT:
+    - type_tag:
+        TYPENAME: TypeTag
+    - event_data: BYTES
 DAGNetworkMessage:
   STRUCT:
     - epoch: U64
     - data: BYTES
+DummyValidatorTransaction:
+  STRUCT:
+    - payload: BYTES
 Ed25519PublicKey:
   NEWTYPESTRUCT: BYTES
 Ed25519Signature:
@@ -353,6 +455,21 @@ MultiEd25519PublicKey:
   NEWTYPESTRUCT: BYTES
 MultiEd25519Signature:
   NEWTYPESTRUCT: BYTES
+MultiKey:
+  STRUCT:
+    - public_keys:
+        SEQ:
+          TYPENAME: AnyPublicKey
+    - signatures_required: U8
+MultiKeyAuthenticator:
+  STRUCT:
+    - public_keys:
+        TYPENAME: MultiKey
+    - signatures:
+        SEQ:
+          TYPENAME: AnySignature
+    - signatures_bitmap:
+        TYPENAME: BitVec
 Multisig:
   STRUCT:
     - multisig_address:
@@ -366,6 +483,12 @@ MultisigTransactionPayload:
       EntryFunction:
         NEWTYPE:
           TYPENAME: EntryFunction
+PartialAuthenticatorAssertionResponse:
+  STRUCT:
+    - signature:
+        TYPENAME: AssertionSignature
+    - authenticator_data: BYTES
+    - client_data_json: BYTES
 Payload:
   ENUM:
     0:
@@ -393,6 +516,23 @@ ProofWithData:
     - proofs:
         SEQ:
           TYPENAME: ProofOfStore
+ProposalExt:
+  ENUM:
+    0:
+      V0:
+        STRUCT:
+          - validator_txns:
+              SEQ:
+                TYPENAME: ValidatorTransaction
+          - payload:
+              TYPENAME: Payload
+          - author:
+              TYPENAME: AccountAddress
+          - failed_authors:
+              SEQ:
+                TUPLE:
+                  - U64
+                  - TYPENAME: AccountAddress
 ProposalMsg:
   STRUCT:
     - proposal:
@@ -407,6 +547,10 @@ QuorumCert:
         TYPENAME: VoteData
     - signed_ledger_info:
         TYPENAME: LedgerInfoWithSignatures
+RandGenMessage:
+  STRUCT:
+    - epoch: U64
+    - data: BYTES
 RawTransaction:
   STRUCT:
     - sender:
@@ -428,6 +572,18 @@ Script:
     - args:
         SEQ:
           TYPENAME: TransactionArgument
+Secp256k1EcdsaPrivateKey:
+  NEWTYPESTRUCT: BYTES
+Secp256k1EcdsaPublicKey:
+  NEWTYPESTRUCT: BYTES
+Secp256k1EcdsaSignature:
+  NEWTYPESTRUCT: BYTES
+Secp256r1EcdsaPrivateKey:
+  NEWTYPESTRUCT: BYTES
+Secp256r1EcdsaPublicKey:
+  NEWTYPESTRUCT: BYTES
+Secp256r1EcdsaSignature:
+  NEWTYPESTRUCT: BYTES
 Signature:
   NEWTYPESTRUCT: BYTES
 SignedBatchInfo:
@@ -449,6 +605,12 @@ SignedTransaction:
         TYPENAME: RawTransaction
     - authenticator:
         TYPENAME: TransactionAuthenticator
+SingleKeyAuthenticator:
+  STRUCT:
+    - public_key:
+        TYPENAME: AnyPublicKey
+    - signature:
+        TYPENAME: AnySignature
 StateKey:
   ENUM:
     0:
@@ -469,9 +631,13 @@ StateValueMetadata:
     0:
       V0:
         STRUCT:
-          - payer:
-              TYPENAME: AccountAddress
           - deposit: U64
+          - creation_time_usecs: U64
+    1:
+      V1:
+        STRUCT:
+          - slot_deposit: U64
+          - bytes_deposit: U64
           - creation_time_usecs: U64
 StructTag:
   STRUCT:
@@ -517,6 +683,10 @@ Transaction:
       StateCheckpoint:
         NEWTYPE:
           TYPENAME: HashValue
+    4:
+      ValidatorTransaction:
+        NEWTYPE:
+          TYPENAME: ValidatorTransaction
 TransactionArgument:
   ENUM:
     0:
@@ -592,6 +762,11 @@ TransactionAuthenticator:
               TYPENAME: AccountAddress
           - fee_payer_signer:
               TYPENAME: AccountAuthenticator
+    4:
+      SingleSender:
+        STRUCT:
+          - sender:
+              TYPENAME: AccountAuthenticator
 TransactionPayload:
   ENUM:
     0:
@@ -657,6 +832,16 @@ ValidatorConsensusInfo:
     - public_key:
         TYPENAME: PublicKey
     - voting_power: U64
+ValidatorTransaction:
+  ENUM:
+    0:
+      DummyTopic1:
+        NEWTYPE:
+          TYPENAME: DummyValidatorTransaction
+    1:
+      DummyTopic2:
+        NEWTYPE:
+          TYPENAME: DummyValidatorTransaction
 ValidatorVerifier:
   STRUCT:
     - validator_infos:

@@ -1,5 +1,5 @@
 
-<a name="@Aptos_Framework_0"></a>
+<a id="@Aptos_Framework_0"></a>
 
 # Aptos Framework
 
@@ -7,7 +7,7 @@
 This is the reference documentation of the Aptos framework.
 
 
-<a name="@Index_1"></a>
+<a id="@Index_1"></a>
 
 ## Index
 
@@ -15,6 +15,7 @@ This is the reference documentation of the Aptos framework.
 -  [`0x1::account`](account.md#0x1_account)
 -  [`0x1::aggregator`](aggregator.md#0x1_aggregator)
 -  [`0x1::aggregator_factory`](aggregator_factory.md#0x1_aggregator_factory)
+-  [`0x1::aggregator_v2`](aggregator_v2.md#0x1_aggregator_v2)
 -  [`0x1::aptos_account`](aptos_account.md#0x1_aptos_account)
 -  [`0x1::aptos_coin`](aptos_coin.md#0x1_aptos_coin)
 -  [`0x1::aptos_governance`](aptos_governance.md#0x1_aptos_governance)
@@ -33,6 +34,7 @@ This is the reference documentation of the Aptos framework.
 -  [`0x1::genesis`](genesis.md#0x1_genesis)
 -  [`0x1::governance_proposal`](governance_proposal.md#0x1_governance_proposal)
 -  [`0x1::guid`](guid.md#0x1_guid)
+-  [`0x1::jwks`](jwks.md#0x1_jwks)
 -  [`0x1::managed_coin`](managed_coin.md#0x1_managed_coin)
 -  [`0x1::multisig_account`](multisig_account.md#0x1_multisig_account)
 -  [`0x1::object`](object.md#0x1_object)
@@ -57,4 +59,4 @@ This is the reference documentation of the Aptos framework.
 -  [`0x1::voting`](voting.md#0x1_voting)
 
 
-[move-book]: https://aptos.dev/guides/move-guides/book/SUMMARY
+[move-book]: https://aptos.dev/move/book/SUMMARY

@@ -43,7 +43,7 @@ export { TypeTagParser } from "../aptos_types";
 const RAW_TRANSACTION_SALT = "APTOS::RawTransaction";
 const RAW_TRANSACTION_WITH_DATA_SALT = "APTOS::RawTransactionWithData";
 
-type AnyRawTransaction = RawTransaction | MultiAgentRawTransaction | FeePayerRawTransaction;
+export type AnyRawTransaction = RawTransaction | MultiAgentRawTransaction | FeePayerRawTransaction;
 
 /**
  * Function that takes in a Signing Message (serialized raw transaction)
@@ -54,7 +54,10 @@ export type SigningFn = (txn: SigningMessage) => Ed25519Signature | MultiEd25519
 export class TransactionBuilder<F extends SigningFn> {
   protected readonly signingFunction: F;
 
-  constructor(signingFunction: F, public readonly rawTxnBuilder?: TransactionBuilderABI) {
+  constructor(
+    signingFunction: F,
+    public readonly rawTxnBuilder?: TransactionBuilderABI,
+  ) {
     this.signingFunction = signingFunction;
   }
 
@@ -155,7 +158,7 @@ export class TransactionBuilderMultiEd25519 extends TransactionBuilder<SigningFn
 /**
  * Config for creating raw transactions.
  */
-interface ABIBuilderConfig {
+export interface ABIBuilderConfig {
   sender: MaybeHexString | AccountAddress;
   sequenceNumber: Uint64 | string;
   gasUnitPrice: Uint64 | string;
@@ -323,7 +326,7 @@ export type RemoteABIBuilderConfig = Partial<Omit<ABIBuilderConfig, "sender">> &
   sender: MaybeHexString | AccountAddress;
 };
 
-interface AptosClientInterface {
+export interface AptosClientInterface {
   getAccountModules: (accountAddress: MaybeHexString) => Promise<Gen.MoveModuleBytecode[]>;
   getAccount: (accountAddress: MaybeHexString) => Promise<Gen.AccountData>;
   getChainId: () => Promise<number>;
@@ -355,7 +358,7 @@ export class TransactionBuilderRemoteABI {
               ({
                 fullName: `${abi!.address}::${abi!.name}::${ef.name}`,
                 ...ef,
-              } as Gen.MoveFunction & { fullName: string }),
+              }) as Gen.MoveFunction & { fullName: string },
           ),
       );
 

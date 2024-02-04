@@ -3,16 +3,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    interface::system_metrics::SystemMetricsThreshold, AptosPublicInfo, ChainInfo, FullNode,
-    NodeExt, Result, SwarmChaos, Validator, Version,
+    AptosPublicInfo, ChainInfo, FullNode, NodeExt, Result, SwarmChaos, Validator, Version,
 };
 use anyhow::{anyhow, bail};
-use aptos_config::config::NodeConfig;
+use aptos_config::{
+    config::{NodeConfig, OverrideNodeConfig},
+    network_id::NetworkId,
+};
 use aptos_logger::info;
 use aptos_rest_client::Client as RestClient;
 use aptos_sdk::types::PeerId;
 use futures::future::{join_all, try_join_all};
-use prometheus_http_query::response::PromqlResult;
+use prometheus_http_query::response::{PromqlResult, Sample};
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
 
@@ -59,12 +61,16 @@ pub trait Swarm: Sync {
     fn add_validator_full_node(
         &mut self,
         version: &Version,
-        template: NodeConfig,
+        config: OverrideNodeConfig,
         id: PeerId,
     ) -> Result<PeerId>;
 
     /// Adds a FullNode to the swarm and returns the PeerId
-    async fn add_full_node(&mut self, version: &Version, template: NodeConfig) -> Result<PeerId>;
+    async fn add_full_node(
+        &mut self,
+        version: &Version,
+        config: OverrideNodeConfig,
+    ) -> Result<PeerId>;
 
     /// Removes the FullNode with the provided PeerId
     fn remove_full_node(&mut self, id: PeerId) -> Result<()>;
@@ -85,13 +91,6 @@ pub trait Swarm: Sync {
     async fn ensure_no_validator_restart(&self) -> Result<()>;
     async fn ensure_no_fullnode_restart(&self) -> Result<()>;
 
-    async fn ensure_healthy_system_metrics(
-        &mut self,
-        start_time: i64,
-        end_time: i64,
-        threshold: SystemMetricsThreshold,
-    ) -> Result<()>;
-
     // Get prometheus metrics from the swarm
     async fn query_metrics(
         &self,
@@ -99,6 +98,14 @@ pub trait Swarm: Sync {
         time: Option<i64>,
         timeout: Option<i64>,
     ) -> Result<PromqlResult>;
+
+    async fn query_range_metrics(
+        &self,
+        query: &str,
+        start_time: i64,
+        end_time: i64,
+        timeout: Option<i64>,
+    ) -> Result<Vec<Sample>>;
 
     fn aptos_public_info(&mut self) -> AptosPublicInfo<'_> {
         self.chain_info().into_aptos_public_info()
@@ -153,7 +160,7 @@ pub trait SwarmExt: Swarm {
         while !try_join_all(
             validators
                 .iter()
-                .map(|node| node.check_connectivity(validators.len() - 1))
+                .map(|node| node.check_connectivity(NetworkId::Validator, validators.len() - 1))
                 .chain(full_nodes.iter().map(|node| node.check_connectivity())),
         )
         .await
@@ -347,7 +354,7 @@ pub trait SwarmExt: Swarm {
         .await;
         ledger_infos
             .into_iter()
-            .zip(clients.into_iter())
+            .zip(clients)
             .flat_map(|(resp, (_, client))| resp.map(|r| (r.into_inner().version, client)))
             .max_by_key(|(v, _c)| *v)
     }
@@ -407,15 +414,14 @@ async fn wait_for_all_nodes_to_catchup_to_target_version_or_epoch(
                 ))
             }))
             .await;
-        let node_versions_and_epochs = version_and_epoch_results
-            .map(|results| results.into_iter().collect::<Vec<_>>())
-            .ok();
+        let node_versions_and_epochs =
+            version_and_epoch_results.map(|results| results.into_iter().collect::<Vec<_>>());
 
         // Check if all nodes are caught up to the target version
         let all_caught_up_to_version = target_version
             .map(|target_version| {
                 node_versions_and_epochs
-                    .clone()
+                    .as_ref()
                     .map(|responses| {
                         responses
                             .iter()
@@ -429,7 +435,7 @@ async fn wait_for_all_nodes_to_catchup_to_target_version_or_epoch(
         let all_caught_up_to_epoch = target_epoch
             .map(|target_epoch| {
                 node_versions_and_epochs
-                    .clone()
+                    .as_ref()
                     .map(|responses| responses.iter().all(|(_, _, epoch)| *epoch >= target_epoch))
                     .unwrap_or(false) // No epoch found
             })
@@ -453,7 +459,7 @@ async fn wait_for_all_nodes_to_catchup_to_target_version_or_epoch(
                 target_version,
                 target_epoch,
                 start_time.elapsed().as_secs(),
-                node_versions_and_epochs.unwrap_or_default()
+                node_versions_and_epochs
             ));
         }
 
@@ -489,7 +495,7 @@ pub async fn get_highest_synced_epoch(clients: &[(String, RestClient)]) -> Resul
 }
 
 /// Returns the highest synced version and epoch of the given clients
-async fn get_highest_synced_version_and_epoch(
+pub async fn get_highest_synced_version_and_epoch(
     clients: &[(String, RestClient)],
 ) -> Result<(u64, u64)> {
     let mut latest_version_and_epoch = (0, 0);

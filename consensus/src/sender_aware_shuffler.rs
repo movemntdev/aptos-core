@@ -40,6 +40,11 @@ impl TransactionShuffler for SenderAwareShuffler {
     fn shuffle(&self, txns: Vec<SignedTransaction>) -> Vec<SignedTransaction> {
         let _timer = TXN_SHUFFLE_SECONDS.start_timer();
 
+        // Early return for performance reason if there are no transactions to shuffle
+        if txns.is_empty() {
+            return txns;
+        }
+
         // handle the corner case of conflict window being 0, in which case we don't do any shuffling
         if self.conflict_window_size == 0 {
             return txns;
@@ -111,7 +116,7 @@ impl PendingTransactions {
         self.ordered_txns.push_back(txn.clone());
         self.txns_by_senders
             .entry(txn.sender())
-            .or_insert_with(VecDeque::new)
+            .or_default()
             .push_back(txn);
     }
 

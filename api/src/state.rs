@@ -3,6 +3,7 @@
 
 use crate::{
     accept_type::AcceptType,
+    context::api_spawn_blocking,
     failpoint::fail_point_poem,
     response::{
         api_forbidden, build_not_found, module_not_found, resource_not_found, table_item_not_found,
@@ -17,10 +18,9 @@ use aptos_api_types::{
     MoveModuleBytecode, MoveResource, MoveStructTag, MoveValue, RawStateValueRequest,
     RawTableItemRequest, TableItemRequest, VerifyInput, VerifyInputWithRecursion, U64,
 };
-use aptos_state_view::TStateView;
 use aptos_types::{
     access_path::AccessPath,
-    state_store::{state_key::StateKey, table::TableHandle},
+    state_store::{state_key::StateKey, table::TableHandle, TStateView},
 };
 use aptos_vm::data_cache::AsMoveResolver;
 use move_core_types::{
@@ -35,7 +35,7 @@ use poem_openapi::{
 use std::{convert::TryInto, sync::Arc};
 
 /// API for retrieving individual state
-#[derive(Clone)] // for M1 integration
+#[derive(Clone)]
 pub struct StateApi {
     pub context: Arc<Context>,
 }
@@ -77,12 +77,17 @@ impl StateApi {
         fail_point_poem("endpoint_get_account_resource")?;
         self.context
             .check_api_output_enabled("Get account resource", &accept_type)?;
-        self.resource(
-            &accept_type,
-            address.0,
-            resource_type.0,
-            ledger_version.0.map(|inner| inner.0),
-        )
+
+        let api = self.clone();
+        api_spawn_blocking(move || {
+            api.resource(
+                &accept_type,
+                address.0,
+                resource_type.0,
+                ledger_version.0.map(|inner| inner.0),
+            )
+        })
+        .await
     }
 
     /// Get account module
@@ -118,7 +123,11 @@ impl StateApi {
         fail_point_poem("endpoint_get_account_module")?;
         self.context
             .check_api_output_enabled("Get account module", &accept_type)?;
-        self.module(&accept_type, address.0, module_name.0, ledger_version.0)
+        let api = self.clone();
+        api_spawn_blocking(move || {
+            api.module(&accept_type, address.0, module_name.0, ledger_version.0)
+        })
+        .await
     }
 
     /// Get table item
@@ -161,12 +170,16 @@ impl StateApi {
         fail_point_poem("endpoint_get_table_item")?;
         self.context
             .check_api_output_enabled("Get table item", &accept_type)?;
-        self.table_item(
-            &accept_type,
-            table_handle.0,
-            table_item_request.0,
-            ledger_version.0,
-        )
+        let api = self.clone();
+        api_spawn_blocking(move || {
+            api.table_item(
+                &accept_type,
+                table_handle.0,
+                table_item_request.0,
+                ledger_version.0,
+            )
+        })
+        .await
     }
 
     /// Get raw table item
@@ -208,12 +221,16 @@ impl StateApi {
         self.context
             .check_api_output_enabled("Get raw table item", &accept_type)?;
 
-        self.raw_table_item(
-            &accept_type,
-            table_handle.0,
-            table_item_request.0,
-            ledger_version.0,
-        )
+        let api = self.clone();
+        api_spawn_blocking(move || {
+            api.raw_table_item(
+                &accept_type,
+                table_handle.0,
+                table_item_request.0,
+                ledger_version.0,
+            )
+        })
+        .await
     }
 
     /// Get raw state value.
@@ -251,7 +268,8 @@ impl StateApi {
         self.context
             .check_api_output_enabled("Get raw state value", &accept_type)?;
 
-        self.raw_value(&accept_type, request.0, ledger_version.0)
+        let api = self.clone();
+        api_spawn_blocking(move || api.raw_value(&accept_type, request.0, ledger_version.0)).await
     }
 }
 
@@ -310,9 +328,11 @@ impl StateApi {
 
                 BasicResponse::try_from_json((resource, &ledger_info, BasicResponseStatus::Ok))
             },
-            AcceptType::Bcs => {
-                BasicResponse::try_from_encoded((bytes, &ledger_info, BasicResponseStatus::Ok))
-            },
+            AcceptType::Bcs => BasicResponse::try_from_encoded((
+                bytes.to_vec(),
+                &ledger_info,
+                BasicResponseStatus::Ok,
+            )),
         }
     }
 
@@ -349,7 +369,7 @@ impl StateApi {
 
         match accept_type {
             AcceptType::Json => {
-                let module = MoveModuleBytecode::new(bytes)
+                let module = MoveModuleBytecode::new(bytes.to_vec())
                     .try_parse_abi()
                     .context("Failed to parse move module ABI from bytes retrieved from storage")
                     .map_err(|err| {
@@ -362,9 +382,11 @@ impl StateApi {
 
                 BasicResponse::try_from_json((module, &ledger_info, BasicResponseStatus::Ok))
             },
-            AcceptType::Bcs => {
-                BasicResponse::try_from_encoded((bytes, &ledger_info, BasicResponseStatus::Ok))
-            },
+            AcceptType::Bcs => BasicResponse::try_from_encoded((
+                bytes.to_vec(),
+                &ledger_info,
+                BasicResponseStatus::Ok,
+            )),
         }
     }
 
@@ -453,9 +475,11 @@ impl StateApi {
 
                 BasicResponse::try_from_json((move_value, &ledger_info, BasicResponseStatus::Ok))
             },
-            AcceptType::Bcs => {
-                BasicResponse::try_from_encoded((bytes, &ledger_info, BasicResponseStatus::Ok))
-            },
+            AcceptType::Bcs => BasicResponse::try_from_encoded((
+                bytes.to_vec(),
+                &ledger_info,
+                BasicResponseStatus::Ok,
+            )),
         }
     }
 
@@ -506,9 +530,11 @@ impl StateApi {
                 "Get raw table item",
                 "Please use get table item instead.",
             )),
-            AcceptType::Bcs => {
-                BasicResponse::try_from_encoded((bytes, &ledger_info, BasicResponseStatus::Ok))
-            },
+            AcceptType::Bcs => BasicResponse::try_from_encoded((
+                bytes.to_vec(),
+                &ledger_info,
+                BasicResponseStatus::Ok,
+            )),
         }
     }
 
@@ -553,7 +579,7 @@ impl StateApi {
                         "StateKey({}) and Ledger version({})",
                         request.key, ledger_version
                     ),
-                    AptosErrorCode::TableItemNotFound,
+                    AptosErrorCode::StateValueNotFound,
                     &ledger_info,
                 )
             })?;

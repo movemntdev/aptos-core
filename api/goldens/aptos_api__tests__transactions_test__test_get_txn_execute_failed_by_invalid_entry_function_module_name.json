@@ -4,7 +4,7 @@
   "state_change_hash": "",
   "event_root_hash": "",
   "state_checkpoint_hash": null,
-  "gas_used": "2",
+  "gas_used": "3",
   "success": false,
   "vm_status": "Transaction Executed and Committed with Error LINKER_ERROR",
   "accumulator_root_hash": "",
@@ -72,7 +72,23 @@
     "signature": "0xb194e9398f2af5e20642ff606d0f456b449333966533965b55551498551058dff8c23f9b92033e6536c5b37e9b41d8ce2619dfd5d9c05cd9159849172bc77e09",
     "type": "ed25519_signature"
   },
-  "events": [],
+  "events": [
+    {
+      "guid": {
+        "creation_number": "0",
+        "account_address": "0x0"
+      },
+      "sequence_number": "0",
+      "type": "0x1::transaction_fee::FeeStatement",
+      "data": {
+        "execution_gas_units": "3",
+        "io_gas_units": "0",
+        "storage_fee_octas": "0",
+        "storage_fee_refund_octas": "0",
+        "total_charge_gas_units": "3"
+      }
+    }
+  ],
   "timestamp": "500000",
   "type": "user_transaction"
 }

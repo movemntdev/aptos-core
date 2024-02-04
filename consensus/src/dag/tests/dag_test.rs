@@ -1,43 +1,61 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+use super::helpers::MockPayloadManager;
 use crate::dag::{
     dag_store::Dag,
-    storage::DAGStorage,
-    tests::helpers::new_certified_node,
-    types::{CertifiedNode, Node},
+    storage::{CommitEvent, DAGStorage},
+    tests::helpers::{new_certified_node, TEST_DAG_WINDOW},
+    types::{CertifiedNode, DagSnapshotBitmask, Node},
     NodeId, Vote,
 };
-use anyhow::Ok;
 use aptos_crypto::HashValue;
 use aptos_infallible::Mutex;
-use aptos_types::{epoch_state::EpochState, validator_verifier::random_validator_verifier};
+use aptos_types::{
+    epoch_state::EpochState, ledger_info::LedgerInfoWithSignatures,
+    validator_signer::ValidatorSigner, validator_verifier::random_validator_verifier,
+};
 use std::{collections::HashMap, sync::Arc};
 
 pub struct MockStorage {
-    node_data: Mutex<HashMap<HashValue, Node>>,
+    node_data: Mutex<Option<Node>>,
     vote_data: Mutex<HashMap<NodeId, Vote>>,
     certified_node_data: Mutex<HashMap<HashValue, CertifiedNode>>,
+    latest_ledger_info: Option<LedgerInfoWithSignatures>,
 }
 
 impl MockStorage {
     pub fn new() -> Self {
         Self {
-            node_data: Mutex::new(HashMap::new()),
+            node_data: Mutex::new(None),
             vote_data: Mutex::new(HashMap::new()),
             certified_node_data: Mutex::new(HashMap::new()),
+            latest_ledger_info: None,
+        }
+    }
+
+    pub fn new_with_ledger_info(ledger_info: LedgerInfoWithSignatures) -> Self {
+        Self {
+            node_data: Mutex::new(None),
+            vote_data: Mutex::new(HashMap::new()),
+            certified_node_data: Mutex::new(HashMap::new()),
+            latest_ledger_info: Some(ledger_info),
         }
     }
 }
 
 impl DAGStorage for MockStorage {
-    fn save_node(&self, node: &Node) -> anyhow::Result<()> {
-        self.node_data.lock().insert(node.digest(), node.clone());
+    fn save_pending_node(&self, node: &Node) -> anyhow::Result<()> {
+        self.node_data.lock().replace(node.clone());
         Ok(())
     }
 
-    fn delete_node(&self, digest: HashValue) -> anyhow::Result<()> {
-        self.node_data.lock().remove(&digest);
+    fn get_pending_node(&self) -> anyhow::Result<Option<Node>> {
+        Ok(self.node_data.lock().clone())
+    }
+
+    fn delete_pending_node(&self) -> anyhow::Result<()> {
+        self.node_data.lock().take();
         Ok(())
     }
 
@@ -46,8 +64,8 @@ impl DAGStorage for MockStorage {
         Ok(())
     }
 
-    fn get_votes(&self) -> anyhow::Result<HashMap<NodeId, Vote>> {
-        Ok(self.vote_data.lock().clone())
+    fn get_votes(&self) -> anyhow::Result<Vec<(NodeId, Vote)>> {
+        Ok(self.vote_data.lock().clone().into_iter().collect())
     }
 
     fn delete_votes(&self, node_ids: Vec<NodeId>) -> anyhow::Result<()> {
@@ -64,8 +82,13 @@ impl DAGStorage for MockStorage {
         Ok(())
     }
 
-    fn get_certified_nodes(&self) -> anyhow::Result<HashMap<HashValue, CertifiedNode>> {
-        Ok(self.certified_node_data.lock().clone())
+    fn get_certified_nodes(&self) -> anyhow::Result<Vec<(HashValue, CertifiedNode)>> {
+        Ok(self
+            .certified_node_data
+            .lock()
+            .clone()
+            .into_iter()
+            .collect())
     }
 
     fn delete_certified_nodes(&self, digests: Vec<HashValue>) -> anyhow::Result<()> {
@@ -74,17 +97,39 @@ impl DAGStorage for MockStorage {
         }
         Ok(())
     }
+
+    fn get_latest_k_committed_events(&self, _k: u64) -> anyhow::Result<Vec<CommitEvent>> {
+        Ok(vec![])
+    }
+
+    fn get_latest_ledger_info(&self) -> anyhow::Result<LedgerInfoWithSignatures> {
+        self.latest_ledger_info
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("ledger info not set"))
+    }
+}
+
+fn setup() -> (Vec<ValidatorSigner>, Arc<EpochState>, Dag, Arc<MockStorage>) {
+    let (signers, validator_verifier) = random_validator_verifier(4, None, false);
+    let epoch_state = Arc::new(EpochState {
+        epoch: 1,
+        verifier: validator_verifier,
+    });
+    let storage = Arc::new(MockStorage::new());
+    let payload_manager = Arc::new(MockPayloadManager {});
+    let dag = Dag::new(
+        epoch_state.clone(),
+        storage.clone(),
+        payload_manager,
+        1,
+        TEST_DAG_WINDOW,
+    );
+    (signers, epoch_state, dag, storage)
 }
 
 #[test]
 fn test_dag_insertion_succeed() {
-    let (signers, validator_verifier) = random_validator_verifier(4, None, false);
-    let epoch_state = Arc::new(EpochState {
-        epoch: 1,
-        verifier: validator_verifier.clone(),
-    });
-    let storage = Arc::new(MockStorage::new());
-    let mut dag = Dag::new(epoch_state, storage);
+    let (signers, epoch_state, mut dag, _) = setup();
 
     // Round 1 - nodes 0, 1, 2 links to vec![]
     for signer in &signers[0..3] {
@@ -92,7 +137,7 @@ fn test_dag_insertion_succeed() {
         assert!(dag.add_node(node).is_ok());
     }
     let parents = dag
-        .get_strong_links_for_round(1, &validator_verifier)
+        .get_strong_links_for_round(1, &epoch_state.verifier)
         .unwrap();
 
     // Round 2 nodes 0, 1, 2 links to 0, 1, 2
@@ -103,7 +148,7 @@ fn test_dag_insertion_succeed() {
 
     // Round 3 nodes 1, 2 links to 0, 1, 2
     let parents = dag
-        .get_strong_links_for_round(2, &validator_verifier)
+        .get_strong_links_for_round(2, &epoch_state.verifier)
         .unwrap();
 
     for signer in &signers[1..3] {
@@ -113,19 +158,13 @@ fn test_dag_insertion_succeed() {
 
     // not enough strong links
     assert!(dag
-        .get_strong_links_for_round(3, &validator_verifier)
+        .get_strong_links_for_round(3, &epoch_state.verifier)
         .is_none());
 }
 
 #[test]
 fn test_dag_insertion_failure() {
-    let (signers, validator_verifier) = random_validator_verifier(4, None, false);
-    let epoch_state = Arc::new(EpochState {
-        epoch: 1,
-        verifier: validator_verifier.clone(),
-    });
-    let storage = Arc::new(MockStorage::new());
-    let mut dag = Dag::new(epoch_state, storage);
+    let (signers, epoch_state, mut dag, _) = setup();
 
     // Round 1 - nodes 0, 1, 2 links to vec![]
     for signer in &signers[0..3] {
@@ -137,7 +176,7 @@ fn test_dag_insertion_failure() {
 
     let missing_node = new_certified_node(1, signers[3].author(), vec![]);
     let mut parents = dag
-        .get_strong_links_for_round(1, &validator_verifier)
+        .get_strong_links_for_round(1, &epoch_state.verifier)
         .unwrap();
     parents.push(missing_node.certificate());
 
@@ -158,19 +197,13 @@ fn test_dag_insertion_failure() {
 
 #[test]
 fn test_dag_recover_from_storage() {
-    let (signers, validator_verifier) = random_validator_verifier(4, None, false);
-    let epoch_state = Arc::new(EpochState {
-        epoch: 1,
-        verifier: validator_verifier.clone(),
-    });
-    let storage = Arc::new(MockStorage::new());
-    let mut dag = Dag::new(epoch_state.clone(), storage.clone());
+    let (signers, epoch_state, mut dag, storage) = setup();
 
     let mut metadatas = vec![];
 
     for round in 1..10 {
         let parents = dag
-            .get_strong_links_for_round(round, &validator_verifier)
+            .get_strong_links_for_round(round, &epoch_state.verifier)
             .unwrap_or_default();
         for signer in &signers[0..3] {
             let node = new_certified_node(round, signer.author(), parents.clone());
@@ -178,7 +211,13 @@ fn test_dag_recover_from_storage() {
             assert!(dag.add_node(node).is_ok());
         }
     }
-    let new_dag = Dag::new(epoch_state, storage.clone());
+    let new_dag = Dag::new(
+        epoch_state.clone(),
+        storage.clone(),
+        Arc::new(MockPayloadManager {}),
+        0,
+        TEST_DAG_WINDOW,
+    );
 
     for metadata in &metadatas {
         assert!(new_dag.exists(metadata));
@@ -186,9 +225,55 @@ fn test_dag_recover_from_storage() {
 
     let new_epoch_state = Arc::new(EpochState {
         epoch: 2,
-        verifier: validator_verifier,
+        verifier: epoch_state.verifier.clone(),
     });
 
-    let _new_epoch_dag = Dag::new(new_epoch_state, storage.clone());
+    let _new_epoch_dag = Dag::new(
+        new_epoch_state,
+        storage.clone(),
+        Arc::new(MockPayloadManager {}),
+        0,
+        TEST_DAG_WINDOW,
+    );
     assert!(storage.certified_node_data.lock().is_empty());
+}
+
+#[test]
+fn test_dag_bitmask() {
+    let (signers, epoch_state, mut dag, _) = setup();
+
+    assert_eq!(
+        dag.bitmask(15),
+        DagSnapshotBitmask::new(1, vec![vec![false; 4]; 15])
+    );
+
+    for round in 1..5 {
+        let parents = dag
+            .get_strong_links_for_round(round, &epoch_state.verifier)
+            .unwrap_or_default();
+        for signer in &signers[0..3] {
+            let node = new_certified_node(round, signer.author(), parents.clone());
+            assert!(dag.add_node(node).is_ok());
+        }
+    }
+    let mut bitmask = vec![vec![true, true, true, false]; 4];
+    bitmask.resize(15, vec![false; 4]);
+    assert_eq!(dag.bitmask(15), DagSnapshotBitmask::new(1, bitmask));
+
+    // Populate the fourth author for all rounds
+    for round in 1..5 {
+        let parents = dag
+            .get_strong_links_for_round(round, &epoch_state.verifier)
+            .unwrap_or_default();
+        let node = new_certified_node(round, signers[3].author(), parents.clone());
+        assert!(dag.add_node(node).is_ok());
+    }
+    assert_eq!(
+        dag.bitmask(15),
+        DagSnapshotBitmask::new(5, vec![vec![false; 4]; 11])
+    );
+    assert_eq!(
+        dag.bitmask(6),
+        DagSnapshotBitmask::new(5, vec![vec![false; 4]; 2])
+    );
 }

@@ -4,10 +4,10 @@
 
 use super::*;
 use crate::{
-    jellyfish_merkle_node::JellyfishMerkleNodeSchema,
-    new_sharded_kv_schema_batch,
+    db::test_helper::{arb_state_kv_sets, update_store},
+    schema::jellyfish_merkle_node::JellyfishMerkleNodeSchema,
     state_restore::StateSnapshotRestore,
-    test_helper::{arb_state_kv_sets, update_store},
+    utils::new_sharded_kv_schema_batch,
     AptosDB,
 };
 use aptos_jellyfish_merkle::{
@@ -22,6 +22,7 @@ use aptos_types::{
     access_path::AccessPath, account_address::AccountAddress, nibble::nibble_path::NibblePath,
     state_store::state_key::StateKeyTag,
 };
+use arr_macro::arr;
 use proptest::{collection::hash_map, prelude::*};
 use std::collections::HashMap;
 
@@ -42,7 +43,7 @@ fn put_value_set(
     let jmt_updates = jmt_updates(&value_set);
 
     let root = state_store
-        .merklize_value_set(jmt_update_refs(&jmt_updates), None, version, base_version)
+        .merklize_value_set(jmt_update_refs(&jmt_updates), version, base_version)
         .unwrap();
     let ledger_batch = SchemaBatch::new();
     let sharded_state_kv_batches = new_sharded_kv_schema_batch();
@@ -58,6 +59,7 @@ fn put_value_set(
             &state_kv_metadata_batch,
             /*put_state_value_indices=*/ false,
             /*skip_usage=*/ false,
+            /*last_checkpoint_index=*/ None,
         )
         .unwrap();
     state_store
@@ -309,13 +311,13 @@ pub fn test_get_state_snapshot_before() {
             &Node::Null,
         )
         .unwrap();
-    db.state_merkle_db
+    db.state_merkle_db()
         .metadata_db()
         .write_schemas(batch)
         .unwrap();
 
     assert_eq!(
-        db.state_merkle_db
+        db.state_merkle_db()
             .get_state_snapshot_version_before(4)
             .unwrap(),
         Some(2)
@@ -325,13 +327,13 @@ pub fn test_get_state_snapshot_before() {
     batch
         .delete::<JellyfishMerkleNodeSchema>(&NodeKey::new_empty_path(2))
         .unwrap();
-    db.state_merkle_db
+    db.state_merkle_db()
         .metadata_db()
         .write_schemas(batch)
         .unwrap();
 
     assert_eq!(
-        db.state_merkle_db
+        db.state_merkle_db()
             .get_state_snapshot_version_before(4)
             .unwrap(),
         Some(0)
@@ -492,7 +494,7 @@ proptest! {
             StateSnapshotRestore::new(&store2.state_merkle_db, store2, version, expected_root_hash, true, /* async_commit */ StateSnapshotRestoreMode::Default).unwrap();
 
         let dummy_state_key = StateKey::raw(vec![]);
-        let (top_levels_batch, sharded_batches, _) = store2.state_merkle_db.merklize_value_set(vec![(max_hash, Some(&(HashValue::random(), dummy_state_key)))], None, 0, None, None).unwrap();
+        let (top_levels_batch, sharded_batches, _) = store2.state_merkle_db.merklize_value_set(vec![(max_hash, Some(&(HashValue::random(), dummy_state_key)))], 0, None, None).unwrap();
         store2.state_merkle_db.commit(version, top_levels_batch, sharded_batches).unwrap();
         assert!(store2.state_merkle_db.get_rightmost_leaf(version).unwrap().is_none());
 

@@ -19,8 +19,9 @@ aptos-api-types = { workspace = true }
 aptos-build-info = { workspace = true }
 aptos-crypto = { workspace = true }
 aptos-framework = { workspace = true }
-aptos-gas = { workspace = true }
+aptos-gas-schedule-updator = { workspace = true }
 aptos-genesis = { workspace = true }
+aptos-keygen = { workspace = true }
 aptos-rest-client = { workspace = true }
 aptos-temppath = { workspace = true }
 aptos-types = { workspace = true }
@@ -38,6 +39,8 @@ once_cell = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }

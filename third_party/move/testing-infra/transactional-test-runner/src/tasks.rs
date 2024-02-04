@@ -137,15 +137,6 @@ pub fn taskify<Command: Debug + Parser>(filename: &Path) -> Result<Vec<TaskInput
             text[text.len() - 1].0
         };
 
-        // Keep fucking this up somehow
-        // let last_non_whitespace = text
-        //     .iter()
-        //     .rposition(|(_, l)| !WHITESPACE.is_match(l))
-        //     .unwrap_or(0);
-        // let initial_text = text
-        //     .into_iter()
-        //     .take_while(|(i, _)| *i < last_non_whitespace)
-        //     .map(|(_, l)| l);
         let file_text_vec = (0..command_lines_stop)
             .map(|_| String::new())
             .chain(text.into_iter().map(|(_ln, l)| l))
@@ -215,10 +206,14 @@ pub struct PrintBytecodeCommand {
     /// The kind of input: either a script, or a module.
     #[clap(long = "input", value_enum, ignore_case = true, default_value_t = PrintBytecodeInputChoice::Script)]
     pub input: PrintBytecodeInputChoice,
+    /// Select Move source ("move") source or MoveIR ("mvir").  Is inferred from filename if absent.
+    #[clap(long = "syntax")]
+    pub syntax: Option<SyntaxChoice>,
 }
 
 #[derive(Debug, Parser)]
 pub struct InitCommand {
+    /// Supply a space-separated list of name=number addresses.
     #[clap(
         long = "addresses",
         value_parser = move_compiler::shared::parse_named_address,
@@ -233,6 +228,8 @@ pub struct PublishCommand {
     pub gas_budget: Option<u64>,
     #[clap(long = "syntax")]
     pub syntax: Option<SyntaxChoice>,
+    #[clap(long = "print-bytecode")]
+    pub print_bytecode: bool,
 }
 
 #[derive(Debug, Parser)]
@@ -261,6 +258,8 @@ pub struct RunCommand<ExtraValueArgs: ParsableValue> {
     pub syntax: Option<SyntaxChoice>,
     #[clap(name = "NAME", value_parser = parse_qualified_module_access)]
     pub name: Option<(ParsedAddress, Identifier, Identifier)>,
+    #[clap(long = "print-bytecode")]
+    pub print_bytecode: bool,
 }
 
 #[derive(Debug, Parser)]

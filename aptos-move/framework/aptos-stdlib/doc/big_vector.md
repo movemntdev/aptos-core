@@ -1,5 +1,5 @@
 
-<a name="0x1_big_vector"></a>
+<a id="0x1_big_vector"></a>
 
 # Module `0x1::big_vector`
 
@@ -10,6 +10,7 @@
 -  [Function `empty`](#0x1_big_vector_empty)
 -  [Function `singleton`](#0x1_big_vector_singleton)
 -  [Function `destroy_empty`](#0x1_big_vector_destroy_empty)
+-  [Function `destroy`](#0x1_big_vector_destroy)
 -  [Function `borrow`](#0x1_big_vector_borrow)
 -  [Function `borrow_mut`](#0x1_big_vector_borrow_mut)
 -  [Function `append`](#0x1_big_vector_append)
@@ -21,6 +22,7 @@
 -  [Function `reverse`](#0x1_big_vector_reverse)
 -  [Function `index_of`](#0x1_big_vector_index_of)
 -  [Function `contains`](#0x1_big_vector_contains)
+-  [Function `to_vector`](#0x1_big_vector_to_vector)
 -  [Function `length`](#0x1_big_vector_length)
 -  [Function `is_empty`](#0x1_big_vector_is_empty)
 -  [Specification](#@Specification_1)
@@ -47,7 +49,7 @@
 
 
 
-<a name="0x1_big_vector_BigVector"></a>
+<a id="0x1_big_vector_BigVector"></a>
 
 ## Struct `BigVector`
 
@@ -88,12 +90,12 @@ Each bucket has a capacity of <code>bucket_size</code> elements.
 
 </details>
 
-<a name="@Constants_0"></a>
+<a id="@Constants_0"></a>
 
 ## Constants
 
 
-<a name="0x1_big_vector_EINDEX_OUT_OF_BOUNDS"></a>
+<a id="0x1_big_vector_EINDEX_OUT_OF_BOUNDS"></a>
 
 Vector index is out of bounds
 
@@ -103,7 +105,7 @@ Vector index is out of bounds
 
 
 
-<a name="0x1_big_vector_EVECTOR_EMPTY"></a>
+<a id="0x1_big_vector_EVECTOR_EMPTY"></a>
 
 Cannot pop back from an empty vector
 
@@ -113,7 +115,7 @@ Cannot pop back from an empty vector
 
 
 
-<a name="0x1_big_vector_EVECTOR_NOT_EMPTY"></a>
+<a id="0x1_big_vector_EVECTOR_NOT_EMPTY"></a>
 
 Cannot destroy a non-empty vector
 
@@ -123,7 +125,7 @@ Cannot destroy a non-empty vector
 
 
 
-<a name="0x1_big_vector_EZERO_BUCKET_SIZE"></a>
+<a id="0x1_big_vector_EZERO_BUCKET_SIZE"></a>
 
 bucket_size cannot be 0
 
@@ -133,7 +135,7 @@ bucket_size cannot be 0
 
 
 
-<a name="0x1_big_vector_empty"></a>
+<a id="0x1_big_vector_empty"></a>
 
 ## Function `empty`
 
@@ -164,7 +166,7 @@ Create an empty vector.
 
 </details>
 
-<a name="0x1_big_vector_singleton"></a>
+<a id="0x1_big_vector_singleton"></a>
 
 ## Function `singleton`
 
@@ -191,7 +193,7 @@ Create a vector of length 1 containing the passed in element.
 
 </details>
 
-<a name="0x1_big_vector_destroy_empty"></a>
+<a id="0x1_big_vector_destroy_empty"></a>
 
 ## Function `destroy_empty`
 
@@ -210,7 +212,7 @@ Aborts if <code>v</code> is not empty.
 
 <pre><code><b>public</b> <b>fun</b> <a href="big_vector.md#0x1_big_vector_destroy_empty">destroy_empty</a>&lt;T&gt;(v: <a href="big_vector.md#0x1_big_vector_BigVector">BigVector</a>&lt;T&gt;) {
     <b>assert</b>!(<a href="big_vector.md#0x1_big_vector_is_empty">is_empty</a>(&v), <a href="../../move-stdlib/doc/error.md#0x1_error_invalid_argument">error::invalid_argument</a>(<a href="big_vector.md#0x1_big_vector_EVECTOR_NOT_EMPTY">EVECTOR_NOT_EMPTY</a>));
-    <b>let</b> <a href="big_vector.md#0x1_big_vector_BigVector">BigVector</a> { buckets, end_index: _,  bucket_size: _ } = v;
+    <b>let</b> <a href="big_vector.md#0x1_big_vector_BigVector">BigVector</a> { buckets, end_index: _, bucket_size: _ } = v;
     <a href="table_with_length.md#0x1_table_with_length_destroy_empty">table_with_length::destroy_empty</a>(buckets);
 }
 </code></pre>
@@ -219,7 +221,39 @@ Aborts if <code>v</code> is not empty.
 
 </details>
 
-<a name="0x1_big_vector_borrow"></a>
+<a id="0x1_big_vector_destroy"></a>
+
+## Function `destroy`
+
+Destroy the vector <code>v</code> if T has <code>drop</code>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="big_vector.md#0x1_big_vector_destroy">destroy</a>&lt;T: drop&gt;(v: <a href="big_vector.md#0x1_big_vector_BigVector">big_vector::BigVector</a>&lt;T&gt;)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="big_vector.md#0x1_big_vector_destroy">destroy</a>&lt;T: drop&gt;(v: <a href="big_vector.md#0x1_big_vector_BigVector">BigVector</a>&lt;T&gt;) {
+    <b>let</b> <a href="big_vector.md#0x1_big_vector_BigVector">BigVector</a> { buckets, end_index, bucket_size: _ } = v;
+    <b>let</b> i = 0;
+    <b>while</b> (end_index &gt; 0) {
+        <b>let</b> num_elements = <a href="../../move-stdlib/doc/vector.md#0x1_vector_length">vector::length</a>(&<a href="table_with_length.md#0x1_table_with_length_remove">table_with_length::remove</a>(&<b>mut</b> buckets, i));
+        end_index = end_index - num_elements;
+        i = i + 1;
+    };
+    <a href="table_with_length.md#0x1_table_with_length_destroy_empty">table_with_length::destroy_empty</a>(buckets);
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_big_vector_borrow"></a>
 
 ## Function `borrow`
 
@@ -246,7 +280,7 @@ Aborts if <code>i</code> is out of bounds.
 
 </details>
 
-<a name="0x1_big_vector_borrow_mut"></a>
+<a id="0x1_big_vector_borrow_mut"></a>
 
 ## Function `borrow_mut`
 
@@ -273,7 +307,7 @@ Aborts if <code>i</code> is out of bounds.
 
 </details>
 
-<a name="0x1_big_vector_append"></a>
+<a id="0x1_big_vector_append"></a>
 
 ## Function `append`
 
@@ -311,7 +345,7 @@ Disclaimer: This function is costly. Use it at your own discretion.
 
 </details>
 
-<a name="0x1_big_vector_push_back"></a>
+<a id="0x1_big_vector_push_back"></a>
 
 ## Function `push_back`
 
@@ -344,7 +378,7 @@ This operation will cost more gas when it adds new bucket.
 
 </details>
 
-<a name="0x1_big_vector_pop_back"></a>
+<a id="0x1_big_vector_pop_back"></a>
 
 ## Function `pop_back`
 
@@ -381,7 +415,7 @@ Aborts if <code>v</code> is empty.
 
 </details>
 
-<a name="0x1_big_vector_remove"></a>
+<a id="0x1_big_vector_remove"></a>
 
 ## Function `remove`
 
@@ -408,11 +442,13 @@ Disclaimer: This function is costly. Use it at your own discretion.
     <b>let</b> res = <a href="../../move-stdlib/doc/vector.md#0x1_vector_remove">vector::remove</a>(cur_bucket, i % v.bucket_size);
     v.end_index = v.end_index - 1;
     <b>move</b> cur_bucket;
-    <b>while</b> ({<b>spec</b> {
-        <b>invariant</b> cur_bucket_index &lt;= num_buckets;
-        <b>invariant</b> <a href="table_with_length.md#0x1_table_with_length_spec_len">table_with_length::spec_len</a>(v.buckets) == num_buckets;
-    };
-        (cur_bucket_index &lt; num_buckets)}) {
+    <b>while</b> ({
+        <b>spec</b> {
+            <b>invariant</b> cur_bucket_index &lt;= num_buckets;
+            <b>invariant</b> <a href="table_with_length.md#0x1_table_with_length_spec_len">table_with_length::spec_len</a>(v.buckets) == num_buckets;
+        };
+        (cur_bucket_index &lt; num_buckets)
+    }) {
         // remove one element from the start of current <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>
         <b>let</b> cur_bucket = <a href="table_with_length.md#0x1_table_with_length_borrow_mut">table_with_length::borrow_mut</a>(&<b>mut</b> v.buckets, cur_bucket_index);
         <b>let</b> t = <a href="../../move-stdlib/doc/vector.md#0x1_vector_remove">vector::remove</a>(cur_bucket, 0);
@@ -441,7 +477,7 @@ Disclaimer: This function is costly. Use it at your own discretion.
 
 </details>
 
-<a name="0x1_big_vector_swap_remove"></a>
+<a id="0x1_big_vector_swap_remove"></a>
 
 ## Function `swap_remove`
 
@@ -481,7 +517,7 @@ Aborts if <code>i</code> is out of bounds.
 
 </details>
 
-<a name="0x1_big_vector_swap"></a>
+<a id="0x1_big_vector_swap"></a>
 
 ## Function `swap`
 
@@ -532,7 +568,7 @@ for v.
 
 </details>
 
-<a name="0x1_big_vector_reverse"></a>
+<a id="0x1_big_vector_reverse"></a>
 
 ## Function `reverse`
 
@@ -567,7 +603,7 @@ Disclaimer: This function is costly. Use it at your own discretion.
         num_buckets_left = num_buckets_left - 1;
     };
 
-    <b>if</b>(<a href="../../move-stdlib/doc/vector.md#0x1_vector_length">vector::length</a>(&push_bucket) &gt; 0) {
+    <b>if</b> (<a href="../../move-stdlib/doc/vector.md#0x1_vector_length">vector::length</a>(&push_bucket) &gt; 0) {
         <a href="../../move-stdlib/doc/vector.md#0x1_vector_push_back">vector::push_back</a>(&<b>mut</b> new_buckets, push_bucket);
     } <b>else</b> {
         <a href="../../move-stdlib/doc/vector.md#0x1_vector_destroy_empty">vector::destroy_empty</a>(push_bucket);
@@ -576,7 +612,7 @@ Disclaimer: This function is costly. Use it at your own discretion.
     <a href="../../move-stdlib/doc/vector.md#0x1_vector_reverse">vector::reverse</a>(&<b>mut</b> new_buckets);
     <b>let</b> i = 0;
     <b>assert</b>!(<a href="table_with_length.md#0x1_table_with_length_length">table_with_length::length</a>(&v.buckets) == 0, 0);
-    <b>while</b>(i &lt; num_buckets) {
+    <b>while</b> (i &lt; num_buckets) {
         <a href="table_with_length.md#0x1_table_with_length_add">table_with_length::add</a>(&<b>mut</b> v.buckets, i, <a href="../../move-stdlib/doc/vector.md#0x1_vector_pop_back">vector::pop_back</a>(&<b>mut</b> new_buckets));
         i = i + 1;
     };
@@ -588,7 +624,7 @@ Disclaimer: This function is costly. Use it at your own discretion.
 
 </details>
 
-<a name="0x1_big_vector_index_of"></a>
+<a id="0x1_big_vector_index_of"></a>
 
 ## Function `index_of`
 
@@ -613,7 +649,7 @@ Disclaimer: This function is costly. Use it at your own discretion.
         <b>let</b> cur = <a href="table_with_length.md#0x1_table_with_length_borrow">table_with_length::borrow</a>(&v.buckets, bucket_index);
         <b>let</b> (found, i) = <a href="../../move-stdlib/doc/vector.md#0x1_vector_index_of">vector::index_of</a>(cur, val);
         <b>if</b> (found) {
-            <b>return</b> (<b>true</b>, bucket_index*v.bucket_size + i)
+            <b>return</b> (<b>true</b>, bucket_index * v.bucket_size + i)
         };
         bucket_index = bucket_index + 1;
     };
@@ -625,7 +661,7 @@ Disclaimer: This function is costly. Use it at your own discretion.
 
 </details>
 
-<a name="0x1_big_vector_contains"></a>
+<a id="0x1_big_vector_contains"></a>
 
 ## Function `contains`
 
@@ -653,7 +689,41 @@ Disclaimer: This function is costly. Use it at your own discretion.
 
 </details>
 
-<a name="0x1_big_vector_length"></a>
+<a id="0x1_big_vector_to_vector"></a>
+
+## Function `to_vector`
+
+Convert a big vector to a native vector, which is supposed to be called mostly by view functions to get an
+atomic view of the whole vector.
+Disclaimer: This function may be costly as the big vector may be huge in size. Use it at your own discretion.
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="big_vector.md#0x1_big_vector_to_vector">to_vector</a>&lt;T: <b>copy</b>&gt;(v: &<a href="big_vector.md#0x1_big_vector_BigVector">big_vector::BigVector</a>&lt;T&gt;): <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;T&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="big_vector.md#0x1_big_vector_to_vector">to_vector</a>&lt;T: <b>copy</b>&gt;(v: &<a href="big_vector.md#0x1_big_vector_BigVector">BigVector</a>&lt;T&gt;): <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;T&gt; {
+    <b>let</b> res = <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>[];
+    <b>let</b> num_buckets = <a href="table_with_length.md#0x1_table_with_length_length">table_with_length::length</a>(&v.buckets);
+    <b>let</b> i = 0;
+    <b>while</b> (i &lt; num_buckets) {
+        <a href="../../move-stdlib/doc/vector.md#0x1_vector_append">vector::append</a>(&<b>mut</b> res, *<a href="table_with_length.md#0x1_table_with_length_borrow">table_with_length::borrow</a>(&v.buckets, i));
+        i = i + 1;
+    };
+    res
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_big_vector_length"></a>
 
 ## Function `length`
 
@@ -678,7 +748,7 @@ Return the length of the vector.
 
 </details>
 
-<a name="0x1_big_vector_is_empty"></a>
+<a id="0x1_big_vector_is_empty"></a>
 
 ## Function `is_empty`
 
@@ -703,12 +773,12 @@ Return <code><b>true</b></code> if the vector <code>v</code> has no elements and
 
 </details>
 
-<a name="@Specification_1"></a>
+<a id="@Specification_1"></a>
 
 ## Specification
 
 
-<a name="@Specification_1_BigVector"></a>
+<a id="@Specification_1_BigVector"></a>
 
 ### Struct `BigVector`
 
@@ -765,7 +835,7 @@ Return <code><b>true</b></code> if the vector <code>v</code> has no elements and
 
 
 
-<a name="@Specification_1_empty"></a>
+<a id="@Specification_1_empty"></a>
 
 ### Function `empty`
 
@@ -783,7 +853,7 @@ Return <code><b>true</b></code> if the vector <code>v</code> has no elements and
 
 
 
-<a name="@Specification_1_singleton"></a>
+<a id="@Specification_1_singleton"></a>
 
 ### Function `singleton`
 
@@ -794,13 +864,14 @@ Return <code><b>true</b></code> if the vector <code>v</code> has no elements and
 
 
 
-<pre><code><b>ensures</b> <a href="big_vector.md#0x1_big_vector_length">length</a>(result) == 1;
+<pre><code><b>aborts_if</b> bucket_size == 0;
+<b>ensures</b> <a href="big_vector.md#0x1_big_vector_length">length</a>(result) == 1;
 <b>ensures</b> result.bucket_size == bucket_size;
 </code></pre>
 
 
 
-<a name="@Specification_1_destroy_empty"></a>
+<a id="@Specification_1_destroy_empty"></a>
 
 ### Function `destroy_empty`
 
@@ -816,7 +887,7 @@ Return <code><b>true</b></code> if the vector <code>v</code> has no elements and
 
 
 
-<a name="@Specification_1_borrow"></a>
+<a id="@Specification_1_borrow"></a>
 
 ### Function `borrow`
 
@@ -833,7 +904,7 @@ Return <code><b>true</b></code> if the vector <code>v</code> has no elements and
 
 
 
-<a name="@Specification_1_borrow_mut"></a>
+<a id="@Specification_1_borrow_mut"></a>
 
 ### Function `borrow_mut`
 
@@ -850,7 +921,7 @@ Return <code><b>true</b></code> if the vector <code>v</code> has no elements and
 
 
 
-<a name="@Specification_1_append"></a>
+<a id="@Specification_1_append"></a>
 
 ### Function `append`
 
@@ -866,7 +937,7 @@ Return <code><b>true</b></code> if the vector <code>v</code> has no elements and
 
 
 
-<a name="@Specification_1_push_back"></a>
+<a id="@Specification_1_push_back"></a>
 
 ### Function `push_back`
 
@@ -878,17 +949,31 @@ Return <code><b>true</b></code> if the vector <code>v</code> has no elements and
 
 
 <pre><code><b>let</b> num_buckets = <a href="big_vector.md#0x1_big_vector_spec_table_len">spec_table_len</a>(v.buckets);
-<b>aborts_if</b> num_buckets * v.bucket_size &gt; MAX_U64;
-<b>aborts_if</b> v.end_index + 1 &gt; MAX_U64;
+<b>include</b> <a href="big_vector.md#0x1_big_vector_PushbackAbortsIf">PushbackAbortsIf</a>&lt;T&gt;;
 <b>ensures</b> <a href="big_vector.md#0x1_big_vector_length">length</a>(v) == <a href="big_vector.md#0x1_big_vector_length">length</a>(<b>old</b>(v)) + 1;
 <b>ensures</b> v.end_index == <b>old</b>(v.end_index) + 1;
 <b>ensures</b> <a href="big_vector.md#0x1_big_vector_spec_at">spec_at</a>(v, v.end_index-1) == val;
 <b>ensures</b> <b>forall</b> i in 0..v.end_index-1: <a href="big_vector.md#0x1_big_vector_spec_at">spec_at</a>(v, i) == <a href="big_vector.md#0x1_big_vector_spec_at">spec_at</a>(<b>old</b>(v), i);
+<b>ensures</b> v.bucket_size == <b>old</b>(v).bucket_size;
 </code></pre>
 
 
 
-<a name="@Specification_1_pop_back"></a>
+
+<a id="0x1_big_vector_PushbackAbortsIf"></a>
+
+
+<pre><code><b>schema</b> <a href="big_vector.md#0x1_big_vector_PushbackAbortsIf">PushbackAbortsIf</a>&lt;T&gt; {
+    v: <a href="big_vector.md#0x1_big_vector_BigVector">BigVector</a>&lt;T&gt;;
+    <b>let</b> num_buckets = <a href="big_vector.md#0x1_big_vector_spec_table_len">spec_table_len</a>(v.buckets);
+    <b>aborts_if</b> num_buckets * v.bucket_size &gt; MAX_U64;
+    <b>aborts_if</b> v.end_index + 1 &gt; MAX_U64;
+}
+</code></pre>
+
+
+
+<a id="@Specification_1_pop_back"></a>
 
 ### Function `pop_back`
 
@@ -907,7 +992,7 @@ Return <code><b>true</b></code> if the vector <code>v</code> has no elements and
 
 
 
-<a name="@Specification_1_remove"></a>
+<a id="@Specification_1_remove"></a>
 
 ### Function `remove`
 
@@ -923,7 +1008,7 @@ Return <code><b>true</b></code> if the vector <code>v</code> has no elements and
 
 
 
-<a name="@Specification_1_swap_remove"></a>
+<a id="@Specification_1_swap_remove"></a>
 
 ### Function `swap_remove`
 
@@ -942,7 +1027,7 @@ Return <code><b>true</b></code> if the vector <code>v</code> has no elements and
 
 
 
-<a name="@Specification_1_swap"></a>
+<a id="@Specification_1_swap"></a>
 
 ### Function `swap`
 
@@ -953,7 +1038,7 @@ Return <code><b>true</b></code> if the vector <code>v</code> has no elements and
 
 
 
-<pre><code><b>pragma</b> verify_duration_estimate = 120;
+<pre><code><b>pragma</b> verify_duration_estimate = 1000;
 <b>aborts_if</b> i &gt;= <a href="big_vector.md#0x1_big_vector_length">length</a>(v) || j &gt;= <a href="big_vector.md#0x1_big_vector_length">length</a>(v);
 <b>ensures</b> <a href="big_vector.md#0x1_big_vector_length">length</a>(v) == <a href="big_vector.md#0x1_big_vector_length">length</a>(<b>old</b>(v));
 <b>ensures</b> <a href="big_vector.md#0x1_big_vector_spec_at">spec_at</a>(v, i) == <a href="big_vector.md#0x1_big_vector_spec_at">spec_at</a>(<b>old</b>(v), j);
@@ -965,7 +1050,7 @@ Return <code><b>true</b></code> if the vector <code>v</code> has no elements and
 
 
 
-<a name="@Specification_1_reverse"></a>
+<a id="@Specification_1_reverse"></a>
 
 ### Function `reverse`
 
@@ -981,7 +1066,7 @@ Return <code><b>true</b></code> if the vector <code>v</code> has no elements and
 
 
 
-<a name="@Specification_1_index_of"></a>
+<a id="@Specification_1_index_of"></a>
 
 ### Function `index_of`
 
@@ -998,7 +1083,7 @@ Return <code><b>true</b></code> if the vector <code>v</code> has no elements and
 
 
 
-<a name="0x1_big_vector_spec_table_len"></a>
+<a id="0x1_big_vector_spec_table_len"></a>
 
 
 <pre><code><b>fun</b> <a href="big_vector.md#0x1_big_vector_spec_table_len">spec_table_len</a>&lt;K, V&gt;(t: TableWithLength&lt;K, V&gt;): u64 {
@@ -1009,7 +1094,7 @@ Return <code><b>true</b></code> if the vector <code>v</code> has no elements and
 
 
 
-<a name="0x1_big_vector_spec_table_contains"></a>
+<a id="0x1_big_vector_spec_table_contains"></a>
 
 
 <pre><code><b>fun</b> <a href="big_vector.md#0x1_big_vector_spec_table_contains">spec_table_contains</a>&lt;K, V&gt;(t: TableWithLength&lt;K, V&gt;, k: K): bool {
@@ -1020,7 +1105,7 @@ Return <code><b>true</b></code> if the vector <code>v</code> has no elements and
 
 
 
-<a name="0x1_big_vector_spec_at"></a>
+<a id="0x1_big_vector_spec_at"></a>
 
 
 <pre><code><b>fun</b> <a href="big_vector.md#0x1_big_vector_spec_at">spec_at</a>&lt;T&gt;(v: <a href="big_vector.md#0x1_big_vector_BigVector">BigVector</a>&lt;T&gt;, i: u64): T {
@@ -1032,4 +1117,4 @@ Return <code><b>true</b></code> if the vector <code>v</code> has no elements and
 </code></pre>
 
 
-[move-book]: https://aptos.dev/guides/move-guides/book/SUMMARY
+[move-book]: https://aptos.dev/move/book/SUMMARY

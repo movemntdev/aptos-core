@@ -30,9 +30,12 @@ import shutil
 import sys
 
 from cases.account import (
-    test_account_create,
+    test_account_create_and_transfer,
+    test_account_list,
     test_account_fund_with_faucet,
     test_account_lookup_address,
+    test_account_resource_account,
+    test_account_rotate_key,
 )
 from cases.config import test_config_show_profiles
 from cases.init import test_aptos_header_included, test_init, test_metrics_accessible
@@ -42,6 +45,23 @@ from cases.move import (
     test_move_publish,
     test_move_run,
     test_move_view,
+)
+from cases.node import (
+    test_node_show_validator_set,
+    test_node_update_consensus_key,
+    test_node_update_validator_network_address,
+)
+from cases.stake import (
+    test_stake_add_stake,
+    test_stake_create_staking_contract,
+    test_stake_increase_lockup,
+    test_stake_initialize_stake_owner,
+    test_stake_request_commission,
+    test_stake_set_operator,
+    test_stake_set_voter,
+    test_stake_unlock_stake,
+    test_stake_withdraw_stake_after_unlock,
+    test_stake_withdraw_stake_before_unlock,
 )
 from common import Network
 from local_testnet import run_node, stop_node, wait_for_startup
@@ -103,6 +123,11 @@ def parse_args():
         default="/tmp/aptos-cli-tests",
         help="Where we'll run CLI commands from (in the host system). Default: %(default)s",
     )
+    parser.add_argument(
+        "--no-pull-always",
+        action="store_true",
+        help='If set, do not set "--pull always" when running the local testnet. Necessary for using local images.',
+    )
     args = parser.parse_args()
     return args
 
@@ -119,18 +144,40 @@ def run_tests(run_helper):
 
     # Run account tests.
     test_account_fund_with_faucet(run_helper)
-    test_account_create(run_helper)
+    test_account_create_and_transfer(run_helper)
+    test_account_list(run_helper)
     test_account_lookup_address(run_helper)
+    test_account_resource_account(run_helper)
 
     # Make sure the aptos-cli header is included on the original request
     test_aptos_header_included(run_helper)
 
     # Run move subcommand group tests.
-    test_move_view(run_helper)
     test_move_compile(run_helper)
     test_move_compile_script(run_helper)
     test_move_publish(run_helper)
     test_move_run(run_helper)
+    test_move_view(run_helper)
+
+    # Run stake subcommand group tests.
+    test_stake_initialize_stake_owner(run_helper)
+    test_stake_add_stake(run_helper)
+    test_stake_withdraw_stake_before_unlock(run_helper)
+    test_stake_unlock_stake(run_helper)
+    test_stake_withdraw_stake_after_unlock(run_helper)
+    test_stake_increase_lockup(run_helper)
+    test_stake_set_operator(run_helper)
+    test_stake_set_voter(run_helper)
+    test_stake_create_staking_contract(run_helper)
+    test_stake_request_commission(run_helper)
+
+    # Run node subcommand group tests.
+    test_node_show_validator_set(run_helper)
+    test_node_update_consensus_key(run_helper)
+    test_node_update_validator_network_address(run_helper)
+
+    # WARNING: This has to stay at the end, else key will get rotated
+    test_account_rotate_key(run_helper)
 
 
 def main():
@@ -147,7 +194,9 @@ def main():
     pathlib.Path(args.working_directory).mkdir(parents=True, exist_ok=True)
 
     # Run a node + faucet and wait for them to start up.
-    container_name = run_node(args.base_network, args.image_repo_with_project)
+    container_name = run_node(
+        args.base_network, args.image_repo_with_project, not args.no_pull_always
+    )
 
     # We run these in a try finally so that if something goes wrong, such as the
     # local testnet not starting up correctly or some unexpected error in the

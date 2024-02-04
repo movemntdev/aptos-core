@@ -5,14 +5,12 @@
 //! Support for mocking the Aptos data store.
 
 use crate::account::AccountData;
-use anyhow::Result;
-use aptos_state_view::{in_memory_state_view::InMemoryStateView, TStateView};
 use aptos_types::{
     access_path::AccessPath,
     account_config::CoinInfoResource,
     state_store::{
-        state_key::StateKey, state_storage_usage::StateStorageUsage, state_value::StateValue,
-        table::TableHandle as AptosTableHandle,
+        errors::StateviewError, in_memory_state_view::InMemoryStateView, state_key::StateKey,
+        state_storage_usage::StateStorageUsage, state_value::StateValue, TStateView,
     },
     transaction::ChangeSet,
     write_set::{TransactionWrite, WriteSet},
@@ -22,7 +20,6 @@ use aptos_vm_genesis::{
     GenesisOptions,
 };
 use move_core_types::language_storage::ModuleId;
-use move_table_extension::{TableHandle, TableResolver};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -37,10 +34,10 @@ pub static GENESIS_CHANGE_SET_TESTNET: Lazy<ChangeSet> =
 pub static GENESIS_CHANGE_SET_MAINNET: Lazy<ChangeSet> =
     Lazy::new(|| generate_genesis_change_set_for_mainnet(GenesisOptions::Mainnet));
 
-/// An in-memory implementation of `StateView` and `RemoteCache` for the VM.
+/// An in-memory implementation of `StateView` and `ExecutorView` for the VM.
 ///
 /// Tests use this to set up state, and pass in a reference to the cache whenever a `StateView` or
-/// `RemoteCache` is needed.
+/// `ExecutorView` is needed.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct FakeDataStore {
     state_data: HashMap<StateKey, StateValue>,
@@ -52,9 +49,14 @@ impl FakeDataStore {
         FakeDataStore {
             state_data: data
                 .into_iter()
-                .map(|(k, v)| (k, StateValue::new_legacy(v)))
+                .map(|(k, v)| (k, StateValue::new_legacy(v.into())))
                 .collect(),
         }
+    }
+
+    /// Creates a new `FakeDataStore` with the provided initial data.
+    pub fn new_with_state_value(data: HashMap<StateKey, StateValue>) -> Self {
+        FakeDataStore { state_data: data }
     }
 
     /// Adds a [`WriteSet`] to this data store.
@@ -72,7 +74,7 @@ impl FakeDataStore {
     /// Returns the previous data if the key was occupied.
     pub fn set_legacy(&mut self, state_key: StateKey, bytes: Vec<u8>) -> Option<StateValue> {
         self.state_data
-            .insert(state_key, StateValue::new_legacy(bytes))
+            .insert(state_key, StateValue::new_legacy(bytes.into()))
     }
 
     /// Sets a (key, value) pair within this data store.
@@ -80,6 +82,12 @@ impl FakeDataStore {
     /// Returns the previous data if the key was occupied.
     pub fn set(&mut self, state_key: StateKey, state_value: StateValue) -> Option<StateValue> {
         self.state_data.insert(state_key, state_value)
+    }
+
+    /// Checks whether the state_key is in this data store
+    ///
+    pub fn contains_key(&self, state_key: &StateKey) -> bool {
+        self.state_data.contains_key(state_key)
     }
 
     /// Deletes a key from this data store.
@@ -109,7 +117,7 @@ impl FakeDataStore {
         let access_path = AccessPath::from(module_id);
         self.set(
             StateKey::access_path(access_path),
-            StateValue::new_legacy(blob),
+            StateValue::new_legacy(blob.into()),
         );
     }
 }
@@ -118,15 +126,11 @@ impl FakeDataStore {
 impl TStateView for FakeDataStore {
     type Key = StateKey;
 
-    fn get_state_value(&self, state_key: &StateKey) -> Result<Option<StateValue>> {
+    fn get_state_value(&self, state_key: &StateKey) -> Result<Option<StateValue>, StateviewError> {
         Ok(self.state_data.get(state_key).cloned())
     }
 
-    fn is_genesis(&self) -> bool {
-        self.state_data.is_empty()
-    }
-
-    fn get_usage(&self) -> Result<StateStorageUsage> {
+    fn get_usage(&self) -> Result<StateStorageUsage, StateviewError> {
         let mut usage = StateStorageUsage::new_untracked();
         for (k, v) in self.state_data.iter() {
             usage.add_item(k.size() + v.size())
@@ -136,17 +140,5 @@ impl TStateView for FakeDataStore {
 
     fn as_in_memory_state_view(&self) -> InMemoryStateView {
         InMemoryStateView::new(self.state_data.clone())
-    }
-}
-
-// This is used by aggregator tests.
-impl TableResolver for FakeDataStore {
-    fn resolve_table_entry(
-        &self,
-        handle: &TableHandle,
-        key: &[u8],
-    ) -> Result<Option<Vec<u8>>, anyhow::Error> {
-        let state_key = StateKey::table_item(AptosTableHandle::from(*handle), key.to_vec());
-        self.get_state_value_bytes(&state_key)
     }
 }

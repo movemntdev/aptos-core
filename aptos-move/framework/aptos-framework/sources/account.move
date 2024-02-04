@@ -142,7 +142,7 @@ module aptos_framework::account {
     const ENO_VALID_FRAMEWORK_RESERVED_ADDRESS: u64 = 11;
     /// Specified scheme required to proceed with the smart contract operation - can only be ED25519_SCHEME(0) OR MULTI_ED25519_SCHEME(1)
     const EINVALID_SCHEME: u64 = 12;
-    /// Abort the transaction if the expected originating address is different from the originating addres on-chain
+    /// Abort the transaction if the expected originating address is different from the originating address on-chain
     const EINVALID_ORIGINATING_ADDRESS: u64 = 13;
     /// The signer capability offer doesn't exist at the given address
     const ENO_SUCH_SIGNER_CAPABILITY: u64 = 14;
@@ -171,6 +171,12 @@ module aptos_framework::account {
         move_to(aptos_framework, OriginatingAddress {
             address_map: table::new(),
         });
+    }
+
+    fun create_account_if_does_not_exist(account_address: address) {
+        if (!exists<Account>(account_address)) {
+            create_account(account_address);
+        }
     }
 
     /// Publishes a new `Account` resource under `new_address`. A signer representing `new_address`
@@ -946,7 +952,7 @@ module aptos_framework::account {
     }
 
     #[test_only]
-    public entry fun create_account_from_ed25519_public_key(pk_bytes: vector<u8>): signer {
+    public fun create_account_from_ed25519_public_key(pk_bytes: vector<u8>): signer {
         let pk = ed25519::new_unvalidated_public_key_from_bytes(pk_bytes);
         let curr_auth_key = ed25519::unvalidated_public_key_to_authentication_key(&pk);
         let alice_address = from_bcs::to_address(curr_auth_key);
@@ -1308,5 +1314,28 @@ module aptos_framework::account {
         let account_state = borrow_global_mut<Account>(addr);
         account_state.guid_creation_num = MAX_GUID_CREATION_NUM - 1;
         create_guid(account);
+    }
+
+    #[test_only]
+    struct FakeCoin { }
+    #[test_only]
+    struct SadFakeCoin { }
+
+    #[test(account = @0x1234)]
+    fun test_events(account: &signer) acquires Account {
+        let addr = signer::address_of(account);
+        create_account_unchecked(addr);
+        register_coin<FakeCoin>(addr);
+
+        let eventhandle = &borrow_global<Account>(addr).coin_register_events;
+        let event = CoinRegisterEvent { type_info: type_info::type_of<FakeCoin>() };
+
+        let events = event::emitted_events_by_handle(eventhandle);
+        assert!(vector::length(&events) == 1, 0);
+        assert!(vector::borrow(&events, 0) == &event, 1);
+        assert!(event::was_event_emitted_by_handle(eventhandle, &event), 2);
+
+        let event = CoinRegisterEvent { type_info: type_info::type_of<SadFakeCoin>() };
+        assert!(!event::was_event_emitted_by_handle(eventhandle, &event), 3);
     }
 }

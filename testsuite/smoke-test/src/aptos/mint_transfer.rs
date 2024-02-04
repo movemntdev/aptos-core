@@ -3,8 +3,8 @@
 
 use crate::smoke_test_environment::new_local_swarm_with_aptos;
 use aptos_cached_packages::aptos_stdlib;
-use aptos_debugger::AptosDebugger;
 use aptos_forge::Swarm;
+use aptos_move_debugger::aptos_debugger::AptosDebugger;
 use aptos_types::transaction::{ExecutionStatus, TransactionStatus};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
@@ -12,7 +12,7 @@ async fn test_mint_transfer() {
     let mut swarm = new_local_swarm_with_aptos(1).await;
     let mut info = swarm.aptos_public_info();
 
-    let mut account1 = info.random_account();
+    let account1 = info.random_account();
     info.create_user_account(account1.public_key())
         .await
         .unwrap();

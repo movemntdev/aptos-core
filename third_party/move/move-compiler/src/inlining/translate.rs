@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
+    command_line::compiler::FullyCompiledProgram,
     diag,
     expansion::ast::{AbilitySet, ModuleIdent, ModuleIdent_, SpecId, Visibility},
-    inlining::visitor::{Dispatcher, TypedDispatcher, TypedVisitor, Visitor, VisitorContinuation},
+    inlining::visitor::{Dispatcher, Visitor, VisitorContinuation},
     naming,
     naming::ast::{
         FunctionSignature, StructDefinition, StructTypeParameter, TParam, TParamID, Type,
@@ -19,17 +20,20 @@ use crate::{
             SpecLambdaLiftedFunction, UnannotatedExp_,
         },
         core::{infer_abilities, InferAbilityContext, Subst},
+        translate::{lvalues_expected_types, sequence_type},
     },
 };
 use move_ir_types::location::{sp, Loc};
 use move_symbol_pool::Symbol;
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::{
+    collections::{BTreeMap, BTreeSet, VecDeque},
+    fmt,
+};
 
 /// A globally unique function name
 type GlobalFunctionName = (ModuleIdent_, Symbol);
 type GlobalStructName = (ModuleIdent_, Symbol);
 
-#[derive(Debug)]
 struct Inliner<'l> {
     env: &'l mut CompilationEnv,
     current_module: Option<ModuleIdent_>,
@@ -41,12 +45,39 @@ struct Inliner<'l> {
     visibilities: BTreeMap<GlobalFunctionName, Visibility>,
     inline_stack: VecDeque<GlobalFunctionName>,
     rename_counter: usize,
+    pre_compiled_lib: Option<&'l FullyCompiledProgram>,
+}
+
+// Manually implement Debug so we don't have to include field pre_compiled_lib,
+// which may be huge.
+impl<'l> fmt::Debug for Inliner<'l> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Inliner")
+            .field("env", &self.env)
+            .field("current_module", &self.current_module)
+            .field("current_function", &self.current_function)
+            .field("current_function_loc", &self.current_function_loc)
+            .field(
+                "current_spec_block_counter",
+                &self.current_spec_block_counter,
+            )
+            .field("struct_defs", &self.struct_defs)
+            .field("inline_defs", &self.inline_defs)
+            .field("visibilities", &self.visibilities)
+            .field("inline_stack", &self.inline_stack)
+            .field("rename_counter", &self.rename_counter)
+            .finish()
+    }
 }
 
 // ============================================================================================
 // Entry point
 
-pub fn run_inlining(env: &mut CompilationEnv, prog: &mut Program) {
+pub fn run_inlining(
+    env: &mut CompilationEnv,
+    pre_compiled_lib: Option<&FullyCompiledProgram>,
+    prog: &mut Program,
+) {
     Inliner {
         env,
         current_module: None,
@@ -58,6 +89,7 @@ pub fn run_inlining(env: &mut CompilationEnv, prog: &mut Program) {
         visibilities: BTreeMap::new(),
         inline_stack: Default::default(),
         rename_counter: 0,
+        pre_compiled_lib,
     }
     .run(prog)
 }
@@ -65,6 +97,7 @@ pub fn run_inlining(env: &mut CompilationEnv, prog: &mut Program) {
 impl<'l> Inliner<'l> {
     fn run(&mut self, prog: &mut Program) {
         // First collect all definitions of inlined functions so we can expand them later in the AST.
+        // Also check that all local inline functions are not native.
         self.visit_functions(prog, VisitingMode::All, &mut |ctx, fname, fdef| {
             if let Some(mid) = ctx.current_module {
                 let global_name = (mid, ctx.current_function);
@@ -85,7 +118,7 @@ impl<'l> Inliner<'l> {
                 }
             }
         });
-        // Also collect all structs, we need them for ability computation
+        // Also collect all structs; we need them for ability computation.
         for (_, mid, mdef) in prog.modules.iter() {
             for (_, name, sdef) in mdef.structs.iter() {
                 let global_name = (*mid, *name);
@@ -107,7 +140,7 @@ impl<'l> Inliner<'l> {
         );
 
         // Now remove all inline functions from the program.
-        for (_, _, mut mdef) in prog.modules.iter_mut() {
+        for (_, _, mdef) in prog.modules.iter_mut() {
             mdef.functions =
                 std::mem::replace(&mut mdef.functions, UniqueMap::new()).filter_map(|_, fdef| {
                     if fdef.inline {
@@ -121,6 +154,44 @@ impl<'l> Inliner<'l> {
         // Finally do acquires checking as we have inlined everything
         self.visit_functions(prog, VisitingMode::SourceOnly, &mut |inliner, name, def| {
             post_inlining_check(inliner, name, def)
+        })
+    }
+
+    /// Get a copy of the function body if `global_name` refers to an inline function.
+    fn copy_def_if_inline_function(
+        &mut self,
+        global_name: &(ModuleIdent_, Symbol),
+    ) -> Option<Function> {
+        // We need a copy of the function body to inline into the program if it's an inline function.
+        // But since we're mutating the program in complicated ways, any inline functions from the
+        // current program are stored in advance in the `inline_defs` table to avoid mutable reference.
+        self.inline_defs
+            .get(global_name)
+            .or_else(|| {
+                let mid = global_name.0;
+                let fsym = &global_name.1;
+                // Function defs from pre-compiled libs (if present) can be copied at the time of use,
+                // since we don't have a mutable ref to it.
+                self.pre_compiled_lib
+                    .and_then(|libs| libs.typing.modules.get_(&mid))
+                    .filter(|mod_def| mod_def.is_source_module)
+                    .and_then(|mod_def| mod_def.functions.get_(fsym))
+                    .filter(|fdef| fdef.inline)
+            })
+            .cloned()
+    }
+
+    /// Get a ref to the struct definition identified by `m::n` if it can be found.
+    fn get_struct_def(&self, m: &ModuleIdent, n: &StructName) -> Option<&StructDefinition> {
+        // To avoid mutable ref issues, this may be a ref to a copy stored in advance
+        // in the `struct_defs` table.
+        self.struct_defs.get(&(m.value, n.0.value)).or_else(|| {
+            // Struct defs from pre-compiled libs (if present) can be referenced at point
+            // of use, since there are no conflicting mutable refs to them.
+            self.pre_compiled_lib
+                .and_then(|libs| libs.typing.modules.get_(&m.value))
+                .filter(|mod_def| mod_def.is_source_module)
+                .and_then(|mod_def| mod_def.structs.get_(&n.value()))
         })
     }
 
@@ -160,6 +231,15 @@ impl<'l> Inliner<'l> {
             self.current_spec_block_counter = 0;
             (*visitor)(self, name.as_str(), &mut sdef.function)
         }
+    }
+
+    /// Create a symbol uniquely based on the provided `var_sym` string to
+    /// avoid conflicts, while remaining somewhat recognizable for debugging
+    /// purposes (or if it leaks to the user somehow).
+    fn rename_symbol(&mut self, var_sym: &str) -> Symbol {
+        let new_name = Symbol::from(format!("{}#{}", var_sym, self.rename_counter));
+        self.rename_counter += 1;
+        new_name
     }
 }
 
@@ -230,7 +310,8 @@ struct SubstitutionVisitor<'l, 'r> {
 
 impl<'l, 'r> Visitor for SubstitutionVisitor<'l, 'r> {
     fn type_(&mut self, ty: &mut Type) -> VisitorContinuation {
-        visit_type(&self.type_arguments, ty)
+        visit_type(&self.type_arguments, ty);
+        VisitorContinuation::Descend
     }
 
     fn exp(&mut self, ex: &mut Exp) -> VisitorContinuation {
@@ -264,7 +345,6 @@ impl<'l, 'r> Visitor for SubstitutionVisitor<'l, 'r> {
                     | BuiltinFunction_::Freeze(ty) => ty,
                     BuiltinFunction_::Assert(_) => return VisitorContinuation::Descend,
                 };
-                self.type_(ty);
                 self.check_resource_usage(ex.exp.loc, ty, true);
                 VisitorContinuation::Descend
             },
@@ -304,7 +384,7 @@ impl<'l, 'r> Visitor for SubstitutionVisitor<'l, 'r> {
         self.shadowed.pop_front();
     }
 
-    fn var_decl(&mut self, var: &mut Var) {
+    fn var_decl(&mut self, _ty: &mut Type, var: &mut Var) {
         self.shadowed
             .front_mut()
             .expect("scoped")
@@ -335,11 +415,12 @@ impl<'l, 'r> SubstitutionVisitor<'l, 'r> {
                 match repl.exp.value {
                     UnannotatedExp_::Lambda(decls, mut body) => {
                         let loc = args.exp.loc;
+                        let params_from_decls = get_params_from_decls(self.inliner, &decls);
                         let (decls_for_let, bindings) = self.inliner.process_parameters(
                             loc,
-                            get_params_from_decls(&decls)
+                            params_from_decls
                                 .into_iter()
-                                .zip(get_args_from_exp(args).into_iter())
+                                .zip(get_args_from_exp(args))
                                 .map(|(s, e)| ((Var(Name::new(e.exp.loc, s)), e.ty.clone()), e)),
                         );
                         // Process body in sub-visitor
@@ -375,7 +456,7 @@ impl<'l, 'r> SubstitutionVisitor<'l, 'r> {
 
     fn check_resource_usage(&mut self, loc: Loc, ty: &mut Type, needs_key: bool) {
         match &mut ty.value {
-            Type_::Apply(abilties, n, _) => {
+            Type_::Apply(abilities, n, _) => {
                 if let TypeName_::ModuleType(m, s) = &n.value {
                     if Some(m.value) != self.inliner.current_module {
                         self.inliner.env.add_diag(diag!(Inlining::AfterExpansion,
@@ -383,7 +464,7 @@ impl<'l, 'r> SubstitutionVisitor<'l, 'r> {
                         ));
                     }
                     if needs_key
-                        && !abilties
+                        && !abilities
                             .as_ref()
                             .map(|a| a.has_ability_(Ability_::Key))
                             .unwrap_or_default()
@@ -391,21 +472,30 @@ impl<'l, 'r> SubstitutionVisitor<'l, 'r> {
                         self.inliner.env.add_diag(diag!(Inlining::AfterExpansion,
                             (loc, format!("After inlining: invalid storage operation since type `{}::{}` has no `key`", m, s))
                         ));
-                    }
+                    };
+                }
+            },
+            Type_::Param(TParam {
+                user_specified_name,
+                abilities,
+                ..
+            }) => {
+                if needs_key && !abilities.iter().any(|a| a.value == Ability_::Key) {
+                    self.inliner.env.add_diag(diag!(Inlining::AfterExpansion,
+                                                    (loc, format!("After inlining: invalid storage operation since type `{}` has no `key`", user_specified_name))
+                    ));
                 }
             },
             Type_::Ref(_, bt) => self.check_resource_usage(loc, bt.as_mut(), needs_key),
-            Type_::Unit
-            | Type_::Param(_)
-            | Type_::Var(_)
-            | Type_::Anything
-            | Type_::UnresolvedError => {
+            Type_::Unit | Type_::Var(_) | Type_::Anything | Type_::UnresolvedError => {
                 self.inliner.env.add_diag(diag!(
                     Inlining::AfterExpansion,
                     (
                         loc,
-                        "After inlining: invalid storage operation as type is not a struct"
-                            .to_owned()
+                        format!(
+                            "After inlining: invalid storage operation as type {} is not a struct",
+                            ast_debug::display_verbose(ty),
+                        )
                     )
                 ));
             },
@@ -517,9 +607,8 @@ impl<'l, 'r> Visitor for RenamingVisitor<'l, 'r> {
         }
     }
 
-    fn var_decl(&mut self, var: &mut Var) {
-        let new_name = Symbol::from(format!("{}#{}", var.0.value, self.inliner.rename_counter));
-        self.inliner.rename_counter += 1;
+    fn var_decl(&mut self, _ty: &mut Type, var: &mut Var) {
+        let new_name = self.inliner.rename_symbol(&var.0.value);
         self.renamings
             .front_mut()
             .unwrap()
@@ -527,7 +616,7 @@ impl<'l, 'r> Visitor for RenamingVisitor<'l, 'r> {
         var.0.value = new_name;
     }
 
-    fn var_use(&mut self, var: &mut Var) {
+    fn var_use(&mut self, _ty: &mut Type, var: &mut Var) {
         for mapping in &self.renamings {
             if let Some(new_name) = mapping.get(&var.0.value) {
                 var.0.value = *new_name
@@ -548,8 +637,8 @@ struct SignatureExtractionVisitor<'l, 'r> {
     used_type_params: BTreeSet<TParam>,
 }
 
-impl<'l, 'r> TypedVisitor for SignatureExtractionVisitor<'l, 'r> {
-    fn ty(&mut self, t: &mut Type) -> VisitorContinuation {
+impl<'l, 'r> Visitor for SignatureExtractionVisitor<'l, 'r> {
+    fn type_(&mut self, t: &mut Type) -> VisitorContinuation {
         if let Type_::Param(param) = &t.value {
             self.used_type_params.insert(param.clone());
         }
@@ -598,7 +687,7 @@ impl<'l> Inliner<'l> {
     /// a `SubstitutionVisitor` for inlined functions.
     fn module_call(&mut self, call_loc: Loc, mcall: &mut ModuleCall) -> Option<UnannotatedExp_> {
         let global_name = (mcall.module.value, mcall.name.0.value);
-        if let Some(mut fdef) = self.inline_defs.get(&global_name).cloned() {
+        if let Some(mut fdef) = self.copy_def_if_inline_function(&global_name) {
             // Function to inline: check for cycles
             if let Some(pos) = self.inline_stack.iter().position(|f| f == &global_name) {
                 let cycle = self
@@ -634,23 +723,44 @@ impl<'l> Inliner<'l> {
                     mcall.name.0.value
                 ),
             };
-            let type_arguments = fdef
+            let type_arguments: BTreeMap<TParamID, Type> = fdef
                 .signature
                 .type_parameters
                 .iter()
                 .zip(mcall.type_arguments.iter())
                 .map(|(p, t)| (p.id, t.clone()))
                 .collect();
+
             let mut inliner_visitor = OuterVisitor { inliner: self };
             let mut inlined_args = mcall.arguments.clone();
             Dispatcher::new(&mut inliner_visitor).exp(&mut inlined_args);
-            let mapped_params = fdef
+
+            // Expand Type formal params in types of other params.
+            let mut param_visitor = TypeSubstitutionVisitor {
+                type_arguments: type_arguments.clone(),
+            };
+            let mut param_dispatcher = Dispatcher::new(&mut param_visitor);
+            let fix_types = |(var, mut spanned_type): (Var, Type)| {
+                param_dispatcher.type_(&mut spanned_type);
+                self.infer_abilities(&mut spanned_type);
+                (var, spanned_type)
+            };
+            let mapped_params: Vec<_> = fdef
                 .signature
                 .parameters
                 .iter()
                 .cloned()
-                .zip(get_args_from_exp(&inlined_args));
-            let (decls_for_let, bindings) = self.process_parameters(call_loc, mapped_params);
+                .map(fix_types)
+                .zip(get_args_from_exp(&inlined_args))
+                .collect();
+
+            let (decls_for_let, bindings) =
+                self.process_parameters(call_loc, mapped_params.into_iter());
+
+            // Expand Type formal params in result type
+            let mut result_type = fdef.signature.return_type.clone();
+            param_dispatcher.type_(&mut result_type);
+            self.infer_abilities(&mut result_type);
 
             // Expand the body in its own independent visitor
             self.inline_stack.push_front(global_name); // for cycle detection
@@ -662,21 +772,34 @@ impl<'l> Inliner<'l> {
             };
             Dispatcher::new(&mut sub_visitor).sequence(&mut seq);
             self.inline_stack.pop_front();
+
             // Construct the let
             for decl in decls_for_let.into_iter().rev() {
                 seq.push_front(decl)
             }
-            Some(UnannotatedExp_::Block(seq))
+
+            if seq.len() == 1 {
+                // special case a sequence with a single expression to reduce tree height
+                if let SequenceItem_::Seq(boxed_expr) = seq.pop_front().unwrap().value {
+                    let exp = boxed_expr.exp;
+                    return Some(exp.value);
+                }
+            }
+            let body_loc = fdef.body.loc;
+            let block_exp_type = sequence_type(&seq).clone();
+            let block_exp_ = UnannotatedExp_::Block(seq);
+            let res = make_unannotated_exp_of(block_exp_, block_exp_type, result_type, body_loc);
+            Some(res)
         } else {
             None
         }
     }
 
-    /// Process parameters, splitting them in those which are eagerly bound as regular
-    /// values and those which are lambdas which are going to be transitively inlined.
+    /// Process parameters, splitting them into (1) those which are eagerly evaluated and let-bound
+    /// as regular values, (2) those which are lambdas which are going to be transitively inlined.
     fn process_parameters(
         &mut self,
-        loc: Loc,
+        call_loc: Loc,
         params: impl Iterator<Item = ((Var, Type), Exp)>,
     ) -> (Vec<SequenceItem>, BTreeMap<Symbol, Exp>) {
         let mut bindings = BTreeMap::new();
@@ -685,38 +808,43 @@ impl<'l> Inliner<'l> {
         let mut tys = vec![];
         let mut exps = vec![];
 
-        for ((var, _), e) in params {
-            let ty = e.ty.clone();
+        for ((var, ty), e) in params {
             if ty.value.is_fun() {
                 bindings.insert(var.0.value, e);
             } else {
-                lvalues.push(sp(loc, LValue_::Var(var, Box::new(ty.clone()))));
-                tys.push(ty);
+                lvalues.push(sp(var.loc(), LValue_::Var(var, Box::new(ty.clone()))));
+                tys.push(ty.clone());
                 exps.push(e);
             }
         }
 
-        let opt_tys = tys.iter().map(|t| Some(t.clone())).collect();
-
         let exp = match exps.len() {
             0 => Exp {
-                ty: sp(loc, Type_::Unit),
-                exp: sp(loc, UnannotatedExp_::Unit { trailing: false }),
+                ty: sp(call_loc, Type_::Unit),
+                exp: sp(call_loc, UnannotatedExp_::Unit { trailing: false }),
             },
-            1 => exps.pop().unwrap(),
+            1 => {
+                let exp1 = exps.pop().unwrap();
+                let mut ty = tys.pop().unwrap();
+                self.infer_abilities(&mut ty);
+                make_annotated_exp_of(exp1, ty, call_loc)
+            },
             _ => {
-                let mut ty = Type_::multiple(loc, tys);
+                let mut ty = Type_::multiple(call_loc, tys.clone());
                 self.infer_abilities(&mut ty);
 
                 Exp {
                     ty,
                     exp: sp(
-                        loc,
+                        call_loc,
                         UnannotatedExp_::ExpList(
                             exps.into_iter()
-                                .map(|e| {
-                                    let ty = e.ty.clone();
-                                    ExpListItem::Single(e, Box::new(ty))
+                                .zip(tys)
+                                .map(|(e, ty)| {
+                                    ExpListItem::Single(
+                                        make_annotated_exp_of(e, ty.clone(), call_loc),
+                                        Box::new(ty),
+                                    )
                                 })
                                 .collect(),
                         ),
@@ -725,11 +853,44 @@ impl<'l> Inliner<'l> {
             },
         };
 
+        let spanned_lvalues = sp(call_loc, lvalues);
+        let lvalue_ty = lvalues_expected_types(&spanned_lvalues);
+
         let decl = sp(
-            loc,
-            SequenceItem_::Bind(sp(loc, lvalues), opt_tys, Box::new(exp)),
+            call_loc,
+            SequenceItem_::Bind(spanned_lvalues, lvalue_ty, Box::new(exp)),
         );
         (vec![decl], bindings)
+    }
+}
+
+fn make_annotated_exp_of(exp: Exp, ty: Type, loc: Loc) -> Exp {
+    if ty != exp.ty {
+        Exp {
+            ty: ty.clone(),
+            exp: sp(loc, UnannotatedExp_::Annotate(Box::new(exp), Box::new(ty))),
+        }
+    } else {
+        exp
+    }
+}
+
+fn make_unannotated_exp_of(
+    exp_: UnannotatedExp_,
+    exp_ty: Type,
+    result_ty: Type,
+    loc: Loc,
+) -> UnannotatedExp_ {
+    if result_ty != exp_ty {
+        UnannotatedExp_::Annotate(
+            Box::new(Exp {
+                exp: sp(loc, exp_),
+                ty: exp_ty,
+            }),
+            Box::new(result_ty),
+        )
+    } else {
+        exp_
     }
 }
 
@@ -831,16 +992,14 @@ impl<'l, 'r> Visitor for CheckerVisitor<'l, 'r> {
 impl<'l> InferAbilityContext for Inliner<'l> {
     fn struct_declared_abilities(&self, m: &ModuleIdent, n: &StructName) -> AbilitySet {
         let res = self
-            .struct_defs
-            .get(&(m.value, n.0.value))
+            .get_struct_def(m, n)
             .map(|s| s.abilities.clone())
             .unwrap_or_else(|| AbilitySet::all(self.current_function_loc.expect("loc")));
         res
     }
 
     fn struct_tparams(&self, m: &ModuleIdent, n: &StructName) -> Vec<StructTypeParameter> {
-        self.struct_defs
-            .get(&(m.value, n.0.value))
+        self.get_struct_def(m, n)
             .map(|s| s.type_parameters.clone())
             .unwrap_or_default()
     }
@@ -879,7 +1038,7 @@ fn lift_lambda_as_function(
         used_local_vars: BTreeMap::new(),
         used_type_params: BTreeSet::new(),
     };
-    TypedDispatcher::new(&mut extraction_visitor).exp(&mut lambda);
+    Dispatcher::new(&mut extraction_visitor).exp(&mut lambda);
     let SignatureExtractionVisitor {
         inliner: _,
         declared_vars: _,
@@ -944,16 +1103,23 @@ fn get_args_from_exp(args: &Exp) -> Vec<Exp> {
     }
 }
 
-fn get_params_from_decls(decls: &LValueList) -> Vec<Symbol> {
+fn get_params_from_decls(inliner: &mut Inliner, decls: &LValueList) -> Vec<Symbol> {
     decls
         .value
         .iter()
         .flat_map(|lv| match &lv.value {
-            LValue_::Var(v, _) => vec![v.0.value],
-            LValue_::Ignore => vec![],
+            LValue_::Var(v, _) => vec![Some(v.0.value)],
+            LValue_::Ignore => vec![None], // placeholder for "_"
             LValue_::Unpack(_, _, _, fields) | LValue_::BorrowUnpack(_, _, _, _, fields) => {
-                fields.iter().map(|(_, x, _)| *x).collect()
+                fields.iter().map(|(_, x, _)| Some(*x)).collect()
             },
+        })
+        .map(|opt_sym| {
+            if let Some(sym) = opt_sym {
+                sym
+            } else {
+                inliner.rename_symbol("_")
+            }
         })
         .collect()
 }
@@ -966,4 +1132,14 @@ fn visit_type(subs: &BTreeMap<TParamID, Type>, ty: &mut Type) -> VisitorContinua
         }
     }
     VisitorContinuation::Descend
+}
+
+struct TypeSubstitutionVisitor {
+    type_arguments: BTreeMap<TParamID, Type>,
+}
+
+impl Visitor for TypeSubstitutionVisitor {
+    fn type_(&mut self, ty: &mut Type) -> VisitorContinuation {
+        visit_type(&self.type_arguments, ty)
+    }
 }

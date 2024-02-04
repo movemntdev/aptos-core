@@ -42,7 +42,7 @@ pub const PING_FAILURES_TOLERATED: u64 = 3;
 pub const CONNECTIVITY_CHECK_INTERVAL_MS: u64 = 5000;
 pub const MAX_CONCURRENT_NETWORK_REQS: usize = 100;
 pub const MAX_CONNECTION_DELAY_MS: u64 = 60_000; /* 1 minute */
-pub const MAX_FULLNODE_OUTBOUND_CONNECTIONS: usize = 4;
+pub const MAX_FULLNODE_OUTBOUND_CONNECTIONS: usize = 6;
 pub const MAX_INBOUND_CONNECTIONS: usize = 100;
 pub const MAX_MESSAGE_METADATA_SIZE: usize = 128 * 1024; /* 128 KiB: a buffer for metadata that might be added to messages by networking */
 pub const MESSAGE_PADDING_SIZE: usize = 2 * 1024 * 1024; /* 2 MiB: a safety buffer to allow messages to get larger during serialization */
@@ -53,10 +53,6 @@ pub const MAX_MESSAGE_SIZE: usize = 64 * 1024 * 1024; /* 64 MiB */
 pub const CONNECTION_BACKOFF_BASE: u64 = 2;
 pub const IP_BYTE_BUCKET_RATE: usize = 102400 /* 100 KiB */;
 pub const IP_BYTE_BUCKET_SIZE: usize = IP_BYTE_BUCKET_RATE;
-pub const INBOUND_TCP_RX_BUFFER_SIZE: u32 = 3 * 1024 * 1024; // 3MB ~6MB/s with 500ms latency
-pub const INBOUND_TCP_TX_BUFFER_SIZE: u32 = 512 * 1024; // 1MB use a bigger spoon
-pub const OUTBOUND_TCP_RX_BUFFER_SIZE: u32 = 3 * 1024 * 1024; // 3MB ~6MB/s with 500ms latency
-pub const OUTBOUND_TCP_TX_BUFFER_SIZE: u32 = 1024 * 1024; // 1MB use a bigger spoon
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default, deny_unknown_fields)]
@@ -89,6 +85,14 @@ pub struct NetworkConfig {
     pub network_id: NetworkId,
     /// Number of threads to run for networking
     pub runtime_threads: Option<usize>,
+    /// Overrides for the size of the inbound and outbound buffers for each peer.
+    /// NOTE: The defaults are None, so socket options are not called. Change to Some values with
+    /// caution. Experiments have shown that relying on Linux's default tcp auto-tuning can perform
+    /// better than setting these. In particular, for larger values to take effect, the
+    /// `net.core.rmem_max` and `net.core.wmem_max` sysctl values may need to be increased. On a
+    /// vanilla GCP machine, these are set to 212992. Without increasing the sysctl values and
+    /// setting a value will constrain the buffer size to the sysctl value. (In contrast, default
+    /// auto-tuning can increase beyond these values.)
     pub inbound_rx_buffer_size_bytes: Option<u32>,
     pub inbound_tx_buffer_size_bytes: Option<u32>,
     pub outbound_rx_buffer_size_bytes: Option<u32>,
@@ -157,10 +161,10 @@ impl NetworkConfig {
             inbound_rate_limit_config: None,
             outbound_rate_limit_config: None,
             max_message_size: MAX_MESSAGE_SIZE,
-            inbound_rx_buffer_size_bytes: Some(INBOUND_TCP_RX_BUFFER_SIZE),
-            inbound_tx_buffer_size_bytes: Some(INBOUND_TCP_TX_BUFFER_SIZE),
-            outbound_rx_buffer_size_bytes: Some(OUTBOUND_TCP_RX_BUFFER_SIZE),
-            outbound_tx_buffer_size_bytes: Some(OUTBOUND_TCP_TX_BUFFER_SIZE),
+            inbound_rx_buffer_size_bytes: None,
+            inbound_tx_buffer_size_bytes: None,
+            outbound_rx_buffer_size_bytes: None,
+            outbound_tx_buffer_size_bytes: None,
             max_parallel_deserialization_tasks: None,
         };
 
@@ -296,7 +300,7 @@ impl NetworkConfig {
         } else {
             AuthenticationKey::try_from(identity_key.public_key().as_slice())
                 .unwrap()
-                .derived_address()
+                .account_address()
         };
         self.identity = Identity::from_config(identity_key, peer_id);
     }

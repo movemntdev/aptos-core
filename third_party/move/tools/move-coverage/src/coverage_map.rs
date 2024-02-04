@@ -68,7 +68,8 @@ impl CoverageMap {
         for line in BufReader::new(file).lines() {
             let line = line.unwrap();
             let mut splits = line.split(',');
-            let exec_id = splits.next().unwrap();
+            // Use a dummy key so that the data structure of the coverage map does not need to be changed
+            let exec_id = "dummy_exec_id";
             let context = splits.next().unwrap();
             let pc = splits.next().unwrap().parse::<u64>().unwrap();
 
@@ -155,10 +156,7 @@ impl ModuleCoverageMap {
     }
 
     pub fn insert_multi(&mut self, func_name: Identifier, pc: u64, count: u64) {
-        let func_entry = self
-            .function_maps
-            .entry(func_name)
-            .or_insert_with(FunctionCoverage::new);
+        let func_entry = self.function_maps.entry(func_name).or_default();
         let pc_entry = func_entry.entry(pc).or_insert(0);
         *pc_entry += count;
     }
@@ -169,10 +167,7 @@ impl ModuleCoverageMap {
 
     pub fn merge(&mut self, another: ModuleCoverageMap) {
         for (key, val) in another.function_maps {
-            self.function_maps
-                .entry(key)
-                .or_insert_with(FunctionCoverage::new)
-                .extend(val);
+            self.function_maps.entry(key).or_default().extend(val);
         }
     }
 
@@ -277,7 +272,8 @@ impl TraceMap {
         for line in BufReader::new(file).lines() {
             let line = line.unwrap();
             let mut splits = line.split(',');
-            let exec_id = splits.next().unwrap();
+            // Use a dummy key so that the data structure of the coverage map does not need to be changed
+            let exec_id = "dummy_exec_id";
             let context = splits.next().unwrap();
             let pc = splits.next().unwrap().parse::<u64>().unwrap();
 
@@ -328,10 +324,7 @@ impl TraceMap {
         func_name: Identifier,
         pc: u64,
     ) {
-        let exec_entry = self
-            .exec_maps
-            .entry(exec_id.to_owned())
-            .or_insert_with(Vec::new);
+        let exec_entry = self.exec_maps.entry(exec_id.to_owned()).or_default();
         exec_entry.push(TraceEntry {
             module_addr,
             module_name,

@@ -6,7 +6,7 @@ use aptos_logger::info;
 use aptos_types::{
     on_chain_config::{
         TransactionShufflerType,
-        TransactionShufflerType::{NoShuffling, SenderAwareV1},
+        TransactionShufflerType::{DeprecatedSenderAwareV1, NoShuffling, SenderAwareV2},
     },
     transaction::SignedTransaction,
 };
@@ -30,13 +30,20 @@ pub fn create_transaction_shuffler(
     shuffler_type: TransactionShufflerType,
 ) -> Arc<dyn TransactionShuffler> {
     match shuffler_type {
-        NoShuffling => Arc::new(NoOpShuffler {}),
-        SenderAwareV1(confict_window_size) => {
+        NoShuffling => {
+            info!("Using no-op transaction shuffling");
+            Arc::new(NoOpShuffler {})
+        },
+        DeprecatedSenderAwareV1(_) => {
+            info!("Using no-op sender aware shuffling v1");
+            Arc::new(NoOpShuffler {})
+        },
+        SenderAwareV2(conflict_window_size) => {
             info!(
                 "Using sender aware transaction shuffling with conflict window size {}",
-                confict_window_size
+                conflict_window_size
             );
-            Arc::new(SenderAwareShuffler::new(confict_window_size as usize))
+            Arc::new(SenderAwareShuffler::new(conflict_window_size as usize))
         },
     }
 }

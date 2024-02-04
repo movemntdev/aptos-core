@@ -10,14 +10,14 @@ use crate::{
         get_child_and_sibling_half_start, Child, Children, InternalNode, LeafNode, Node, NodeKey,
         NodeType,
     },
-    NibbleExt, TreeReader, TreeWriter, IO_POOL, ROOT_NIBBLE_HEIGHT,
+    NibbleExt, TreeReader, TreeWriter, ROOT_NIBBLE_HEIGHT,
 };
-use anyhow::{ensure, Result};
 use aptos_crypto::{
     hash::{CryptoHash, SPARSE_MERKLE_PLACEHOLDER_HASH},
     HashValue,
 };
 use aptos_logger::info;
+use aptos_storage_interface::{db_ensure as ensure, AptosDbError, Result};
 use aptos_types::{
     nibble::{
         nibble_path::{NibbleIterator, NibblePath},
@@ -27,6 +27,7 @@ use aptos_types::{
     transaction::Version,
 };
 use itertools::Itertools;
+use once_cell::sync::Lazy;
 use std::{
     cmp::Eq,
     collections::HashMap,
@@ -35,6 +36,14 @@ use std::{
         Arc,
     },
 };
+
+static IO_POOL: Lazy<rayon::ThreadPool> = Lazy::new(|| {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(32)
+        .thread_name(|index| format!("jmt_batch_{}", index))
+        .build()
+        .unwrap()
+});
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum ChildInfo<K> {
@@ -676,11 +685,13 @@ where
         left_siblings.reverse();
 
         // Verify the proof now that we have all the siblings
-        proof.verify(
-            self.expected_root_hash,
-            SparseMerkleLeafNode::new(previous_key, previous_leaf.value_hash()),
-            left_siblings,
-        )
+        proof
+            .verify(
+                self.expected_root_hash,
+                SparseMerkleLeafNode::new(previous_key, previous_leaf.value_hash()),
+                left_siblings,
+            )
+            .map_err(Into::into)
     }
 
     /// Computes the sibling on the left for the `n`-th child.

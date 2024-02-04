@@ -13,7 +13,7 @@ use crate::{
     persistent_liveness_storage::{
         PersistentLivenessStorage, RecoveryData, RootInfo, RootMetadata,
     },
-    quorum_store,
+    state_computer::PipelineExecutionResult,
     state_replication::StateComputer,
     util::time_service::TimeService,
 };
@@ -23,12 +23,11 @@ use aptos_consensus_types::{
     sync_info::SyncInfo, timeout_2chain::TwoChainTimeoutCertificate,
 };
 use aptos_crypto::{hash::ACCUMULATOR_PLACEHOLDER_HASH, HashValue};
-use aptos_executor_types::{Error, StateComputeResult};
+use aptos_executor_types::{ExecutorError, ExecutorResult, StateComputeResult};
 use aptos_infallible::RwLock;
 use aptos_logger::prelude::*;
-use aptos_types::{ledger_info::LedgerInfoWithSignatures, transaction::TransactionStatus};
+use aptos_types::ledger_info::LedgerInfoWithSignatures;
 use futures::executor::block_on;
-use move_core_types::vm_status::DiscardedVMStatus;
 #[cfg(test)]
 use std::collections::VecDeque;
 #[cfg(any(test, feature = "fuzzing"))]
@@ -42,54 +41,9 @@ mod block_store_test;
 #[path = "sync_manager.rs"]
 pub mod sync_manager;
 
-const MAX_ORDERING_PIPELINE_LATENCY_REDUCTION: Duration = Duration::from_secs(1);
-
 fn update_counters_for_ordered_blocks(ordered_blocks: &[Arc<ExecutedBlock>]) {
     for block in ordered_blocks {
         observe_block(block.block().timestamp_usecs(), BlockStage::ORDERED);
-    }
-}
-
-pub fn update_counters_for_committed_blocks(blocks_to_commit: &[Arc<ExecutedBlock>]) {
-    for block in blocks_to_commit {
-        observe_block(block.block().timestamp_usecs(), BlockStage::COMMITTED);
-        let txn_status = block.compute_result().compute_status();
-        counters::NUM_TXNS_PER_BLOCK.observe(txn_status.len() as f64);
-        counters::COMMITTED_BLOCKS_COUNT.inc();
-        counters::LAST_COMMITTED_ROUND.set(block.round() as i64);
-        counters::LAST_COMMITTED_VERSION.set(block.compute_result().num_leaves() as i64);
-
-        let failed_rounds = block
-            .block()
-            .block_data()
-            .failed_authors()
-            .map(|v| v.len())
-            .unwrap_or(0);
-        if failed_rounds > 0 {
-            counters::COMMITTED_FAILED_ROUNDS_COUNT.inc_by(failed_rounds as u64);
-        }
-
-        // Quorum store metrics
-        quorum_store::counters::NUM_BATCH_PER_BLOCK.observe(block.block().payload_size() as f64);
-
-        for status in txn_status.iter() {
-            let commit_status = match status {
-                TransactionStatus::Keep(_) => counters::TXN_COMMIT_SUCCESS_LABEL,
-                TransactionStatus::Discard(reason) => {
-                    if *reason == DiscardedVMStatus::SEQUENCE_NUMBER_TOO_NEW {
-                        counters::TXN_COMMIT_RETRY_LABEL
-                    } else if *reason == DiscardedVMStatus::SEQUENCE_NUMBER_TOO_OLD {
-                        counters::TXN_COMMIT_FAILED_DUPLICATE_LABEL
-                    } else {
-                        counters::TXN_COMMIT_FAILED_LABEL
-                    }
-                },
-                TransactionStatus::Retry => counters::TXN_COMMIT_RETRY_LABEL,
-            };
-            counters::COMMITTED_TXNS_COUNT
-                .with_label_values(&[commit_status])
-                .inc();
-        }
     }
 }
 
@@ -221,6 +175,7 @@ impl BlockStore {
 
         let executed_root_block = ExecutedBlock::new(
             *root_block,
+            vec![],
             // Create a dummy state_compute_result with necessary fields filled in.
             result,
         );
@@ -370,7 +325,7 @@ impl BlockStore {
 
         let executed_block = match self.execute_block(block.clone()).await {
             Ok(res) => Ok(res),
-            Err(Error::BlockNotFound(parent_block_id)) => {
+            Err(ExecutorError::BlockNotFound(parent_block_id)) => {
                 // recover the block tree in executor
                 let blocks_to_reexecute = self
                     .path_from_ordered_root(parent_block_id)
@@ -397,24 +352,25 @@ impl BlockStore {
             }
             self.time_service.wait_until(block_time).await;
         }
-        self.payload_manager
-            .prefetch_payload_data(executed_block.block())
-            .await;
+        if let Some(payload) = executed_block.block().payload() {
+            self.payload_manager
+                .prefetch_payload_data(payload, executed_block.block().timestamp_usecs());
+        }
         self.storage
             .save_tree(vec![executed_block.block().clone()], vec![])
             .context("Insert block failed when saving block")?;
         self.inner.write().insert_block(executed_block)
     }
 
-    async fn execute_block(&self, block: Block) -> anyhow::Result<ExecutedBlock, Error> {
+    async fn execute_block(&self, block: Block) -> ExecutorResult<ExecutedBlock> {
         // Although NIL blocks don't have a payload, we still send a T::default() to compute
         // because we may inject a block prologue transaction.
-        let state_compute_result = self
+        let pipeline_result = self
             .state_computer
             .compute(&block, block.parent_id())
             .await?;
-
-        Ok(ExecutedBlock::new(block, state_compute_result))
+        let PipelineExecutionResult { input_txns, result } = pipeline_result;
+        Ok(ExecutedBlock::new(block, input_txns, result))
     }
 
     /// Validates quorum certificates and inserts it into block tree assuming dependencies exist.
@@ -524,11 +480,28 @@ impl BlockStore {
     }
 
     pub fn pipeline_pending_latency(&self, proposal_timestamp: Duration) -> Duration {
-        let ordered_round = self.ordered_root().round();
-        let commit_round = self.commit_root().round();
-        let pending_rounds = ordered_round.checked_sub(commit_round).unwrap();
-        let ordered_timestamp = Duration::from_micros(self.ordered_root().timestamp_usecs());
-        let committed_timestamp = Duration::from_micros(self.commit_root().timestamp_usecs());
+        let ordered_root = self.ordered_root();
+        let commit_root = self.commit_root();
+        let pending_path = self
+            .path_from_commit_root(self.ordered_root().id())
+            .unwrap_or_default();
+        let pending_rounds = pending_path.len();
+        let oldest_not_committed = pending_path.into_iter().min_by_key(|b| b.round());
+
+        let oldest_not_committed_spent_in_pipeline = oldest_not_committed
+            .as_ref()
+            .and_then(|b| b.elapsed_in_pipeline())
+            .unwrap_or(Duration::ZERO);
+
+        let ordered_round = ordered_root.round();
+        let oldest_not_committed_round = oldest_not_committed.as_ref().map_or(0, |b| b.round());
+        let commit_round = commit_root.round();
+        let ordered_timestamp = Duration::from_micros(ordered_root.timestamp_usecs());
+        let oldest_not_committed_timestamp = oldest_not_committed
+            .as_ref()
+            .map(|b| Duration::from_micros(b.timestamp_usecs()))
+            .unwrap_or(Duration::ZERO);
+        let committed_timestamp = Duration::from_micros(commit_root.timestamp_usecs());
         let commit_cert_timestamp =
             Duration::from_micros(self.highest_commit_cert().commit_info().timestamp_usecs());
 
@@ -542,13 +515,19 @@ impl BlockStore {
         }
 
         let latency_to_committed = latency_from_proposal(proposal_timestamp, committed_timestamp);
+        let latency_to_oldest_not_committed =
+            latency_from_proposal(proposal_timestamp, oldest_not_committed_timestamp);
         let latency_to_ordered = latency_from_proposal(proposal_timestamp, ordered_timestamp);
 
         info!(
             pending_rounds = pending_rounds,
             ordered_round = ordered_round,
+            oldest_not_committed_round = oldest_not_committed_round,
             commit_round = commit_round,
+            oldest_not_committed_spent_in_pipeline =
+                oldest_not_committed_spent_in_pipeline.as_millis() as u64,
             latency_to_ordered_ms = latency_to_ordered.as_millis() as u64,
+            latency_to_oldest_not_committed = latency_to_oldest_not_committed.as_millis() as u64,
             latency_to_committed_ms = latency_to_committed.as_millis() as u64,
             latency_to_commit_cert_ms =
                 latency_from_proposal(proposal_timestamp, commit_cert_timestamp).as_millis() as u64,
@@ -556,10 +535,20 @@ impl BlockStore {
         );
 
         counters::CONSENSUS_PROPOSAL_PENDING_ROUNDS.observe(pending_rounds as f64);
-        counters::CONSENSUS_PROPOSAL_PENDING_DURATION.observe(latency_to_committed.as_secs_f64());
+        counters::CONSENSUS_PROPOSAL_PENDING_DURATION
+            .observe(oldest_not_committed_spent_in_pipeline.as_secs_f64());
 
-        latency_to_committed
-            .saturating_sub(latency_to_ordered.min(MAX_ORDERING_PIPELINE_LATENCY_REDUCTION))
+        if pending_rounds > 1 {
+            // TODO cleanup
+            // previous logic was using difference between committed and ordered.
+            // keeping it until we test out the new logic.
+            // latency_to_oldest_not_committed
+            //     .saturating_sub(latency_to_ordered.min(MAX_ORDERING_PIPELINE_LATENCY_REDUCTION))
+
+            oldest_not_committed_spent_in_pipeline
+        } else {
+            Duration::ZERO
+        }
     }
 }
 

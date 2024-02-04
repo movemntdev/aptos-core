@@ -130,6 +130,7 @@ module aptos_framework::genesis {
         block::initialize(&aptos_framework_account, epoch_interval_microsecs);
         state_storage::initialize(&aptos_framework_account);
         timestamp::set_time_has_started(&aptos_framework_account);
+        jwks::initialize(&aptos_framework_account);
     }
 
     /// Genesis step 2: Initialize Aptos coin.
@@ -139,6 +140,8 @@ module aptos_framework::genesis {
         stake::store_aptos_coin_mint_cap(aptos_framework, mint_cap);
         // Give transaction_fee module BurnCapability<AptosCoin> so it can burn gas.
         transaction_fee::store_aptos_coin_burn_cap(aptos_framework, burn_cap);
+        // Give transaction_fee module MintCapability<AptosCoin> so it can mint refunds.
+        transaction_fee::store_aptos_coin_mint_cap(aptos_framework, mint_cap);
     }
 
     /// Only called for testnets and e2e tests.
@@ -151,6 +154,8 @@ module aptos_framework::genesis {
         stake::store_aptos_coin_mint_cap(aptos_framework, mint_cap);
         // Give transaction_fee module BurnCapability<AptosCoin> so it can burn gas.
         transaction_fee::store_aptos_coin_burn_cap(aptos_framework, burn_cap);
+        // Give transaction_fee module MintCapability<AptosCoin> so it can mint refunds.
+        transaction_fee::store_aptos_coin_mint_cap(aptos_framework, mint_cap);
 
         let core_resources = account::create_account(@core_resources);
         account::rotate_authentication_key_internal(&core_resources, core_resources_auth_key);
@@ -377,6 +382,7 @@ module aptos_framework::genesis {
 
     #[verify_only]
     use std::features;
+    use aptos_framework::jwks;
 
     #[verify_only]
     fun initialize_for_verification(

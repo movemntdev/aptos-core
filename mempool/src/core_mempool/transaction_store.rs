@@ -250,9 +250,7 @@ impl TransactionStore {
 
         self.clean_committed_transactions(&address, acc_seq_num);
 
-        self.transactions
-            .entry(address)
-            .or_insert_with(AccountTransactions::new);
+        self.transactions.entry(address).or_default();
 
         if let Some(txns) = self.transactions.get_mut(&address) {
             // capacity check
@@ -311,6 +309,10 @@ impl TransactionStore {
             self.hash_index.len(),
         );
         counters::core_mempool_index_size(counters::SIZE_BYTES_LABEL, self.size_bytes);
+        counters::core_mempool_index_size(
+            counters::GAS_UPGRADED_INDEX_LABEL,
+            self.gas_upgraded_index.len(),
+        );
     }
 
     /// Checks if Mempool is full.
@@ -375,7 +377,7 @@ impl TransactionStore {
     fn log_ready_transaction(
         ranking_score: u64,
         bucket: &str,
-        insertion_info: InsertionInfo,
+        insertion_info: &InsertionInfo,
         broadcast_ready: bool,
     ) {
         if let Ok(time_delta) = SystemTime::now().duration_since(insertion_info.insertion_time) {
@@ -441,7 +443,7 @@ impl TransactionStore {
                     Self::log_ready_transaction(
                         txn.ranking_score,
                         self.timeline_index.get_bucket(txn.ranking_score),
-                        txn.insertion_info,
+                        &txn.insertion_info,
                         process_broadcast_ready,
                     );
                 }
@@ -602,7 +604,7 @@ impl TransactionStore {
                         }
                         let bucket = self.timeline_index.get_bucket(txn.ranking_score);
                         Mempool::log_txn_latency(
-                            txn.insertion_info,
+                            &txn.insertion_info,
                             bucket,
                             BROADCAST_BATCHED_LABEL,
                         );

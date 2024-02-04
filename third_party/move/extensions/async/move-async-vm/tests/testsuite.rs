@@ -2,7 +2,7 @@
 // Copyright (c) The Move Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::{bail, Error};
+use bytes::Bytes;
 use itertools::Itertools;
 use move_async_vm::{
     actor_metadata,
@@ -10,10 +10,10 @@ use move_async_vm::{
     async_vm::{AsyncResult, AsyncSession, AsyncVM, Message},
     natives::GasParameters as ActorGasParameters,
 };
-use move_binary_format::access::ModuleAccess;
+use move_binary_format::{access::ModuleAccess, errors::PartialVMError};
 use move_command_line_common::testing::EXP_EXT;
 use move_compiler::{
-    compiled_unit::CompiledUnit, diagnostics::report_diagnostics_to_buffer,
+    attr_derivation, compiled_unit::CompiledUnit, diagnostics::report_diagnostics_to_buffer,
     shared::NumericalAddress, Compiler, Flags,
 };
 use move_core_types::{
@@ -24,6 +24,7 @@ use move_core_types::{
     language_storage::{ModuleId, StructTag},
     metadata::Metadata,
     resolver::{resource_size, ModuleResolver, ResourceResolver},
+    value::MoveTypeLayout,
 };
 use move_prover_test_utils::{baseline_test::verify_or_update_baseline, extract_test_directives};
 use move_vm_test_utils::gas_schedule::GasStatus;
@@ -46,7 +47,7 @@ struct Harness {
     vm: AsyncVM,
     actor_instances: Vec<(ModuleId, AccountAddress)>,
     baseline: RefCell<String>,
-    resource_store: RefCell<BTreeMap<(AccountAddress, StructTag), Vec<u8>>>,
+    resource_store: RefCell<BTreeMap<(AccountAddress, StructTag), Bytes>>,
 }
 
 fn test_account() -> AccountAddress {
@@ -269,7 +270,7 @@ impl Harness {
             // format: 0x3 Module State init message..
             let parts = actor.split_ascii_whitespace().collect_vec();
             if parts.len() < 4 {
-                bail!("malformed actor decl `{}`", actor)
+                anyhow::bail!("malformed actor decl `{}`", actor)
             }
             let address = AccountAddress::from_hex_literal(parts[0])?;
             let module = Identifier::from_str(parts[1])?;
@@ -304,7 +305,7 @@ impl Harness {
             // where the last address is where the instance is to create
             let parts = inst.split_ascii_whitespace().collect_vec();
             if parts.len() != 3 {
-                bail!("malformed instance decl `{}`", inst)
+                anyhow::bail!("malformed instance decl `{}`", inst)
             }
             let address = AccountAddress::from_hex_literal(parts[0])?;
             let module = Identifier::from_str(parts[1])?;
@@ -331,7 +332,7 @@ impl Harness {
                 }
             }
             if !found {
-                bail!("dependency {} not found", dep)
+                anyhow::bail!("dependency {} not found", dep)
             }
         }
         Ok(module_files)
@@ -349,11 +350,13 @@ impl Harness {
                 .filter(|p| *p != path)
                 .cloned()
                 .collect();
-            let compiler = Compiler::from_files(targets, deps, address_map.clone())
-                .set_flags(Flags::empty().set_flavor("async"));
+            let flags = Flags::empty().set_flavor("async");
+            let known_attributes = attr_derivation::get_known_attributes_for_flavor(&flags);
+            let compiler =
+                Compiler::from_files(targets, deps, address_map.clone(), flags, &known_attributes);
             let (sources, inner) = compiler.build()?;
             match inner {
-                Err(diags) => bail!(
+                Err(diags) => anyhow::bail!(
                     "Compilation failure {{\n{}\n}}",
                     String::from_utf8_lossy(
                         report_diagnostics_to_buffer(&sources, diags).as_slice()
@@ -379,26 +382,31 @@ struct HarnessProxy<'a> {
 }
 
 impl<'a> ModuleResolver for HarnessProxy<'a> {
+    type Error = PartialVMError;
+
     fn get_module_metadata(&self, _module_id: &ModuleId) -> Vec<Metadata> {
         vec![]
     }
 
-    fn get_module(&self, id: &ModuleId) -> Result<Option<Vec<u8>>, Error> {
+    fn get_module(&self, id: &ModuleId) -> Result<Option<Bytes>, Self::Error> {
         Ok(self
             .harness
             .module_cache
             .get(id.name())
-            .map(|c| c.serialize(None)))
+            .map(|c| c.serialize(None).into()))
     }
 }
 
 impl<'a> ResourceResolver for HarnessProxy<'a> {
-    fn get_resource_with_metadata(
+    type Error = PartialVMError;
+
+    fn get_resource_bytes_with_metadata_and_layout(
         &self,
         address: &AccountAddress,
         typ: &StructTag,
         _metadata: &[Metadata],
-    ) -> anyhow::Result<(Option<Vec<u8>>, usize)> {
+        _maybe_layout: Option<&MoveTypeLayout>,
+    ) -> Result<(Option<Bytes>, usize), Self::Error> {
         let res = self
             .harness
             .resource_store

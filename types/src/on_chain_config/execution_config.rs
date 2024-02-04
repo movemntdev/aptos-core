@@ -1,7 +1,9 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::on_chain_config::OnChainConfig;
+use crate::{
+    block_executor::config::BlockExecutorConfigFromOnchain, on_chain_config::OnChainConfig,
+};
 use anyhow::{format_err, Result};
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +13,11 @@ pub enum OnChainExecutionConfig {
     V1(ExecutionConfigV1),
     V2(ExecutionConfigV2),
     V3(ExecutionConfigV3),
+    /// To maintain backwards compatibility on replay, we must ensure that any new features resolve
+    /// to previous behavior (before OnChainExecutionConfig was registered) in case of Missing.
+    Missing,
+    // Reminder: Add V4 and future versions here, after Missing (order matters for enums).
+    V4(ExecutionConfigV4),
 }
 
 /// The public interface that exposes all values with safe fallback.
@@ -18,35 +25,71 @@ impl OnChainExecutionConfig {
     /// The type of the transaction shuffler being used.
     pub fn transaction_shuffler_type(&self) -> TransactionShufflerType {
         match &self {
+            OnChainExecutionConfig::Missing => TransactionShufflerType::NoShuffling,
             OnChainExecutionConfig::V1(config) => config.transaction_shuffler_type.clone(),
             OnChainExecutionConfig::V2(config) => config.transaction_shuffler_type.clone(),
             OnChainExecutionConfig::V3(config) => config.transaction_shuffler_type.clone(),
+            OnChainExecutionConfig::V4(config) => config.transaction_shuffler_type.clone(),
         }
     }
 
     /// The per-block gas limit being used.
-    pub fn block_gas_limit(&self) -> Option<u64> {
+    pub fn block_gas_limit_type(&self) -> BlockGasLimitType {
         match &self {
-            OnChainExecutionConfig::V1(_config) => None,
-            OnChainExecutionConfig::V2(config) => config.block_gas_limit,
-            OnChainExecutionConfig::V3(config) => config.block_gas_limit,
+            OnChainExecutionConfig::Missing => BlockGasLimitType::NoLimit,
+            OnChainExecutionConfig::V1(_config) => BlockGasLimitType::NoLimit,
+            OnChainExecutionConfig::V2(config) => config
+                .block_gas_limit
+                .map_or(BlockGasLimitType::NoLimit, BlockGasLimitType::Limit),
+            OnChainExecutionConfig::V3(config) => config
+                .block_gas_limit
+                .map_or(BlockGasLimitType::NoLimit, BlockGasLimitType::Limit),
+            OnChainExecutionConfig::V4(config) => config.block_gas_limit_type.clone(),
+        }
+    }
+
+    pub fn block_executor_onchain_config(&self) -> BlockExecutorConfigFromOnchain {
+        BlockExecutorConfigFromOnchain {
+            block_gas_limit_type: self.block_gas_limit_type(),
         }
     }
 
     /// The type of the transaction deduper being used.
     pub fn transaction_deduper_type(&self) -> TransactionDeduperType {
         match &self {
+            // Note, this behavior was enabled before OnChainExecutionConfig was registered.
+            OnChainExecutionConfig::Missing => TransactionDeduperType::TxnHashAndAuthenticatorV1,
             OnChainExecutionConfig::V1(_config) => TransactionDeduperType::NoDedup,
             OnChainExecutionConfig::V2(_config) => TransactionDeduperType::NoDedup,
             OnChainExecutionConfig::V3(config) => config.transaction_deduper_type.clone(),
+            OnChainExecutionConfig::V4(config) => config.transaction_deduper_type.clone(),
         }
     }
-}
 
-/// This is used when on-chain config is not initialized.
-impl Default for OnChainExecutionConfig {
-    fn default() -> Self {
-        OnChainExecutionConfig::V1(ExecutionConfigV1::default())
+    /// The default values to use for new networks, e.g., devnet, forge.
+    /// Features that are ready for deployment can be enabled here.
+    pub fn default_for_genesis() -> Self {
+        OnChainExecutionConfig::V4(ExecutionConfigV4 {
+            transaction_shuffler_type: TransactionShufflerType::SenderAwareV2(32),
+            block_gas_limit_type: BlockGasLimitType::ComplexLimitV1 {
+                effective_block_gas_limit: 20000,
+                execution_gas_effective_multiplier: 1,
+                io_gas_effective_multiplier: 1,
+                conflict_penalty_window: 6,
+                use_granular_resource_group_conflicts: false,
+                use_module_publishing_block_conflict: false,
+                block_output_limit: Some(3 * 1024 * 1024),
+                include_user_txn_size_in_block_output: true,
+                add_block_limit_outcome_onchain: false,
+            },
+            transaction_deduper_type: TransactionDeduperType::TxnHashAndAuthenticatorV1,
+        })
+    }
+
+    /// The default values to use when on-chain config is not initialized.
+    /// This value should not be changed, for replay purposes.
+    pub fn default_if_missing() -> Self {
+        OnChainExecutionConfig::Missing
     }
 }
 
@@ -73,27 +116,10 @@ pub struct ExecutionConfigV1 {
     pub transaction_shuffler_type: TransactionShufflerType,
 }
 
-impl Default for ExecutionConfigV1 {
-    fn default() -> Self {
-        Self {
-            transaction_shuffler_type: TransactionShufflerType::SenderAwareV1(32),
-        }
-    }
-}
-
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct ExecutionConfigV2 {
     pub transaction_shuffler_type: TransactionShufflerType,
     pub block_gas_limit: Option<u64>,
-}
-
-impl Default for ExecutionConfigV2 {
-    fn default() -> Self {
-        Self {
-            transaction_shuffler_type: TransactionShufflerType::NoShuffling,
-            block_gas_limit: None,
-        }
-    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -103,21 +129,19 @@ pub struct ExecutionConfigV3 {
     pub transaction_deduper_type: TransactionDeduperType,
 }
 
-impl Default for ExecutionConfigV3 {
-    fn default() -> Self {
-        Self {
-            transaction_shuffler_type: TransactionShufflerType::NoShuffling,
-            block_gas_limit: None,
-            transaction_deduper_type: TransactionDeduperType::NoDedup,
-        }
-    }
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub struct ExecutionConfigV4 {
+    pub transaction_shuffler_type: TransactionShufflerType,
+    pub block_gas_limit_type: BlockGasLimitType,
+    pub transaction_deduper_type: TransactionDeduperType,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")] // cannot use tag = "type" as nested enums cannot work, and bcs doesn't support it
 pub enum TransactionShufflerType {
     NoShuffling,
-    SenderAwareV1(u32),
+    DeprecatedSenderAwareV1(u32),
+    SenderAwareV2(u32),
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -127,16 +151,154 @@ pub enum TransactionDeduperType {
     TxnHashAndAuthenticatorV1,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")] // cannot use tag = "type" as nested enums cannot work, and bcs doesn't support it
+pub enum BlockGasLimitType {
+    NoLimit,
+    Limit(u64),
+    /// Provides two separate block limits:
+    /// 1. effective_block_gas_limit
+    /// 2. block_output_limit
+    ComplexLimitV1 {
+        /// Formula for effective block gas limit:
+        /// effective_block_gas_limit <
+        /// (execution_gas_effective_multiplier * execution_gas_used +
+        ///  io_gas_effective_multiplier * io_gas_used
+        /// ) * (1 + num conflicts in conflict_penalty_window)
+        effective_block_gas_limit: u64,
+        execution_gas_effective_multiplier: u64,
+        io_gas_effective_multiplier: u64,
+        conflict_penalty_window: u32,
+
+        /// If true we look at granular resource group conflicts (i.e. if same Tag
+        /// within a resource group has a conflict)
+        /// If false, we treat any conclicts inside of resource groups (even across
+        /// non-overlapping tags) as conflicts).
+        use_granular_resource_group_conflicts: bool,
+        /// Module publishing today fallbacks to sequential execution,
+        /// even though there is no read-write conflict.
+        /// When enabled, this flag allows us to account for that conflict.
+        /// NOTE: Currently not supported.
+        use_module_publishing_block_conflict: bool,
+
+        /// Block limit on the total (approximate) txn output size in bytes.
+        block_output_limit: Option<u64>,
+        /// When set, we include the user txn size in the approximate computation
+        /// of block output size, which is compared against the block_output_limit above.
+        include_user_txn_size_in_block_output: bool,
+
+        /// When set, we create BlockEpilogue (instead of StateCheckpint) transaction,
+        /// which contains BlockEndInfo
+        /// NOTE: Currently not supported.
+        add_block_limit_outcome_onchain: bool,
+    },
+}
+
+impl BlockGasLimitType {
+    pub fn block_gas_limit(&self) -> Option<u64> {
+        match self {
+            BlockGasLimitType::NoLimit => None,
+            BlockGasLimitType::Limit(limit) => Some(*limit),
+            BlockGasLimitType::ComplexLimitV1 {
+                effective_block_gas_limit,
+                ..
+            } => Some(*effective_block_gas_limit),
+        }
+    }
+
+    pub fn execution_gas_effective_multiplier(&self) -> u64 {
+        match self {
+            BlockGasLimitType::NoLimit => 1,
+            BlockGasLimitType::Limit(_) => 1,
+            BlockGasLimitType::ComplexLimitV1 {
+                execution_gas_effective_multiplier,
+                ..
+            } => *execution_gas_effective_multiplier,
+        }
+    }
+
+    pub fn io_gas_effective_multiplier(&self) -> u64 {
+        match self {
+            BlockGasLimitType::NoLimit => 1,
+            BlockGasLimitType::Limit(_) => 1,
+            BlockGasLimitType::ComplexLimitV1 {
+                io_gas_effective_multiplier,
+                ..
+            } => *io_gas_effective_multiplier,
+        }
+    }
+
+    pub fn block_output_limit(&self) -> Option<u64> {
+        match self {
+            BlockGasLimitType::NoLimit => None,
+            BlockGasLimitType::Limit(_) => None,
+            BlockGasLimitType::ComplexLimitV1 {
+                block_output_limit, ..
+            } => *block_output_limit,
+        }
+    }
+
+    pub fn conflict_penalty_window(&self) -> Option<u32> {
+        match self {
+            BlockGasLimitType::NoLimit => None,
+            BlockGasLimitType::Limit(_) => None,
+            BlockGasLimitType::ComplexLimitV1 {
+                conflict_penalty_window,
+                ..
+            } => {
+                if *conflict_penalty_window > 1 {
+                    Some(*conflict_penalty_window)
+                } else {
+                    None
+                }
+            },
+        }
+    }
+
+    pub fn include_user_txn_size_in_block_output(&self) -> bool {
+        match self {
+            BlockGasLimitType::NoLimit => false,
+            BlockGasLimitType::Limit(_) => false,
+            BlockGasLimitType::ComplexLimitV1 {
+                include_user_txn_size_in_block_output,
+                ..
+            } => *include_user_txn_size_in_block_output,
+        }
+    }
+
+    pub fn add_block_limit_outcome_onchain(&self) -> bool {
+        match self {
+            BlockGasLimitType::NoLimit => false,
+            BlockGasLimitType::Limit(_) => false,
+            BlockGasLimitType::ComplexLimitV1 {
+                add_block_limit_outcome_onchain,
+                ..
+            } => *add_block_limit_outcome_onchain,
+        }
+    }
+
+    pub fn use_granular_resource_group_conflicts(&self) -> bool {
+        match self {
+            BlockGasLimitType::NoLimit => false,
+            BlockGasLimitType::Limit(_) => false,
+            BlockGasLimitType::ComplexLimitV1 {
+                use_granular_resource_group_conflicts,
+                ..
+            } => *use_granular_resource_group_conflicts,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::on_chain_config::OnChainConfigPayload;
+    use crate::on_chain_config::{InMemoryOnChainConfig, OnChainConfigPayload};
     use rand::Rng;
-    use std::{collections::HashMap, sync::Arc};
+    use std::collections::HashMap;
 
     #[test]
     fn test_config_yaml_serialization() {
-        let config = OnChainExecutionConfig::default();
+        let config = OnChainExecutionConfig::default_for_genesis();
         let s = serde_yaml::to_string(&config).unwrap();
 
         serde_yaml::from_str::<OnChainExecutionConfig>(&s).unwrap();
@@ -144,7 +306,7 @@ mod test {
 
     #[test]
     fn test_config_bcs_serialization() {
-        let config = OnChainExecutionConfig::default();
+        let config = OnChainExecutionConfig::default_for_genesis();
         let s = bcs::to_bytes(&config).unwrap();
 
         bcs::from_bytes::<OnChainExecutionConfig>(&s).unwrap();
@@ -153,20 +315,20 @@ mod test {
     #[test]
     fn test_config_serialization() {
         let config = OnChainExecutionConfig::V1(ExecutionConfigV1 {
-            transaction_shuffler_type: TransactionShufflerType::SenderAwareV1(32),
+            transaction_shuffler_type: TransactionShufflerType::SenderAwareV2(32),
         });
 
         let s = serde_yaml::to_string(&config).unwrap();
         let result = serde_yaml::from_str::<OnChainExecutionConfig>(&s).unwrap();
         assert!(matches!(
             result.transaction_shuffler_type(),
-            TransactionShufflerType::SenderAwareV1(32)
+            TransactionShufflerType::SenderAwareV2(32)
         ));
 
         // V2 test with random per-block gas limit
         let rand_gas_limit = rand::thread_rng().gen_range(0, 1000000) as u64;
         let config = OnChainExecutionConfig::V2(ExecutionConfigV2 {
-            transaction_shuffler_type: TransactionShufflerType::SenderAwareV1(32),
+            transaction_shuffler_type: TransactionShufflerType::SenderAwareV2(32),
             block_gas_limit: Some(rand_gas_limit),
         });
 
@@ -174,13 +336,16 @@ mod test {
         let result = serde_yaml::from_str::<OnChainExecutionConfig>(&s).unwrap();
         assert!(matches!(
             result.transaction_shuffler_type(),
-            TransactionShufflerType::SenderAwareV1(32)
+            TransactionShufflerType::SenderAwareV2(32)
         ));
-        assert!(result.block_gas_limit() == Some(rand_gas_limit));
+        assert_eq!(
+            result.block_gas_limit_type(),
+            BlockGasLimitType::Limit(rand_gas_limit)
+        );
 
         // V2 test with no per-block gas limit
         let config = OnChainExecutionConfig::V2(ExecutionConfigV2 {
-            transaction_shuffler_type: TransactionShufflerType::SenderAwareV1(32),
+            transaction_shuffler_type: TransactionShufflerType::SenderAwareV2(32),
             block_gas_limit: None,
         });
 
@@ -188,15 +353,15 @@ mod test {
         let result = serde_yaml::from_str::<OnChainExecutionConfig>(&s).unwrap();
         assert!(matches!(
             result.transaction_shuffler_type(),
-            TransactionShufflerType::SenderAwareV1(32)
+            TransactionShufflerType::SenderAwareV2(32)
         ));
-        assert!(matches!(result.block_gas_limit(), None));
+        assert_eq!(result.block_gas_limit_type(), BlockGasLimitType::NoLimit);
     }
 
     #[test]
     fn test_config_onchain_payload() {
         let execution_config = OnChainExecutionConfig::V1(ExecutionConfigV1 {
-            transaction_shuffler_type: TransactionShufflerType::SenderAwareV1(32),
+            transaction_shuffler_type: TransactionShufflerType::SenderAwareV2(32),
         });
 
         let mut configs = HashMap::new();
@@ -206,18 +371,18 @@ mod test {
             bcs::to_bytes(&bcs::to_bytes(&execution_config).unwrap()).unwrap(),
         );
 
-        let payload = OnChainConfigPayload::new(1, Arc::new(configs));
+        let payload = OnChainConfigPayload::new(1, InMemoryOnChainConfig::new(configs));
 
         let result: OnChainExecutionConfig = payload.get().unwrap();
         assert!(matches!(
             result.transaction_shuffler_type(),
-            TransactionShufflerType::SenderAwareV1(32)
+            TransactionShufflerType::SenderAwareV2(32)
         ));
 
         // V2 test with random per-block gas limit
         let rand_gas_limit = rand::thread_rng().gen_range(0, 1000000) as u64;
         let execution_config = OnChainExecutionConfig::V2(ExecutionConfigV2 {
-            transaction_shuffler_type: TransactionShufflerType::SenderAwareV1(32),
+            transaction_shuffler_type: TransactionShufflerType::SenderAwareV2(32),
             block_gas_limit: Some(rand_gas_limit),
         });
 
@@ -228,18 +393,21 @@ mod test {
             bcs::to_bytes(&bcs::to_bytes(&execution_config).unwrap()).unwrap(),
         );
 
-        let payload = OnChainConfigPayload::new(1, Arc::new(configs));
+        let payload = OnChainConfigPayload::new(1, InMemoryOnChainConfig::new(configs));
 
         let result: OnChainExecutionConfig = payload.get().unwrap();
         assert!(matches!(
             result.transaction_shuffler_type(),
-            TransactionShufflerType::SenderAwareV1(32)
+            TransactionShufflerType::SenderAwareV2(32)
         ));
-        assert!(result.block_gas_limit() == Some(rand_gas_limit));
+        assert_eq!(
+            result.block_gas_limit_type(),
+            BlockGasLimitType::Limit(rand_gas_limit)
+        );
 
         // V2 test with no per-block gas limit
         let execution_config = OnChainExecutionConfig::V2(ExecutionConfigV2 {
-            transaction_shuffler_type: TransactionShufflerType::SenderAwareV1(32),
+            transaction_shuffler_type: TransactionShufflerType::SenderAwareV2(32),
             block_gas_limit: None,
         });
 
@@ -250,13 +418,13 @@ mod test {
             bcs::to_bytes(&bcs::to_bytes(&execution_config).unwrap()).unwrap(),
         );
 
-        let payload = OnChainConfigPayload::new(1, Arc::new(configs));
+        let payload = OnChainConfigPayload::new(1, InMemoryOnChainConfig::new(configs));
 
         let result: OnChainExecutionConfig = payload.get().unwrap();
         assert!(matches!(
             result.transaction_shuffler_type(),
-            TransactionShufflerType::SenderAwareV1(32)
+            TransactionShufflerType::SenderAwareV2(32)
         ));
-        assert!(matches!(result.block_gas_limit(), None));
+        assert_eq!(result.block_gas_limit_type(), BlockGasLimitType::NoLimit);
     }
 }

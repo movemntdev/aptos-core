@@ -5,15 +5,15 @@ use crate::common::{
     types::{
         account_address_from_auth_key, account_address_from_public_key,
         AuthenticationKeyInputOptions, CliCommand, CliConfig, CliError, CliTypedResult,
-        ConfigSearchMode, EncodingOptions, EncodingType, ExtractPublicKey, ParsePrivateKey,
-        ProfileConfig, ProfileOptions, PublicKeyInputOptions, RestOptions, RotationProofChallenge,
-        TransactionOptions, TransactionSummary,
+        ConfigSearchMode, EncodingOptions, ExtractPublicKey, ParsePrivateKey, ProfileConfig,
+        ProfileOptions, PublicKeyInputOptions, RestOptions, TransactionOptions, TransactionSummary,
     },
     utils::{prompt_yes, prompt_yes_with_override, read_line},
 };
 use aptos_cached_packages::aptos_stdlib;
 use aptos_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
+    encoding_type::EncodingType,
     PrivateKey, SigningKey,
 };
 use aptos_rest_client::{
@@ -22,7 +22,8 @@ use aptos_rest_client::{
     Client,
 };
 use aptos_types::{
-    account_address::AccountAddress, account_config::CORE_CODE_ADDRESS,
+    account_address::AccountAddress,
+    account_config::{RotationProofChallenge, CORE_CODE_ADDRESS},
     transaction::authenticator::AuthenticationKey,
 };
 use async_trait::async_trait;
@@ -103,6 +104,12 @@ impl CliCommand<RotateSummary> for RotateKey {
             })?;
 
         let (current_private_key, sender_address) = self.txn_options.get_key_and_address()?;
+
+        if new_private_key == current_private_key {
+            return Err(CliError::CommandArgumentError(
+                "New private key cannot be the same as the current private key".to_string(),
+            ));
+        }
 
         // Get sequence number for account
         let sequence_number = self.txn_options.sequence_number(sender_address).await?;

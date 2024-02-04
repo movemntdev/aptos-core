@@ -4,11 +4,11 @@
 use crate::{
     pruner::{db_sub_pruner::DBSubPruner, pruner_utils::get_or_initialize_subpruner_progress},
     schema::db_metadata::{DbMetadataKey, DbMetadataSchema, DbMetadataValue},
-    TransactionStore,
+    transaction_store::TransactionStore,
 };
-use anyhow::Result;
 use aptos_logger::info;
 use aptos_schemadb::{SchemaBatch, DB};
+use aptos_storage_interface::Result;
 use aptos_types::transaction::Version;
 use std::sync::Arc;
 
@@ -19,6 +19,10 @@ pub struct TransactionInfoPruner {
 }
 
 impl DBSubPruner for TransactionInfoPruner {
+    fn name(&self) -> &str {
+        "TransactionInfoPruner"
+    }
+
     fn prune(&self, current_progress: Version, target_version: Version) -> Result<()> {
         let batch = SchemaBatch::new();
         self.transaction_store.prune_transaction_info_schema(

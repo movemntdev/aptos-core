@@ -2,7 +2,7 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::experimental;
+use crate::pipeline;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -12,6 +12,12 @@ pub struct DbError {
     inner: anyhow::Error,
 }
 
+impl From<aptos_storage_interface::AptosDbError> for DbError {
+    fn from(e: aptos_storage_interface::AptosDbError) -> Self {
+        DbError { inner: e.into() }
+    }
+}
+
 #[derive(Debug, Error)]
 #[error(transparent)]
 pub struct StateSyncError {
@@ -19,14 +25,14 @@ pub struct StateSyncError {
     inner: anyhow::Error,
 }
 
-impl From<experimental::errors::Error> for StateSyncError {
-    fn from(e: experimental::errors::Error) -> Self {
+impl From<pipeline::errors::Error> for StateSyncError {
+    fn from(e: pipeline::errors::Error) -> Self {
         StateSyncError { inner: e.into() }
     }
 }
 
-impl From<aptos_executor_types::Error> for StateSyncError {
-    fn from(e: aptos_executor_types::Error) -> Self {
+impl From<aptos_executor_types::ExecutorError> for StateSyncError {
+    fn from(e: aptos_executor_types::ExecutorError) -> Self {
         StateSyncError { inner: e.into() }
     }
 }
@@ -53,12 +59,14 @@ pub struct VerifyError {
 }
 
 pub fn error_kind(e: &anyhow::Error) -> &'static str {
-    if e.downcast_ref::<aptos_executor_types::Error>().is_some() {
+    if e.downcast_ref::<aptos_executor_types::ExecutorError>()
+        .is_some()
+    {
         return "Execution";
     }
     if let Some(e) = e.downcast_ref::<StateSyncError>() {
         if e.inner
-            .downcast_ref::<aptos_executor_types::Error>()
+            .downcast_ref::<aptos_executor_types::ExecutorError>()
             .is_some()
         {
             return "Execution";
@@ -90,7 +98,7 @@ mod tests {
 
     #[test]
     fn conversion_and_downcast() {
-        let error = aptos_executor_types::Error::InternalError {
+        let error = aptos_executor_types::ExecutorError::InternalError {
             error: "lalala".to_string(),
         };
         let typed_error: StateSyncError = error.into();

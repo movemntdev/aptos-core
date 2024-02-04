@@ -17,7 +17,7 @@ use move_core_types::{
     account_address::AccountAddress,
     identifier::{IdentStr, Identifier},
     language_storage::{ModuleId, StructTag, TypeTag},
-    resolver::MoveResolver,
+    resolver::ModuleResolver,
     u256,
     value::{MoveStruct, MoveTypeLayout, MoveValue},
     vm_status::VMStatus,
@@ -83,16 +83,11 @@ pub struct MoveValueAnnotator<'a, T: ?Sized> {
     cache: Resolver<'a, T>,
 }
 
-impl<'a, T: MoveResolver + ?Sized> MoveValueAnnotator<'a, T> {
+impl<'a, T: ModuleResolver + ?Sized> MoveValueAnnotator<'a, T> {
     pub fn new(view: &'a T) -> Self {
         Self {
             cache: Resolver::new(view),
         }
-    }
-
-    // TODO
-    pub fn get_resource_bytes(&self, addr: &AccountAddress, tag: &StructTag) -> Option<Vec<u8>> {
-        self.cache.state.get_resource(addr, tag).ok()?
     }
 
     pub fn get_module(&self, module: &ModuleId) -> Result<Rc<CompiledModule>> {
@@ -179,7 +174,7 @@ impl<'a, T: MoveResolver + ?Sized> MoveValueAnnotator<'a, T> {
                 .cache
                 .get_field_names(&ty)?
                 .into_iter()
-                .zip(runtime.into_iter())
+                .zip(runtime)
                 .collect(),
             MoveStruct::WithFields(fields) | MoveStruct::WithTypes { fields, .. } => fields,
         })
@@ -212,10 +207,7 @@ impl<'a, T: MoveResolver + ?Sized> MoveValueAnnotator<'a, T> {
         Ok(AnnotatedMoveStruct {
             abilities: ty.abilities.0,
             type_: struct_tag,
-            value: field_names
-                .into_iter()
-                .zip(annotated_fields.into_iter())
-                .collect(),
+            value: field_names.into_iter().zip(annotated_fields).collect(),
         })
     }
 
