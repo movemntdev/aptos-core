@@ -47,18 +47,18 @@ impl CliCommand<String> for FundWithFaucet {
 
     async fn execute(self) -> CliTypedResult<String> {
         // todo: the below is a hotfix. Determine why the auth_key parameter in the rpc is not working
-        /* 
+        
         let hashes = fund_account(
             self.faucet_options.faucet_url(&self.profile_options)?,
             self.amount,
             self.account,
         )
         .await?;
-        */
-        let hashes = fund_pub_key(
+        
+        /*let hashes = fund_pub_key(
             self.faucet_options.faucet_url(&self.profile_options)?, 
             (self.profile_options.public_key()?).to_string()
-        ).await?;
+        ).await?;*/
         let client = self.rest_options.client(&self.profile_options)?;
         wait_for_transactions(&client, hashes).await?;
         return Ok(format!(

@@ -95,13 +95,13 @@ impl CliCommand<()> for InitTool {
             network
         } else {
             eprintln!(
-                "Choose network from [devnet, testnet, mainnet, local, custom, movement-devnet | defaults to movement-devnet]"
+                "Choose network from [devnet, testnet, mainnet, local, custom | defaults to devnet]"
             );
             let input = read_line("network")?;
             let input = input.trim();
             if input.is_empty() {
-                eprintln!("No network given, using movement-devnet...");
-                Network::MovementDevnet
+                eprintln!("No network given, using devnet...");
+                Network::Devnet
             } else {
                 Network::from_str(input)?
             }
@@ -128,11 +128,11 @@ impl CliCommand<()> for InitTool {
                 profile_config.rest_url = Some("http://localhost:8080".to_string());
                 profile_config.faucet_url = Some("http://localhost:8081".to_string());
             },
-            Network::Custom => self.custom_network(&mut profile_config)?,
             Network::MovementDevnet => {
-                profile_config.rest_url = Some("https://seed-node1.movementlabs.xyz".to_string());
-                profile_config.faucet_url = Some("https://seed-node1.movementlabs.xyz".to_string());
+                profile_config.rest_url = Some("https://devnet.m1.movementlabs.xyz".to_string());
+                profile_config.faucet_url = Some("https://devnet.m1.movementlabs.xyz".to_string());
             },
+            Network::Custom => self.custom_network(&mut profile_config)?,
         }
 
         // Private key
@@ -173,24 +173,10 @@ impl CliCommand<()> for InitTool {
             .map_err(|err| CliError::UnableToParse("rest_url", err.to_string()))?,
         );
 
-        let pub_key = public_key.clone().to_string();
-        /*if let Some(faucet_url) = profile_config.faucet_url.as_ref() {
-            eprintln!("Funding account");
-            let hashes = fund_pub_key(
-                Url::parse(faucet_url)
-                    .map_err(|err| CliError::UnableToParse("rest_url", err.to_string()))?,
-                // NUM_DEFAULT_OCTAS,
-                pub_key.clone().to_string()
-            ).await?;
-            wait_for_transactions(&client, hashes).await?;
-        }*/
-
         // lookup the address from onchain instead of deriving it
         // if this is the rotated key, deriving it will outputs an incorrect address
         let derived_address = account_address_from_public_key(&public_key);
         let address = lookup_address(&client, derived_address, false).await?;
-
-        eprintln!("Using account {}", address);
 
         profile_config.private_key = Some(private_key);
         profile_config.public_key = Some(public_key);
@@ -243,11 +229,11 @@ impl CliCommand<()> for InitTool {
                     "Account {} doesn't exist, creating it and funding it with {} Octas",
                     address, NUM_DEFAULT_OCTAS
                 );
-                let hashes = fund_pub_key(
+                let hashes = fund_account(
                     Url::parse(faucet_url)
                         .map_err(|err| CliError::UnableToParse("rest_url", err.to_string()))?,
-                    // NUM_DEFAULT_OCTAS,
-                    pub_key.clone().to_string()
+                    NUM_DEFAULT_OCTAS,
+                    address,
                 )
                 .await?;
                 wait_for_transactions(&client, hashes).await?;
