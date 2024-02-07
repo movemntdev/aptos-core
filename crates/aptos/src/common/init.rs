@@ -131,21 +131,17 @@ impl CliCommand<()> for InitTool {
             },
             Network::Testnet => {
                 profile_config.rest_url =
-                    Some("https://fullnode.testnet.aptoslabs.com".to_string());
+                    Some("https://testnet.m1.movementlabs.xyz".to_string());
                 profile_config.faucet_url =
-                    Some("https://faucet.testnet.aptoslabs.com".to_string());
+                    Some("https://testnet.m1.movementlabs.xyz".to_string());
             },
             Network::Devnet => {
-                profile_config.rest_url = Some("https://fullnode.devnet.aptoslabs.com".to_string());
-                profile_config.faucet_url = Some("https://faucet.devnet.aptoslabs.com".to_string());
+                profile_config.rest_url = Some("https://devnet.m1.movementlabs.xyz".to_string());
+                profile_config.faucet_url = Some("https://devnet.m1.movementlabs.xyz".to_string());
             },
             Network::Local => {
                 profile_config.rest_url = Some("http://localhost:8080".to_string());
                 profile_config.faucet_url = Some("http://localhost:8081".to_string());
-            },
-            Network::MovementDevnet => {
-                profile_config.rest_url = Some("https://devnet.m1.movementlabs.xyz".to_string());
-                profile_config.faucet_url = Some("https://devnet.m1.movementlabs.xyz".to_string());
             },
             Network::Custom => self.custom_network(&mut profile_config)?,
         }
@@ -432,8 +428,7 @@ pub enum Network {
     Testnet,
     Devnet,
     Local,
-    Custom,
-    MovementDevnet
+    Custom
 }
 
 impl FromStr for Network {
@@ -446,7 +441,6 @@ impl FromStr for Network {
             "devnet" => Self::Devnet,
             "local" => Self::Local,
             "custom" => Self::Custom,
-            "movement-devnet" => Self::MovementDevnet,
             str => {
                 return Err(CliError::CommandArgumentError(format!(
                     "Invalid network {}.  Must be one of [devnet, testnet, mainnet, local, custom, movement-devnet]",
@@ -459,6 +453,6 @@ impl FromStr for Network {
 
 impl Default for Network {
     fn default() -> Self {
-        Self::MovementDevnet
+        Self::Devnet
     }
 }
