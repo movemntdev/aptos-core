@@ -265,32 +265,8 @@ impl CliCommand<()> for InitTool {
         // Check if account exists
         let account_exists = match client.get_account(address).await {
             Ok(_) => true,
-            Err(err) => {
-                if let RestError::Api(AptosErrorResponse {
-                    error:
-                        AptosError {
-                            error_code: AptosErrorCode::ResourceNotFound,
-                            ..
-                        },
-                    ..
-                })
-                | RestError::Api(AptosErrorResponse {
-                    error:
-                        AptosError {
-                            error_code: AptosErrorCode::AccountNotFound,
-                            ..
-                        },
-                    ..
-                }) = err
-                {
-                    false
-                } else {
-                    return Err(CliError::UnexpectedError(format!(
-                        "Failed to check if account exists: {:?}",
-                        err
-                    )));
-                }
-            },
+            // todo: this is rather naive, but it should fail more definitively when another error occurs below
+            Err(err) => false,
         };
 
         // If you want to create a private key, but not fund the account, skipping the faucet is still possible
