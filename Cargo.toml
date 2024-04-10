@@ -454,6 +454,7 @@ ark-ec = "0.4.0"
 ark-ff = "0.4.0"
 ark-groth16 = "0.4.0"
 ark-serialize = "0.4.0"
+getrandom = { version = "0.2.3", default-features = false }
 ark-std = { version = "0.4.0", features = ["getrandom"] }
 aptos-moving-average = { git = "https://github.com/aptos-labs/aptos-indexer-processors.git", rev = "4801acae7aea30d7e96bbfbe5ec5b04056dfa4cf" }
 assert_approx_eq = "1.1.0"
