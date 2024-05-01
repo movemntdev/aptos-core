@@ -17,4 +17,3 @@ libc = { workspace = true }
 num_cpus = { workspace = true }
 once_cell = { workspace = true }
 rayon = { workspace = true }
-tokio = { workspace = true }
