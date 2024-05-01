@@ -17,7 +17,7 @@ use aptos_dkg::{
     },
     weighted_vuf::pinkas::MIN_MULTIPAIR_NUM_JOBS,
 };
-use aptos_runtimes::spawn_rayon_thread_pool;
+use cond_parallel::thread_pool;
 use blstrs::{G1Projective, G2Projective, Gt};
 use criterion::{
     criterion_group, criterion_main, measurement::Measurement, BenchmarkGroup, BenchmarkId,
@@ -418,7 +418,7 @@ fn parallel_multipairing<M: Measurement>(n: usize, g: &mut BenchmarkGroup<M>, nu
 
     g.throughput(Throughput::Elements(n as u64));
 
-    let pool = spawn_rayon_thread_pool("bencmultpair".to_string(), Some(num_threads));
+    let pool = thread_pool("bencmultpair".to_string(), Some(num_threads));
 
     g.bench_function(
         format!("parallel_multipairing/{}/{}-threads", n, num_threads),

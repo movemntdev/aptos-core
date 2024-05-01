@@ -1100,11 +1100,11 @@ dependencies = [
  "anyhow",
  "aptos-crypto",
  "aptos-crypto-derive",
- "aptos-runtimes",
  "bcs 0.1.4",
  "bellman",
  "blst",
  "blstrs",
+ "cond-parallel",
  "criterion",
  "ff 0.13.0",
  "group 0.13.0",
@@ -3058,7 +3058,6 @@ dependencies = [
 name = "aptos-runtimes"
 version = "0.1.0"
 dependencies = [
- "rayon",
  "tokio",
 ]
 

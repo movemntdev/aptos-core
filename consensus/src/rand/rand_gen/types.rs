@@ -10,7 +10,7 @@ use aptos_dkg::{
     weighted_vuf::traits::WeightedVUF,
 };
 use aptos_logger::debug;
-use aptos_runtimes::spawn_rayon_thread_pool;
+use cond_parallel::thread_pool;
 use aptos_types::{
     aggregate_signature::AggregateSignature,
     randomness::{
@@ -102,7 +102,7 @@ impl TShare for Share {
 
         let proof = WVUF::aggregate_shares(&rand_config.wconfig, &apks_and_proofs);
         let pool =
-            spawn_rayon_thread_pool("wvuf".to_string(), Some(NUM_THREADS_FOR_WVUF_DERIVATION));
+            thread_pool("wvuf".to_string(), Some(NUM_THREADS_FOR_WVUF_DERIVATION));
         let eval = WVUF::derive_eval(
             &rand_config.wconfig,
             &rand_config.vuf_pp,

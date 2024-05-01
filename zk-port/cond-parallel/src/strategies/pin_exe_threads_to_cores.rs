@@ -4,8 +4,8 @@
 use crate::{
     common::{new_cpu_set, pin_cpu_set},
     thread_manager::ThreadManager,
+    thread_pool_with_start_hook,
 };
-use aptos_runtimes::spawn_rayon_thread_pool_with_start_hook;
 use libc::CPU_SET;
 use rayon::ThreadPool;
 
@@ -31,31 +31,31 @@ impl PinExeThreadsToCoresThreadManager {
             unsafe { CPU_SET(core_id.id, &mut non_exe_cpu_set) };
         }
 
-        let exe_threads = spawn_rayon_thread_pool_with_start_hook(
+        let exe_threads = thread_pool_with_start_hook(
             "exe".into(),
             Some(num_exe_cpu),
             pin_cpu_set(exe_cpu_set),
         );
 
-        let non_exe_threads = spawn_rayon_thread_pool_with_start_hook(
+        let non_exe_threads = thread_pool_with_start_hook(
             "non_exe".into(),
             Some(core_ids.len() - num_exe_cpu),
             pin_cpu_set(non_exe_cpu_set),
         );
 
-        let high_pri_io_threads = spawn_rayon_thread_pool_with_start_hook(
+        let high_pri_io_threads = thread_pool_with_start_hook(
             "io_high".into(),
             Some(32),
             pin_cpu_set(exe_cpu_set),
         );
 
-        let io_threads = spawn_rayon_thread_pool_with_start_hook(
+        let io_threads = thread_pool_with_start_hook(
             "io_low".into(),
             Some(64),
             pin_cpu_set(non_exe_cpu_set),
         );
 
-        let background_threads = spawn_rayon_thread_pool_with_start_hook(
+        let background_threads = thread_pool_with_start_hook(
             "background".into(),
             Some(32),
             pin_cpu_set(non_exe_cpu_set),

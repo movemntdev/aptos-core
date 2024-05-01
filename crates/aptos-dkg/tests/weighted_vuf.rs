@@ -14,7 +14,7 @@ use aptos_dkg::{
     utils::random::random_scalar,
     weighted_vuf::{pinkas::PinkasWUF, traits::WeightedVUF},
 };
-use aptos_runtimes::spawn_rayon_thread_pool;
+use cond_parallel::thread_pool;
 use rand::{rngs::StdRng, thread_rng};
 use rand_core::SeedableRng;
 use sha3::{Digest, Sha3_256};
@@ -164,7 +164,7 @@ fn wvuf_randomly_aggregate_verify_and_derive_eval<
 
     // Derive the VUF evaluation
     let eval_aggrs = [1, 32].map(|num_threads| {
-        let pool = spawn_rayon_thread_pool("test-wvuf".to_string(), Some(num_threads));
+        let pool = thread_pool("test-wvuf".to_string(), Some(num_threads));
         WVUF::derive_eval(&wc, &vuf_pp, msg, &apks[..], &proof, &pool)
             .expect("WVUF derivation was expected to succeed")
     });

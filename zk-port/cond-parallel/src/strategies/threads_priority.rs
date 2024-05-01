@@ -1,8 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{common::set_thread_nice_value, thread_manager::ThreadManager};
-use aptos_runtimes::spawn_rayon_thread_pool_with_start_hook;
+use crate::{common::set_thread_nice_value, thread_manager::ThreadManager, thread_pool_with_start_hook};
 use rayon::ThreadPool;
 
 pub(crate) struct ThreadsPriorityThreadManager {
@@ -16,31 +15,31 @@ pub(crate) struct ThreadsPriorityThreadManager {
 impl ThreadsPriorityThreadManager {
     pub(crate) fn new(num_exe_threads: usize) -> Self {
         // TODO(grao): Make priorities and thread numbers configurable.
-        let exe_threads = spawn_rayon_thread_pool_with_start_hook(
+        let exe_threads = thread_pool_with_start_hook(
             "exe".into(),
             Some(num_exe_threads),
             set_thread_nice_value(-20),
         );
 
-        let non_exe_threads = spawn_rayon_thread_pool_with_start_hook(
+        let non_exe_threads = thread_pool_with_start_hook(
             "non_exe".into(),
             Some(16),
             set_thread_nice_value(-10),
         );
 
-        let high_pri_io_threads = spawn_rayon_thread_pool_with_start_hook(
+        let high_pri_io_threads = thread_pool_with_start_hook(
             "io_high".into(),
             Some(32),
             set_thread_nice_value(-20),
         );
 
-        let io_threads = spawn_rayon_thread_pool_with_start_hook(
+        let io_threads = thread_pool_with_start_hook(
             "io_low".into(),
             Some(64),
             set_thread_nice_value(1),
         );
 
-        let background_threads = spawn_rayon_thread_pool_with_start_hook(
+        let background_threads = thread_pool_with_start_hook(
             "background".into(),
             Some(32),
             set_thread_nice_value(20),

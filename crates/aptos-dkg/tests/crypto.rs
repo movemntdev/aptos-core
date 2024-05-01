@@ -10,7 +10,7 @@ use aptos_dkg::{
     },
     weighted_vuf::pinkas::MIN_MULTIPAIR_NUM_JOBS,
 };
-use aptos_runtimes::spawn_rayon_thread_pool;
+use cond_parallel::thread_pool;
 use blstrs::{G1Projective, G2Projective, Scalar};
 use ff::Field;
 use group::Group;
@@ -182,8 +182,8 @@ fn test_parallel_multi_pairing() {
     let r1 = [random_g1_point(&mut rng), random_g1_point(&mut rng)];
     let r2 = [random_g2_point(&mut rng), random_g2_point(&mut rng)];
 
-    let pool1 = spawn_rayon_thread_pool("testmultpair".to_string(), Some(1));
-    let pool32 = spawn_rayon_thread_pool("testmultpair".to_string(), Some(32));
+    let pool1 = thread_pool("testmultpair".to_string(), Some(1));
+    let pool32 = thread_pool("testmultpair".to_string(), Some(32));
 
     for (g1, g2) in vec![
         ([G1Projective::identity(), r1[0]], r2),

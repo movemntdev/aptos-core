@@ -21,7 +21,7 @@ use aptos_dkg::{
         traits::WeightedVUF,
     },
 };
-use aptos_runtimes::spawn_rayon_thread_pool;
+use cond_parallel::thread_pool;
 use blstrs::{G1Projective, G2Projective, Scalar};
 use core::iter::zip;
 use criterion::{
@@ -533,7 +533,7 @@ fn wvuf_derive_eval<
 ) where
     WVUF::PublicParameters: for<'a> From<&'a WT::PublicParameters>,
 {
-    let pool = spawn_rayon_thread_pool("bench-wvuf".to_string(), Some(num_threads));
+    let pool = thread_pool("bench-wvuf".to_string(), Some(num_threads));
 
     group.bench_function(
         format!(
@@ -619,7 +619,7 @@ fn pinkas_wvuf_derive_eval_rks_multiexps<
     subset_type: &str,
     num_threads: usize,
 ) {
-    let pool = spawn_rayon_thread_pool("bench-wvuf".to_string(), Some(num_threads));
+    let pool = thread_pool("bench-wvuf".to_string(), Some(num_threads));
 
     group.bench_function(
         format!(
@@ -678,7 +678,7 @@ fn pinkas_wvuf_derive_eval_multipairing<
     subset_type: &str,
     num_threads: usize,
 ) {
-    let pool = spawn_rayon_thread_pool("bench-wvuf".to_string(), Some(num_threads));
+    let pool = thread_pool("bench-wvuf".to_string(), Some(num_threads));
     let n = pick_subset_fn(wc, rng).len();
 
     group.bench_function(
