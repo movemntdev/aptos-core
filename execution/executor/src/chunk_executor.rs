@@ -23,7 +23,7 @@ use aptos_executor_types::{
     ChunkCommitNotification, ChunkExecutorTrait, ExecutedChunk, ParsedTransactionOutput,
     TransactionReplayer, VerifyExecutionMode,
 };
-use aptos_experimental_runtimes::thread_manager::{optimal_min_len, THREAD_MANAGER};
+use cond_parallel::thread_manager::{optimal_min_len, THREAD_MANAGER};
 use aptos_infallible::{Mutex, RwLock};
 use aptos_logger::prelude::*;
 use aptos_metrics_core::TimerHelper;

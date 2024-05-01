@@ -24,7 +24,7 @@ use crate::{
 use aptos_executor::{
     block_executor::TransactionBlockExecutor, components::chunk_output::ChunkOutput,
 };
-use aptos_experimental_runtimes::thread_manager::THREAD_MANAGER;
+use cond_parallel::thread_manager::THREAD_MANAGER;
 use aptos_infallible::Mutex;
 use aptos_metrics_core::TimerHelper;
 use aptos_storage_interface::cached_state_view::CachedStateView;

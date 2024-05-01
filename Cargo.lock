@@ -727,7 +727,6 @@ dependencies = [
  "aptos-executor",
  "aptos-executor-test-helpers",
  "aptos-executor-types",
- "aptos-experimental-runtimes",
  "aptos-fallible",
  "aptos-global-constants",
  "aptos-infallible",
@@ -757,6 +756,7 @@ dependencies = [
  "chrono",
  "claims",
  "clap 4.5.4",
+ "cond-parallel",
  "dashmap",
  "enum_dispatch",
  "fail 0.5.1",
@@ -983,7 +983,6 @@ dependencies = [
  "aptos-db-indexer",
  "aptos-executor",
  "aptos-executor-types",
- "aptos-experimental-runtimes",
  "aptos-infallible",
  "aptos-jellyfish-merkle",
  "aptos-logger",
@@ -1002,6 +1001,7 @@ dependencies = [
  "byteorder",
  "claims",
  "clap 4.5.4",
+ "cond-parallel",
  "dashmap",
  "either",
  "itertools 0.10.5",
@@ -1169,9 +1169,9 @@ dependencies = [
 name = "aptos-drop-helper"
 version = "0.1.0"
 dependencies = [
- "aptos-experimental-runtimes",
  "aptos-infallible",
  "aptos-metrics-core",
+ "cond-parallel",
  "once_cell",
  "threadpool",
 ]
@@ -1242,7 +1242,6 @@ dependencies = [
  "aptos-executor-service",
  "aptos-executor-test-helpers",
  "aptos-executor-types",
- "aptos-experimental-runtimes",
  "aptos-genesis",
  "aptos-infallible",
  "aptos-logger",
@@ -1257,6 +1256,7 @@ dependencies = [
  "arr_macro",
  "bcs 0.1.4",
  "bytes",
+ "cond-parallel",
  "dashmap",
  "fail 0.5.1",
  "itertools 0.10.5",
@@ -1283,7 +1283,6 @@ dependencies = [
  "aptos-executor-service",
  "aptos-executor-types",
  "aptos-experimental-ptx-executor",
- "aptos-experimental-runtimes",
  "aptos-genesis",
  "aptos-jellyfish-merkle",
  "aptos-logger",
@@ -1301,6 +1300,7 @@ dependencies = [
  "bcs 0.1.4",
  "chrono",
  "clap 4.5.4",
+ "cond-parallel",
  "derivative",
  "indicatif",
  "itertools 0.10.5",
@@ -1403,7 +1403,6 @@ dependencies = [
  "aptos-crypto",
  "aptos-crypto-derive",
  "aptos-executor",
- "aptos-experimental-runtimes",
  "aptos-framework",
  "aptos-infallible",
  "aptos-logger",
@@ -1414,6 +1413,7 @@ dependencies = [
  "aptos-vm-logging",
  "aptos-vm-types",
  "bcs 0.1.4",
+ "cond-parallel",
  "dashmap",
  "fail 0.5.1",
  "hashbrown 0.14.3",
@@ -1435,19 +1435,6 @@ dependencies = [
  "serde_json",
  "smallvec",
  "tracing",
-]
-
-[[package]]
-name = "aptos-experimental-runtimes"
-version = "0.1.0"
-dependencies = [
- "aptos-runtimes",
- "core_affinity",
- "libc",
- "num_cpus",
- "once_cell",
- "rayon",
- "tokio",
 ]
 
 [[package]]
@@ -2090,7 +2077,6 @@ dependencies = [
  "aptos-crypto",
  "aptos-crypto-derive",
  "aptos-db",
- "aptos-experimental-runtimes",
  "aptos-infallible",
  "aptos-logger",
  "aptos-metrics-core",
@@ -2099,6 +2085,7 @@ dependencies = [
  "arr_macro",
  "bcs 0.1.4",
  "byteorder",
+ "cond-parallel",
  "itertools 0.10.5",
  "num-derive",
  "num-traits",
@@ -3128,12 +3115,12 @@ version = "0.1.0"
 dependencies = [
  "aptos-crypto",
  "aptos-drop-helper",
- "aptos-experimental-runtimes",
  "aptos-infallible",
  "aptos-logger",
  "aptos-metrics-core",
  "aptos-types",
  "bitvec 1.0.1",
+ "cond-parallel",
  "criterion",
  "itertools 0.10.5",
  "jemallocator",
@@ -3313,7 +3300,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "aptos-crypto",
- "aptos-experimental-runtimes",
  "aptos-logger",
  "aptos-metrics-core",
  "aptos-scratchpad",
@@ -3324,6 +3310,7 @@ dependencies = [
  "assert_unordered",
  "bcs 0.1.4",
  "bytes",
+ "cond-parallel",
  "crossbeam-channel",
  "dashmap",
  "itertools 0.10.5",
@@ -3590,7 +3577,6 @@ dependencies = [
  "aptos-crypto",
  "aptos-crypto-derive",
  "aptos-dkg",
- "aptos-experimental-runtimes",
  "ark-bn254",
  "ark-ff",
  "ark-groth16",
@@ -3603,6 +3589,7 @@ dependencies = [
  "chrono",
  "ciborium",
  "claims",
+ "cond-parallel",
  "coset",
  "derivative",
  "fixed",
@@ -3712,7 +3699,6 @@ dependencies = [
  "aptos-block-partitioner",
  "aptos-crypto",
  "aptos-crypto-derive",
- "aptos-experimental-runtimes",
  "aptos-framework",
  "aptos-gas-algebra",
  "aptos-gas-meter",
@@ -3734,6 +3720,7 @@ dependencies = [
  "bcs 0.1.4",
  "bytes",
  "claims",
+ "cond-parallel",
  "crossbeam-channel",
  "dashmap",
  "derive_more",
@@ -5518,6 +5505,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d16048cd947b08fa32c24458a22f5dc5e835264f689f4f5653210c69fd107363"
 dependencies = [
  "crossbeam-utils",
+]
+
+[[package]]
+name = "cond-parallel"
+version = "0.1.0"
+dependencies = [
+ "aptos-runtimes",
+ "core_affinity",
+ "libc",
+ "num_cpus",
+ "once_cell",
+ "rayon",
+ "tokio",
 ]
 
 [[package]]

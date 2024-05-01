@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::sharded_block_executor::aggr_overridden_state_view::TOTAL_SUPPLY_AGGR_BASE_VAL;
-use aptos_experimental_runtimes::thread_manager::optimal_min_len;
+use cond_parallel::thread_manager::optimal_min_len;
 use aptos_types::{
     state_store::{state_key::StateKey, StateView},
     transaction::TransactionOutput,

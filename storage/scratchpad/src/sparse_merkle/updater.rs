@@ -14,7 +14,7 @@ use aptos_crypto::{
     hash::{CryptoHash, SPARSE_MERKLE_PLACEHOLDER_HASH},
     HashValue,
 };
-use aptos_experimental_runtimes::thread_manager::THREAD_MANAGER;
+use cond_parallel::thread_manager::THREAD_MANAGER;
 use aptos_types::proof::{definition::NodeInProof, SparseMerkleLeafNode, SparseMerkleProofExt};
 use std::cmp::Ordering;
 

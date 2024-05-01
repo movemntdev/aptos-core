@@ -1,5 +1,6 @@
 [package]
 name = "cond-parallel"
+description = "Utilities for conditional parallelism with sequential fallback for ZK targets"
 version = "0.1.0"
 
 authors.workspace = true
@@ -10,3 +11,10 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+aptos-runtimes = { workspace = true }
+core_affinity = { workspace = true }
+libc = { workspace = true }
+num_cpus = { workspace = true }
+once_cell = { workspace = true }
+rayon = { workspace = true }
+tokio = { workspace = true }

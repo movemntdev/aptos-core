@@ -11,7 +11,7 @@ use crate::{
     utils::truncation_helper::{get_state_kv_commit_progress, truncate_state_kv_db_shards},
 };
 use aptos_config::config::{RocksdbConfig, RocksdbConfigs, StorageDirPaths};
-use aptos_experimental_runtimes::thread_manager::THREAD_MANAGER;
+use cond_parallel::thread_manager::THREAD_MANAGER;
 use aptos_logger::prelude::info;
 use aptos_rocksdb_options::gen_rocksdb_options;
 use aptos_schemadb::{SchemaBatch, DB};

@@ -22,7 +22,7 @@ use aptos_executor_types::{
     execution_output::ExecutionOutput, state_checkpoint_output::StateCheckpointOutput,
     BlockExecutorTrait, ExecutorError, ExecutorResult, StateComputeResult,
 };
-use aptos_experimental_runtimes::thread_manager::THREAD_MANAGER;
+use cond_parallel::thread_manager::THREAD_MANAGER;
 use aptos_infallible::RwLock;
 use aptos_logger::prelude::*;
 use aptos_scratchpad::SparseMerkleTree;

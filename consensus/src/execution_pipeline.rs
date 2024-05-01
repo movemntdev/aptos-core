@@ -14,7 +14,7 @@ use aptos_executor_types::{
     state_checkpoint_output::StateCheckpointOutput, BlockExecutorTrait, ExecutorError,
     ExecutorResult,
 };
-use aptos_experimental_runtimes::thread_manager::optimal_min_len;
+use cond_parallel::thread_manager::optimal_min_len;
 use aptos_logger::{debug, error};
 use aptos_types::{
     block_executor::{config::BlockExecutorConfigFromOnchain, partitioner::ExecutableBlock},

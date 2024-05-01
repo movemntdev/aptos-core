@@ -17,7 +17,7 @@ use crate::{
 };
 use aptos_config::config::{RocksdbConfig, RocksdbConfigs, StorageDirPaths};
 use aptos_crypto::{hash::CryptoHash, HashValue};
-use aptos_experimental_runtimes::thread_manager::{optimal_min_len, THREAD_MANAGER};
+use cond_parallel::thread_manager::{optimal_min_len, THREAD_MANAGER};
 use aptos_jellyfish_merkle::{
     node_type::{NodeKey, NodeType},
     JellyfishMerkleTree, TreeReader, TreeUpdateBatch, TreeWriter,

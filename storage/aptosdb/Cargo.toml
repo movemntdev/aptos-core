@@ -20,7 +20,6 @@ aptos-crypto = { workspace = true }
 aptos-db-indexer = { workspace = true }
 aptos-executor = { workspace = true }
 aptos-executor-types = { workspace = true }
-aptos-experimental-runtimes = { workspace = true }
 aptos-infallible = { workspace = true }
 aptos-jellyfish-merkle = { workspace = true }
 aptos-logger = { workspace = true }
@@ -39,6 +38,7 @@ bcs = { workspace = true }
 byteorder = { workspace = true }
 claims = { workspace = true }
 clap = { workspace = true, optional = true }
+cond-parallel = { workspace = true }
 dashmap = { workspace = true }
 either = { workspace = true }
 itertools = { workspace = true }

@@ -18,7 +18,7 @@ use aptos_executor_benchmark::{native_executor::NativeExecutor, pipeline::Pipeli
 use aptos_executor_service::remote_executor_client;
 use aptos_experimental_ptx_executor::PtxBlockExecutor;
 #[cfg(target_os = "linux")]
-use aptos_experimental_runtimes::thread_manager::{ThreadConfigStrategy, ThreadManagerBuilder};
+use cond_parallel::thread_manager::{ThreadConfigStrategy, ThreadManagerBuilder};
 use aptos_metrics_core::{register_int_gauge, IntGauge};
 use aptos_profiler::{ProfilerConfig, ProfilerHandler};
 use aptos_push_metrics::MetricsPusher;

@@ -12,7 +12,7 @@ use crate::{
     },
     versioned_node_cache::VersionedNodeCache,
 };
-use aptos_experimental_runtimes::thread_manager::THREAD_MANAGER;
+use cond_parallel::thread_manager::THREAD_MANAGER;
 use aptos_logger::trace;
 use aptos_scratchpad::SmtAncestors;
 use aptos_storage_interface::{jmt_update_refs, jmt_updates, state_delta::StateDelta, Result};

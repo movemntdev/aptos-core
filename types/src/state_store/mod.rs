@@ -14,7 +14,7 @@ use crate::{
     transaction::Version,
 };
 use aptos_crypto::HashValue;
-use aptos_experimental_runtimes::thread_manager::THREAD_MANAGER;
+use cond_parallel::thread_manager::THREAD_MANAGER;
 use arr_macro::arr;
 use bytes::Bytes;
 use std::{collections::HashMap, ops::Deref};

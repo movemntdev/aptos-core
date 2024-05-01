@@ -5,7 +5,7 @@ use crate::{
     counters::{TXN_DEDUP_FILTERED, TXN_DEDUP_SECONDS},
     transaction_deduper::TransactionDeduper,
 };
-use aptos_experimental_runtimes::thread_manager::optimal_min_len;
+use cond_parallel::thread_manager::optimal_min_len;
 use aptos_types::transaction::SignedTransaction;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};

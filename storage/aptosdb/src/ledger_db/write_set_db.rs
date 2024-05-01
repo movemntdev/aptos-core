@@ -9,7 +9,7 @@ use crate::{
     },
     utils::iterators::ExpectContinuousVersions,
 };
-use aptos_experimental_runtimes::thread_manager::optimal_min_len;
+use cond_parallel::thread_manager::optimal_min_len;
 use aptos_schemadb::{ReadOptions, SchemaBatch, DB};
 use aptos_storage_interface::{db_ensure as ensure, AptosDbError, Result};
 use aptos_types::{

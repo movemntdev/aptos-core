@@ -119,7 +119,6 @@ members = [
     "execution/executor-test-helpers",
     "execution/executor-types",
     "experimental/execution/ptx-executor",
-    "experimental/runtimes",
     "keyless/pepper/common", "keyless/pepper/example-client-rust", "keyless/pepper/service",
     "mempool",
     "network/benchmark",
@@ -223,6 +222,7 @@ members = [
     "third_party/move/tools/move-unit-test",
     "types",
     "vm-validator",
+    "zk-port/cond-parallel",
 ]
 
 # NOTE: default-members is the complete list of binaries that form the "production Aptos codebase". These members should
@@ -299,7 +299,6 @@ aptos-executor-service = { path = "execution/executor-service" }
 aptos-executor-test-helpers = { path = "execution/executor-test-helpers" }
 aptos-executor-types = { path = "execution/executor-types" }
 aptos-experimental-ptx-executor = { path = "experimental/execution/ptx-executor" }
-aptos-experimental-runtimes = { path = "experimental/runtimes" }
 aptos-faucet-cli = { path = "crates/aptos-faucet/cli" }
 aptos-faucet-core = { path = "crates/aptos-faucet/core" }
 aptos-faucet-service = { path = "crates/aptos-faucet/service" }
@@ -410,6 +409,7 @@ aptos-vm-validator = { path = "vm-validator" }
 aptos-warp-webserver = { path = "crates/aptos-warp-webserver" }
 aptos-writeset-generator = { path = "aptos-move/writeset-transaction-generator" }
 aptos-cargo-cli = { path = "devtools/aptos-cargo-cli" }
+cond-parallel = { path = "zk-port/cond-parallel" }
 
 # External crate dependencies.
 # Please do not add any test features here: they should be declared by the individual crate.

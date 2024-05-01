@@ -19,7 +19,7 @@ use aptos_executor_types::{
     state_checkpoint_output::{StateCheckpointOutput, TransactionsByStatus},
     ExecutedChunk, LedgerUpdateOutput, ParsedTransactionOutput,
 };
-use aptos_experimental_runtimes::thread_manager::optimal_min_len;
+use cond_parallel::thread_manager::optimal_min_len;
 use aptos_logger::error;
 use aptos_storage_interface::{state_delta::StateDelta, ExecutedTrees};
 use aptos_types::{

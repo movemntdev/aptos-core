@@ -21,7 +21,7 @@ use crate::{
     state_merkle_db::StateMerkleDb,
 };
 use anyhow::anyhow;
-use aptos_experimental_runtimes::thread_manager::THREAD_MANAGER;
+use cond_parallel::thread_manager::THREAD_MANAGER;
 use aptos_jellyfish_merkle::{node_type::NodeKey, StaleNodeIndex};
 use aptos_logger::info;
 use aptos_schemadb::{schema::KeyCodec, ReadOptions, DB};

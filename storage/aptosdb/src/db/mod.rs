@@ -32,7 +32,7 @@ use aptos_config::config::{
 };
 use aptos_crypto::HashValue;
 use aptos_db_indexer::Indexer;
-use aptos_experimental_runtimes::thread_manager::{optimal_min_len, THREAD_MANAGER};
+use cond_parallel::thread_manager::{optimal_min_len, THREAD_MANAGER};
 use aptos_logger::prelude::*;
 use aptos_metrics_core::TimerHelper;
 use aptos_schemadb::{ReadOptions, SchemaBatch};
