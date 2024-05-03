@@ -39,7 +39,6 @@ use move_core_types::{
 };
 use move_vm_types::delayed_values::delayed_field_id::DelayedFieldID;
 use once_cell::sync::OnceCell;
-use rayon::ThreadPool;
 use std::{
     collections::{BTreeMap, HashSet},
     sync::Arc,
@@ -398,7 +397,6 @@ impl BlockAptosVM {
         S: StateView + Sync,
         L: TransactionCommitHook<Output = AptosTransactionOutput>,
     >(
-        executor_thread_pool: Arc<ThreadPool>,
         signature_verified_block: &[SignatureVerifiedTransaction],
         state_view: &S,
         config: BlockExecutorConfig,
@@ -419,7 +417,7 @@ impl BlockAptosVM {
             S,
             L,
             ExecutableTestType,
-        >::new(config, executor_thread_pool, transaction_commit_listener);
+        >::new(config, transaction_commit_listener);
 
         let ret = executor.execute_block(state_view, signature_verified_block, state_view);
         match ret {

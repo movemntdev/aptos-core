@@ -100,7 +100,7 @@ use move_vm_runtime::{
 };
 use move_vm_types::gas::{GasMeter, UnmeteredGasMeter};
 use num_cpus;
-use once_cell::sync::{Lazy, OnceCell};
+use once_cell::sync::OnceCell;
 use std::{
     cmp::{max, min},
     collections::{BTreeMap, BTreeSet},
@@ -115,17 +115,6 @@ static PARANOID_TYPE_CHECKS: OnceCell<bool> = OnceCell::new();
 static DISCARD_FAILED_BLOCKS: OnceCell<bool> = OnceCell::new();
 static PROCESSED_TRANSACTIONS_DETAILED_COUNTERS: OnceCell<bool> = OnceCell::new();
 static TIMED_FEATURE_OVERRIDE: OnceCell<TimedFeatureOverride> = OnceCell::new();
-
-// TODO: Don't expose this in AptosVM, and use only in BlockAptosVM!
-pub static RAYON_EXEC_POOL: Lazy<Arc<rayon::ThreadPool>> = Lazy::new(|| {
-    Arc::new(
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_cpus::get())
-            .thread_name(|index| format!("par_exec-{}", index))
-            .build()
-            .unwrap(),
-    )
-});
 
 macro_rules! deprecated_module_bundle {
     () => {
@@ -749,10 +738,11 @@ impl AptosVM {
             let module_id = traversal_context
                 .referenced_module_ids
                 .alloc(entry_fn.module().clone());
-            session.check_dependencies_and_charge_gas(gas_meter, traversal_context, [(
-                module_id.address(),
-                module_id.name(),
-            )])?;
+            session.check_dependencies_and_charge_gas(
+                gas_meter,
+                traversal_context,
+                [(module_id.address(), module_id.name())],
+            )?;
         }
 
         let (function, is_friend_or_private) = session.load_function_and_is_friend_or_private_def(
@@ -2302,7 +2292,6 @@ impl VMExecutor for AptosVM {
             _,
             NoOpTransactionCommitHook<AptosTransactionOutput, VMStatus>,
         >(
-            Arc::clone(&RAYON_EXEC_POOL),
             transactions,
             state_view,
             BlockExecutorConfig {

@@ -564,7 +564,6 @@ dependencies = [
  "proptest",
  "proptest-derive 0.4.0",
  "rand 0.7.3",
- "rayon",
  "scopeguard",
  "serde",
  "test-case",

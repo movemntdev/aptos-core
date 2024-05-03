@@ -28,7 +28,7 @@ use aptos_types::{
     contract_event::TransactionEvent,
     executable::{ExecutableTestType, ModulePath},
 };
-use claims::assert_matches;
+use claims::{assert_err, assert_matches};
 use fail::FailScenario;
 use rand::{prelude::*, random};
 use std::{
@@ -37,7 +37,6 @@ use std::{
     fmt::Debug,
     hash::Hash,
     marker::PhantomData,
-    sync::Arc,
 };
 
 #[test]
@@ -77,12 +76,6 @@ fn resource_group_bcs_fallback() {
     let data_view = NonEmptyGroupDataView::<KeyType<u32>> {
         group_keys: HashSet::new(),
     };
-    let executor_thread_pool = Arc::new(
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_cpus::get())
-            .build()
-            .unwrap(),
-    );
     let block_executor = BlockExecutor::<
         MockTransaction<KeyType<u32>, MockEvent>,
         MockTask<KeyType<u32>, MockEvent>,
@@ -91,12 +84,12 @@ fn resource_group_bcs_fallback() {
         ExecutableTestType,
     >::new(
         BlockExecutorConfig::new_no_block_limit(num_cpus::get()),
-        executor_thread_pool,
         None,
     );
 
     // Execute the block normally.
-    let output = block_executor.execute_transactions_parallel((), &transactions, &data_view);
+    let output =
+        block_executor.execute_transactions_sequential((), &transactions, &data_view, false);
     match output {
         Ok(block_output) => {
             let txn_outputs = block_output.into_transaction_outputs_forced();
@@ -113,9 +106,6 @@ fn resource_group_bcs_fallback() {
     assert!(fail::has_failpoints());
     fail::cfg("fail-point-resource-group-serialization", "return()").unwrap();
     assert!(!fail::list().is_empty());
-
-    let par_output = block_executor.execute_transactions_parallel((), &transactions, &data_view);
-    assert_matches!(par_output, Err(()));
 
     let seq_output =
         block_executor.execute_transactions_sequential((), &transactions, &data_view, false);
@@ -170,12 +160,6 @@ fn block_output_err_precedence() {
     let data_view = DeltaDataView::<KeyType<u32>> {
         phantom: PhantomData,
     };
-    let executor_thread_pool = Arc::new(
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_cpus::get())
-            .build()
-            .unwrap(),
-    );
     let block_executor = BlockExecutor::<
         MockTransaction<KeyType<u32>, MockEvent>,
         MockTask<KeyType<u32>, MockEvent>,
@@ -184,7 +168,6 @@ fn block_output_err_precedence() {
         ExecutableTestType,
     >::new(
         BlockExecutorConfig::new_no_block_limit(num_cpus::get()),
-        executor_thread_pool,
         None,
     );
 
@@ -194,8 +177,9 @@ fn block_output_err_precedence() {
     assert!(!fail::list().is_empty());
     // Pause the thread that processes the aborting txn1, so txn2 can halt the scheduler first.
     // Confirm that the fatal VM error is still detected and sequential fallback triggered.
-    let output = block_executor.execute_transactions_parallel((), &transactions, &data_view);
-    assert_matches!(output, Err(()));
+    let output =
+        block_executor.execute_transactions_sequential((), &transactions, &data_view, false);
+    assert_err!(output);
     scenario.teardown();
 }
 
@@ -208,12 +192,6 @@ fn skip_rest_gas_limit() {
     let data_view = DeltaDataView::<KeyType<u32>> {
         phantom: PhantomData,
     };
-    let executor_thread_pool = Arc::new(
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_cpus::get())
-            .build()
-            .unwrap(),
-    );
     let block_executor = BlockExecutor::<
         MockTransaction<KeyType<u32>, MockEvent>,
         MockTask<KeyType<u32>, MockEvent>,
@@ -222,12 +200,11 @@ fn skip_rest_gas_limit() {
         ExecutableTestType,
     >::new(
         BlockExecutorConfig::new_maybe_block_limit(num_cpus::get(), Some(5)),
-        executor_thread_pool,
         None,
     );
 
     // Should hit block limit on the skip transaction.
-    let _ = block_executor.execute_transactions_parallel((), &transactions, &data_view);
+    let _ = block_executor.execute_transactions_sequential((), &transactions, &data_view, false);
 }
 
 // TODO: add unit test for block gas limit!
@@ -240,13 +217,6 @@ where
         phantom: PhantomData,
     };
 
-    let executor_thread_pool = Arc::new(
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_cpus::get())
-            .build()
-            .unwrap(),
-    );
-
     let output = BlockExecutor::<
         MockTransaction<K, E>,
         MockTask<K, E>,
@@ -255,13 +225,12 @@ where
         ExecutableTestType,
     >::new(
         BlockExecutorConfig::new_no_block_limit(num_cpus::get()),
-        executor_thread_pool,
         None,
     )
-    .execute_transactions_parallel((), &transactions, &data_view);
+    .execute_transactions_sequential((), &transactions, &data_view, false);
 
     let baseline = BaselineOutput::generate(&transactions, None);
-    baseline.assert_parallel_output(&output);
+    baseline.assert_sequential_output(&output);
 }
 
 fn random_value(delete_value: bool) -> ValueType {

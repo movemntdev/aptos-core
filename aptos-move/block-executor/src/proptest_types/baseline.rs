@@ -12,7 +12,7 @@
 /// number, and hence it is crucial for the baseline to know the final incarnation number
 /// of each transaction of the tested block executor execution.
 use crate::{
-    errors::{BlockExecutionError, BlockExecutionResult},
+    errors::{BlockExecutionError, BlockExecutionResult, SequentialBlockExecutionError},
     proptest_types::types::{
         MockOutput, MockTransaction, ValueType, RESERVED_TAG, STORAGE_AGGREGATOR_VALUE,
     },
@@ -351,8 +351,22 @@ impl<K: Debug + Hash + Clone + Eq> BaselineOutput<K> {
         });
     }
 
+    fn assert_error(&self, err: &BlockExecutionError<usize>) {
+        match err {
+            BlockExecutionError::FatalVMError(idx) => {
+                assert_matches!(&self.status, BaselineStatus::Aborted);
+                assert_eq!(*idx, self.read_values.len());
+                assert_eq!(*idx, self.resolved_deltas.len());
+            },
+            BlockExecutionError::FatalBlockExecutorError(e) => {
+                unimplemented!("not tested here FallbackToSequential({:?})", e);
+            },
+        }
+    }
+
     // Used for testing, hence the function asserts the correctness conditions within
     // itself to be easily traceable in case of an error.
+    #[allow(dead_code)]
     pub(crate) fn assert_output<E: Debug>(
         &self,
         results: &BlockExecutionResult<BlockOutput<MockOutput<K, E>>, usize>,
@@ -361,29 +375,24 @@ impl<K: Debug + Hash + Clone + Eq> BaselineOutput<K> {
             Ok(block_output) => {
                 self.assert_success(block_output);
             },
-            Err(BlockExecutionError::FatalVMError(idx)) => {
-                assert_matches!(&self.status, BaselineStatus::Aborted);
-                assert_eq!(*idx, self.read_values.len());
-                assert_eq!(*idx, self.resolved_deltas.len());
-            },
-            Err(BlockExecutionError::FatalBlockExecutorError(e)) => {
-                unimplemented!("not tested here FallbackToSequential({:?})", e);
+            Err(err) => {
+                self.assert_error(err);
             },
         }
     }
 
-    pub(crate) fn assert_parallel_output<E: Debug>(
+    pub(crate) fn assert_sequential_output<E: Debug>(
         &self,
-        results: &Result<BlockOutput<MockOutput<K, E>>, ()>,
+        results: &Result<BlockOutput<MockOutput<K, E>>, SequentialBlockExecutionError<usize>>,
     ) {
         match results {
             Ok(block_output) => {
                 self.assert_success(block_output);
             },
-            Err(()) => {
-                // Parallel execution currently returns an arbitrary error to fallback.
-                // TODO: adjust the logic to be able to test better.
+            Err(SequentialBlockExecutionError::ResourceGroupSerializationError) => {
+                panic!("Unexpected error")
             },
+            Err(SequentialBlockExecutionError::ErrorToReturn(err)) => self.assert_error(err),
         }
     }
 }
