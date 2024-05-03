@@ -112,6 +112,7 @@ pub mod gas;
 mod keyless_validation;
 pub mod move_vm_ext;
 pub mod natives;
+#[cfg(feature = "sharded")]
 pub mod sharded_block_executor;
 pub mod system_module_names;
 pub mod testing;
@@ -121,11 +122,12 @@ pub mod validator_txns;
 pub mod verifier;
 
 pub use crate::aptos_vm::{AptosSimulationVM, AptosVM};
+#[cfg(feature = "sharded")]
 use crate::sharded_block_executor::{executor_client::ExecutorClient, ShardedBlockExecutor};
+#[cfg(feature = "sharded")]
+use aptos_types::block_executor::partitioner::PartitionedTransactions;
 use aptos_types::{
-    block_executor::{
-        config::BlockExecutorConfigFromOnchain, partitioner::PartitionedTransactions,
-    },
+    block_executor::config::BlockExecutorConfigFromOnchain,
     state_store::StateView,
     transaction::{
         signature_verified_transaction::SignatureVerifiedTransaction, BlockOutput,
@@ -133,7 +135,9 @@ use aptos_types::{
     },
     vm_status::VMStatus,
 };
-use std::{marker::Sync, sync::Arc};
+use std::marker::Sync;
+#[cfg(feature = "sharded")]
+use std::sync::Arc;
 pub use verifier::view_function::determine_is_view;
 
 /// This trait describes the VM's validation interfaces.
@@ -146,8 +150,9 @@ pub trait VMValidator {
     ) -> VMValidatorResult;
 }
 
-/// This trait describes the VM's execution interface.
-pub trait VMExecutor: Send + Sync {
+/// This trait describes the VM's execution interface, without the sharded
+/// execution method which is only available when the `sharded` feature is enabled.
+pub trait SerialVMExecutor: Send + Sync {
     // NOTE: At the moment there are no persistent caches that live past the end of a block (that's
     // why execute_block doesn't take &self.)
     // There are some cache invalidation issues around transactions publishing code that need to be
@@ -173,7 +178,11 @@ pub trait VMExecutor: Send + Sync {
         )
         .map(BlockOutput::into_transaction_outputs_forced)
     }
+}
 
+/// This trait augments `SerialVMExecutor` with sharded execution capabilities.
+#[cfg(feature = "sharded")]
+pub trait VMExecutor: SerialVMExecutor {
     /// Executes a block of transactions using a sharded block executor and returns the results.
     fn execute_block_sharded<S: StateView + Sync + Send + 'static, E: ExecutorClient<S>>(
         sharded_block_executor: &ShardedBlockExecutor<S, E>,

@@ -17,12 +17,16 @@ use crate::{
         },
         AptosMoveResolver, MoveVmExt, SessionExt, SessionId,
     },
-    sharded_block_executor::{executor_client::ExecutorClient, ShardedBlockExecutor},
     system_module_names::*,
     transaction_metadata::TransactionMetadata,
     transaction_validation, verifier,
     verifier::randomness::has_randomness_attribute,
-    VMExecutor, VMValidator,
+    SerialVMExecutor, VMValidator,
+};
+#[cfg(feature = "sharded")]
+use crate::{
+    sharded_block_executor::{executor_client::ExecutorClient, ShardedBlockExecutor},
+    VMExecutor,
 };
 use anyhow::anyhow;
 use aptos_block_executor::txn_commit_hook::NoOpTransactionCommitHook;
@@ -42,9 +46,8 @@ use aptos_types::state_store::StateViewId;
 use aptos_types::{
     account_config,
     account_config::{new_block_event_key, AccountResource},
-    block_executor::{
-        config::{BlockExecutorConfig, BlockExecutorConfigFromOnchain, BlockExecutorLocalConfig},
-        partitioner::PartitionedTransactions,
+    block_executor::config::{
+        BlockExecutorConfig, BlockExecutorConfigFromOnchain, BlockExecutorLocalConfig,
     },
     block_metadata::BlockMetadata,
     block_metadata_ext::{BlockMetadataExt, BlockMetadataWithRandomness},
@@ -56,7 +59,7 @@ use aptos_types::{
         TimedFeatureOverride, TimedFeatures, TimedFeaturesBuilder,
     },
     randomness::Randomness,
-    state_store::{StateView, TStateView},
+    state_store::StateView,
     transaction::{
         authenticator::AnySignature, signature_verified_transaction::SignatureVerifiedTransaction,
         BlockOutput, EntryFunction, ExecutionError, ExecutionStatus, ModuleBundle, Multisig,
@@ -66,6 +69,8 @@ use aptos_types::{
     },
     vm_status::{AbortLocation, StatusCode, VMStatus},
 };
+#[cfg(feature = "sharded")]
+use aptos_types::{block_executor::partitioner::PartitionedTransactions, state_store::TStateView};
 use aptos_utils::{aptos_try, return_on_failure};
 use aptos_vm_logging::{log_schema::AdapterLogSchema, speculative_error, speculative_log};
 use aptos_vm_types::{
@@ -2263,7 +2268,7 @@ impl AptosVM {
 }
 
 // Executor external API
-impl VMExecutor for AptosVM {
+impl SerialVMExecutor for AptosVM {
     /// Execute a block of `transactions`. The output vector will have the exact same length as the
     /// input vector. The discarded transactions will be marked as `TransactionStatus::Discard` and
     /// have an empty `WriteSet`. Also `state_view` is immutable, and does not have interior
@@ -2310,7 +2315,10 @@ impl VMExecutor for AptosVM {
         }
         ret
     }
+}
 
+#[cfg(feature = "sharded")]
+impl VMExecutor for AptosVM {
     fn execute_block_sharded<S: StateView + Sync + Send + 'static, C: ExecutorClient<S>>(
         sharded_block_executor: &ShardedBlockExecutor<S, C>,
         transactions: PartitionedTransactions,
