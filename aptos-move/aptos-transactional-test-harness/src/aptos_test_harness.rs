@@ -26,7 +26,7 @@ use aptos_types::{
         Script as TransactionScript, Transaction, TransactionOutput, TransactionStatus,
     },
 };
-use aptos_vm::{data_cache::AsMoveResolver, AptosVM, VMExecutor};
+use aptos_vm::{data_cache::AsMoveResolver, AptosVM, SerialVMExecutor};
 use aptos_vm_genesis::GENESIS_KEYPAIR;
 use clap::Parser;
 use move_binary_format::file_format::{CompiledModule, CompiledScript};
