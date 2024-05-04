@@ -17,12 +17,16 @@ use crate::{
         },
         AptosMoveResolver, MoveVmExt, SessionExt, SessionId,
     },
-    sharded_block_executor::{executor_client::ExecutorClient, ShardedBlockExecutor},
     system_module_names::*,
     transaction_metadata::TransactionMetadata,
     transaction_validation, verifier,
     verifier::randomness::has_randomness_attribute,
-    VMExecutor, VMValidator,
+    SerialVMExecutor, VMValidator,
+};
+#[cfg(feature = "sharded")]
+use crate::{
+    sharded_block_executor::{executor_client::ExecutorClient, ShardedBlockExecutor},
+    VMExecutor,
 };
 use anyhow::anyhow;
 use aptos_block_executor::txn_commit_hook::NoOpTransactionCommitHook;
@@ -42,9 +46,8 @@ use aptos_types::state_store::StateViewId;
 use aptos_types::{
     account_config,
     account_config::{new_block_event_key, AccountResource},
-    block_executor::{
-        config::{BlockExecutorConfig, BlockExecutorConfigFromOnchain, BlockExecutorLocalConfig},
-        partitioner::PartitionedTransactions,
+    block_executor::config::{
+        BlockExecutorConfig, BlockExecutorConfigFromOnchain, BlockExecutorLocalConfig,
     },
     block_metadata::BlockMetadata,
     block_metadata_ext::{BlockMetadataExt, BlockMetadataWithRandomness},
@@ -56,7 +59,7 @@ use aptos_types::{
         TimedFeatureOverride, TimedFeatures, TimedFeaturesBuilder,
     },
     randomness::Randomness,
-    state_store::{StateView, TStateView},
+    state_store::StateView,
     transaction::{
         authenticator::AnySignature, signature_verified_transaction::SignatureVerifiedTransaction,
         BlockOutput, EntryFunction, ExecutionError, ExecutionStatus, ModuleBundle, Multisig,
@@ -66,6 +69,8 @@ use aptos_types::{
     },
     vm_status::{AbortLocation, StatusCode, VMStatus},
 };
+#[cfg(feature = "sharded")]
+use aptos_types::{block_executor::partitioner::PartitionedTransactions, state_store::TStateView};
 use aptos_utils::{aptos_try, return_on_failure};
 use aptos_vm_logging::{log_schema::AdapterLogSchema, speculative_error, speculative_log};
 use aptos_vm_types::{
@@ -100,7 +105,7 @@ use move_vm_runtime::{
 };
 use move_vm_types::gas::{GasMeter, UnmeteredGasMeter};
 use num_cpus;
-use once_cell::sync::{Lazy, OnceCell};
+use once_cell::sync::OnceCell;
 use std::{
     cmp::{max, min},
     collections::{BTreeMap, BTreeSet},
@@ -115,17 +120,6 @@ static PARANOID_TYPE_CHECKS: OnceCell<bool> = OnceCell::new();
 static DISCARD_FAILED_BLOCKS: OnceCell<bool> = OnceCell::new();
 static PROCESSED_TRANSACTIONS_DETAILED_COUNTERS: OnceCell<bool> = OnceCell::new();
 static TIMED_FEATURE_OVERRIDE: OnceCell<TimedFeatureOverride> = OnceCell::new();
-
-// TODO: Don't expose this in AptosVM, and use only in BlockAptosVM!
-pub static RAYON_EXEC_POOL: Lazy<Arc<rayon::ThreadPool>> = Lazy::new(|| {
-    Arc::new(
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_cpus::get())
-            .thread_name(|index| format!("par_exec-{}", index))
-            .build()
-            .unwrap(),
-    )
-});
 
 macro_rules! deprecated_module_bundle {
     () => {
@@ -749,10 +743,11 @@ impl AptosVM {
             let module_id = traversal_context
                 .referenced_module_ids
                 .alloc(entry_fn.module().clone());
-            session.check_dependencies_and_charge_gas(gas_meter, traversal_context, [(
-                module_id.address(),
-                module_id.name(),
-            )])?;
+            session.check_dependencies_and_charge_gas(
+                gas_meter,
+                traversal_context,
+                [(module_id.address(), module_id.name())],
+            )?;
         }
 
         let (function, is_friend_or_private) = session.load_function_and_is_friend_or_private_def(
@@ -2273,7 +2268,7 @@ impl AptosVM {
 }
 
 // Executor external API
-impl VMExecutor for AptosVM {
+impl SerialVMExecutor for AptosVM {
     /// Execute a block of `transactions`. The output vector will have the exact same length as the
     /// input vector. The discarded transactions will be marked as `TransactionStatus::Discard` and
     /// have an empty `WriteSet`. Also `state_view` is immutable, and does not have interior
@@ -2302,7 +2297,6 @@ impl VMExecutor for AptosVM {
             _,
             NoOpTransactionCommitHook<AptosTransactionOutput, VMStatus>,
         >(
-            Arc::clone(&RAYON_EXEC_POOL),
             transactions,
             state_view,
             BlockExecutorConfig {
@@ -2321,7 +2315,10 @@ impl VMExecutor for AptosVM {
         }
         ret
     }
+}
 
+#[cfg(feature = "sharded")]
+impl VMExecutor for AptosVM {
     fn execute_block_sharded<S: StateView + Sync + Send + 'static, C: ExecutorClient<S>>(
         sharded_block_executor: &ShardedBlockExecutor<S, C>,
         transactions: PartitionedTransactions,

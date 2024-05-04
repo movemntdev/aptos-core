@@ -118,7 +118,6 @@ pub enum ExecutorMode {
 pub struct FakeExecutor {
     data_store: FakeDataStore,
     event_store: Vec<ContractEvent>,
-    executor_thread_pool: Arc<rayon::ThreadPool>,
     block_time: u64,
     executed_output: Option<GoldenOutputs>,
     trace_dir: Option<PathBuf>,
@@ -147,16 +146,9 @@ pub enum ExecFuncTimerDynamicArgs {
 impl FakeExecutor {
     /// Creates an executor from a genesis [`WriteSet`].
     pub fn from_genesis(write_set: &WriteSet, chain_id: ChainId) -> Self {
-        let executor_thread_pool = Arc::new(
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(num_cpus::get())
-                .build()
-                .unwrap(),
-        );
         let mut executor = FakeExecutor {
             data_store: FakeDataStore::default(),
             event_store: Vec::new(),
-            executor_thread_pool,
             block_time: 0,
             executed_output: None,
             trace_dir: None,
@@ -231,16 +223,9 @@ impl FakeExecutor {
 
     /// Creates an executor in which no genesis state has been applied yet.
     pub fn no_genesis() -> Self {
-        let executor_thread_pool = Arc::new(
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(num_cpus::get())
-                .build()
-                .unwrap(),
-        );
         FakeExecutor {
             data_store: FakeDataStore::default(),
             event_store: Vec::new(),
-            executor_thread_pool,
             block_time: 0,
             executed_output: None,
             trace_dir: None,
@@ -503,7 +488,6 @@ impl FakeExecutor {
             onchain: onchain_config,
         };
         BlockAptosVM::execute_block::<_, NoOpTransactionCommitHook<AptosTransactionOutput, VMStatus>>(
-            self.executor_thread_pool.clone(),
             txn_block,
             &state_view,
             config,

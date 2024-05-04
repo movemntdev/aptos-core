@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    errors::SequentialBlockExecutionError,
     executor::BlockExecutor,
     proptest_types::{
         baseline::BaselineOutput,
@@ -19,7 +18,7 @@ use aptos_types::{
     block_executor::config::BlockExecutorConfig, contract_event::TransactionEvent,
     executable::ExecutableTestType,
 };
-use claims::{assert_matches, assert_ok};
+use claims::{assert_err, assert_ok};
 use num_cpus;
 use proptest::{
     collection::vec,
@@ -29,7 +28,7 @@ use proptest::{
     test_runner::TestRunner,
 };
 use rand::Rng;
-use std::{cmp::max, fmt::Debug, hash::Hash, marker::PhantomData, sync::Arc};
+use std::{cmp::max, fmt::Debug, hash::Hash, marker::PhantomData};
 use test_case::test_case;
 
 fn run_transactions<K, V, E>(
@@ -63,13 +62,6 @@ fn run_transactions<K, V, E>(
         phantom: PhantomData,
     };
 
-    let executor_thread_pool = Arc::new(
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_cpus::get())
-            .build()
-            .unwrap(),
-    );
-
     for _ in 0..num_repeat {
         let output = BlockExecutor::<
             MockTransaction<KeyType<K>, E>,
@@ -79,18 +71,17 @@ fn run_transactions<K, V, E>(
             ExecutableTestType,
         >::new(
             BlockExecutorConfig::new_maybe_block_limit(num_cpus::get(), maybe_block_gas_limit),
-            executor_thread_pool.clone(),
             None,
         )
-        .execute_transactions_parallel((), &transactions, &data_view);
+        .execute_transactions_sequential((), &transactions, &data_view, false);
 
         if module_access.0 && module_access.1 {
-            assert_matches!(output, Err(()));
+            assert_err!(output);
             continue;
         }
 
         BaselineOutput::generate(&transactions, maybe_block_gas_limit)
-            .assert_parallel_output(&output);
+            .assert_sequential_output(&output);
     }
 }
 
@@ -198,13 +189,6 @@ fn deltas_writes_mixed_with_block_gas_limit(num_txns: usize, maybe_block_gas_lim
         phantom: PhantomData,
     };
 
-    let executor_thread_pool = Arc::new(
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_cpus::get())
-            .build()
-            .unwrap(),
-    );
-
     for _ in 0..20 {
         let output = BlockExecutor::<
             MockTransaction<KeyType<[u8; 32]>, MockEvent>,
@@ -214,13 +198,12 @@ fn deltas_writes_mixed_with_block_gas_limit(num_txns: usize, maybe_block_gas_lim
             ExecutableTestType,
         >::new(
             BlockExecutorConfig::new_maybe_block_limit(num_cpus::get(), maybe_block_gas_limit),
-            executor_thread_pool.clone(),
             None,
         )
-        .execute_transactions_parallel((), &transactions, &data_view);
+        .execute_transactions_sequential((), &transactions, &data_view, false);
 
         BaselineOutput::generate(&transactions, maybe_block_gas_limit)
-            .assert_parallel_output(&output);
+            .assert_sequential_output(&output);
     }
 }
 
@@ -249,13 +232,6 @@ fn deltas_resolver_with_block_gas_limit(num_txns: usize, maybe_block_gas_limit: 
         .map(|txn_gen| txn_gen.materialize_with_deltas(&universe, 15, false))
         .collect();
 
-    let executor_thread_pool = Arc::new(
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_cpus::get())
-            .build()
-            .unwrap(),
-    );
-
     for _ in 0..20 {
         let output = BlockExecutor::<
             MockTransaction<KeyType<[u8; 32]>, MockEvent>,
@@ -265,13 +241,12 @@ fn deltas_resolver_with_block_gas_limit(num_txns: usize, maybe_block_gas_limit: 
             ExecutableTestType,
         >::new(
             BlockExecutorConfig::new_maybe_block_limit(num_cpus::get(), maybe_block_gas_limit),
-            executor_thread_pool.clone(),
             None,
         )
-        .execute_transactions_parallel((), &transactions, &data_view);
+        .execute_transactions_sequential((), &transactions, &data_view, false);
 
         BaselineOutput::generate(&transactions, maybe_block_gas_limit)
-            .assert_parallel_output(&output);
+            .assert_sequential_output(&output);
     }
 }
 
@@ -405,13 +380,6 @@ fn publishing_fixed_params_with_block_gas_limit(
         phantom: PhantomData,
     };
 
-    let executor_thread_pool = Arc::new(
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_cpus::get())
-            .build()
-            .unwrap(),
-    );
-
     // Confirm still no intersection
     let output = BlockExecutor::<
         MockTransaction<KeyType<[u8; 32]>, MockEvent>,
@@ -421,10 +389,9 @@ fn publishing_fixed_params_with_block_gas_limit(
         ExecutableTestType,
     >::new(
         BlockExecutorConfig::new_maybe_block_limit(num_cpus::get(), maybe_block_gas_limit),
-        executor_thread_pool,
         None,
     )
-    .execute_transactions_parallel((), &transactions, &data_view);
+    .execute_transactions_sequential((), &transactions, &data_view, false);
     assert_ok!(output);
 
     // Adjust the reads of txn indices[2] to contain module read to key 42.
@@ -447,13 +414,6 @@ fn publishing_fixed_params_with_block_gas_limit(
         },
     };
 
-    let executor_thread_pool = Arc::new(
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_cpus::get())
-            .build()
-            .unwrap(),
-    );
-
     for _ in 0..200 {
         let output = BlockExecutor::<
             MockTransaction<KeyType<[u8; 32]>, MockEvent>,
@@ -466,12 +426,11 @@ fn publishing_fixed_params_with_block_gas_limit(
                 num_cpus::get(),
                 Some(max(w_index, r_index) as u64 * MAX_GAS_PER_TXN + 1),
             ),
-            executor_thread_pool.clone(),
             None,
         ) // Ensure enough gas limit to commit the module txns (4 is maximum gas per txn)
-        .execute_transactions_parallel((), &transactions, &data_view);
+        .execute_transactions_sequential((), &transactions, &data_view, false);
 
-        assert_matches!(output, Err(()));
+        assert_err!(output);
     }
 }
 
@@ -485,7 +444,7 @@ fn publishing_fixed_params_with_block_gas_limit(
 fn non_empty_group(
     num_txns: usize,
     key_universe_len: usize,
-    num_repeat_parallel: usize,
+    _num_repeat_parallel: usize,
     num_repeat_sequential: usize,
     group_size_testing: usize,
 ) {
@@ -529,30 +488,6 @@ fn non_empty_group(
             .collect(),
     };
 
-    let executor_thread_pool = Arc::new(
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(num_cpus::get())
-            .build()
-            .unwrap(),
-    );
-
-    for _ in 0..num_repeat_parallel {
-        let output = BlockExecutor::<
-            MockTransaction<KeyType<[u8; 32]>, MockEvent>,
-            MockTask<KeyType<[u8; 32]>, MockEvent>,
-            NonEmptyGroupDataView<KeyType<[u8; 32]>>,
-            NoOpTransactionCommitHook<MockOutput<KeyType<[u8; 32]>, MockEvent>, usize>,
-            ExecutableTestType,
-        >::new(
-            BlockExecutorConfig::new_no_block_limit(num_cpus::get()),
-            executor_thread_pool.clone(),
-            None,
-        )
-        .execute_transactions_parallel((), &transactions, &data_view);
-
-        BaselineOutput::generate(&transactions, None).assert_parallel_output(&output);
-    }
-
     for _ in 0..num_repeat_sequential {
         let output = BlockExecutor::<
             MockTransaction<KeyType<[u8; 32]>, MockEvent>,
@@ -562,19 +497,15 @@ fn non_empty_group(
             ExecutableTestType,
         >::new(
             BlockExecutorConfig::new_no_block_limit(num_cpus::get()),
-            executor_thread_pool.clone(),
             None,
         )
         .execute_transactions_sequential((), &transactions, &data_view, false);
         // TODO: test dynamic disabled as well.
 
-        BaselineOutput::generate(&transactions, None).assert_output(&output.map_err(|e| match e {
-            SequentialBlockExecutionError::ResourceGroupSerializationError => {
-                panic!("Unexpected error")
-            },
-            SequentialBlockExecutionError::ErrorToReturn(err) => err,
-        }));
+        BaselineOutput::generate(&transactions, None).assert_sequential_output(&output);
     }
+
+    // TODO: restore testing of parallel execution from upstream
 }
 
 #[test]
