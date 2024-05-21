@@ -191,7 +191,9 @@ fn verify_range_proof(
     // The (Bullet)proof size is $\log_2(num_bits)$ and its verification time is $O(num_bits)$
     context.charge(BULLETPROOFS_PER_BIT_RANGEPROOF_VERIFY * NumArgs::new(bit_length as u64))?;
 
-    let mut ver_trans = Transcript::new(dst.as_slice());
+    // Workaround for compilation issue with hyperlane. 
+    // We may want to feature flag this, but this renders this test useless for the timebeing.  
+    let mut ver_trans = Transcript::new(&dst);
 
     let success = range_proof
         .verify_single(
