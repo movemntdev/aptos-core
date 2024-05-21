@@ -843,7 +843,6 @@ impl TransactionsApi {
                 .get_pending_transaction_by_hash(hash)
                 .await?
                 .map(|t| t.into());
-                println!("pending_transaction: {:?}", res);
                 res
             },
             _ => from_db.map(|t| t.into()),
