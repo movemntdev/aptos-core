@@ -843,6 +843,7 @@ impl TransactionsApi {
                 .get_pending_transaction_by_hash(hash)
                 .await?
                 .map(|t| t.into());
+                // there is no need to log
                 res
             },
             _ => from_db.map(|t| t.into()),
