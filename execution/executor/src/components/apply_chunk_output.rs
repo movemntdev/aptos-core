@@ -244,6 +244,7 @@ impl ApplyChunkOutput {
 
         // Append the StateCheckpoint transaction to the end of to_keep
         if let Some(block_id) = state_checkpoint_to_add {
+            println!("Appending StateCheckpoint transaction to the end of to_keep");
             let state_checkpoint_txn = Transaction::StateCheckpoint(block_id);
             let state_checkpoint_txn_output: ParsedTransactionOutput =
                 Into::into(TransactionOutput::new(
