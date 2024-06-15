@@ -318,6 +318,7 @@ where
             };
 
         if !current_output.output.has_reconfiguration() {
+            println!("Ensuring ends with state checkpoint!!!!!");
             output.ensure_ends_with_state_checkpoint()?;
         }
 
