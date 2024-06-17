@@ -36,6 +36,7 @@ use crate::{
     },
 };
 use anyhow::{Context, Result};
+#[cfg(feature = "aptos")]
 use aptos_indexer_grpc_server_framework::setup_logging;
 use async_trait::async_trait;
 use clap::Parser;
@@ -187,6 +188,7 @@ impl CliCommand<()> for RunLocalTestnet {
 
     async fn execute(mut self) -> CliTypedResult<()> {
         if self.log_to_stdout {
+            #[cfg(feature = "aptos")]
             setup_logging(None);
         }
 
@@ -226,6 +228,7 @@ impl CliCommand<()> for RunLocalTestnet {
             let make_writer = move || {
                 ThreadNameMakeWriter::new(td.clone()).make_writer() as Box<dyn std::io::Write>
             };
+            #[cfg(feature = "aptos")]
             setup_logging(Some(Box::new(make_writer)));
         }
 

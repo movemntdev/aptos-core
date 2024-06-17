@@ -481,6 +481,7 @@ impl CliCommand<&'static str> for TestPackage {
                 NativeGasParameters::zeros(),
                 MiscGasParameters::zeros(),
             ),
+            move_core_types::effects::ChangeSet::new(),
             None,
             self.compute_coverage,
             &mut std::io::stdout(),
