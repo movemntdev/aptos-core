@@ -29,7 +29,6 @@ aptos-gas-schedule = { workspace = true }
 aptos-genesis = { workspace = true }
 aptos-github-client = { workspace = true }
 aptos-global-constants = { workspace = true }
-aptos-indexer-grpc-server-framework = { workspace = true }
 aptos-indexer-grpc-utils = { workspace = true }
 aptos-keygen = { workspace = true }
 aptos-ledger = { workspace = true }
@@ -41,7 +40,7 @@ aptos-protos = { workspace = true }
 aptos-rest-client = { workspace = true }
 aptos-sdk = { workspace = true }
 aptos-storage-interface = { workspace = true }
-aptos-telemetry = { workspace = true }
+# aptos-telemetry = { workspace = true }
 aptos-temppath = { workspace = true }
 aptos-types = { workspace = true }
 aptos-vm = { workspace = true, features = ["testing"] }
@@ -106,7 +105,7 @@ jemallocator = { workspace = true }
 default = []
 fuzzing = []
 no-upload-proposal = []
-indexer = ["aptos-node/indexer"]
+# indexer = ["aptos-node/indexer"]
 cli-framework-test-move = []
 
 [build-dependencies]

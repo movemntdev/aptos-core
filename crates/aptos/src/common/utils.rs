@@ -14,6 +14,7 @@ use aptos_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
 use aptos_keygen::KeyGen;
 use aptos_logger::{debug, Level};
 use aptos_rest_client::{aptos_api_types::HashValue, Account, Client, FaucetClient, State};
+#[cfg(feature = "aptos")]
 use aptos_telemetry::service::telemetry_is_disabled;
 use aptos_types::{
     account_address::create_multisig_account_address,
@@ -85,6 +86,7 @@ pub async fn to_common_result<T: Serialize>(
 ) -> CliResult {
     let latency = start_time.elapsed();
 
+    #[cfg(feature = "aptos")]
     if !telemetry_is_disabled() {
         let error = if let Err(ref error) = result {
             // Only print the error type
@@ -129,6 +131,7 @@ async fn send_telemetry_event(command: &str, latency: Duration, error: Option<&s
     // Collect the build information
     let build_information = cli_build_information();
 
+    #[cfg(feature = "aptos")]
     // Send the event
     aptos_telemetry::cli_metrics::send_cli_telemetry_event(
         build_information,
@@ -472,6 +475,7 @@ pub async fn wait_for_transactions(
 
 pub fn start_logger(level: Level) {
     let mut logger = aptos_logger::Logger::new();
+    #[cfg(feature = "aptos")]
     logger.channel_size(1000).is_async(false).level(level);
     logger.build();
 }
