@@ -55,14 +55,14 @@ pub struct AptosTransactionOutput {
 }
 
 impl AptosTransactionOutput {
-    pub fn new(output: VMOutput) -> Self {
+    pub(crate) fn new(output: VMOutput) -> Self {
         Self {
             vm_output: Mutex::new(Some(output)),
             committed_output: OnceCell::new(),
         }
     }
 
-    pub fn committed_output(&self) -> &TransactionOutput {
+    pub(crate) fn committed_output(&self) -> &TransactionOutput {
         self.committed_output.get().unwrap()
     }
 
@@ -424,7 +424,7 @@ impl BlockAptosVM {
         let ret = executor.execute_block(state_view, signature_verified_block, state_view);
         match ret {
             Ok(block_output) => {
-                let transaction_outputs = block_output.into_inner();
+                let (transaction_outputs, block_end_info) = block_output.into_inner();
                 let output_vec: Vec<_> = transaction_outputs
                     .into_iter()
                     .map(|output| output.take_output())
@@ -439,7 +439,7 @@ impl BlockAptosVM {
                     flush_speculative_logs(pos);
                 }
 
-                Ok(BlockOutput::new(output_vec))
+                Ok(BlockOutput::new(output_vec, block_end_info))
             },
             Err(BlockExecutionError::FatalBlockExecutorError(PanicError::CodeInvariantError(
                 err_msg,
