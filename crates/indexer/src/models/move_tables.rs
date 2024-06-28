@@ -57,7 +57,7 @@ impl TableItem {
         transaction_version: i64,
         transaction_block_height: i64,
     ) -> (Self, CurrentTableItem) {
-        debug!(
+        println!(
             "Decoding WriteTableItem: {:?}",
             write_table_item
         );
