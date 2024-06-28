@@ -1,5 +1,15 @@
-# CLI test suite
-This directory contains Python code to help with running the CLI test suite.
+# CLI test suite - Movement testnet modification 
+This directory contains Python code to help with running the CLI test suite, when using Movement testnet endpoints:
+
+- `test_metrics_accessible` 
+- `test_account_create_and_transfer`
+- `test_aptos_header_included`
+- `test_stake_request_commission`
+- `test_node_update_consensus_key`
+- `test_node_update_validator_network_address`
+- `test_account_rotate_key`
+
+Other than the known issue of `test_metrics_accessible` currently lacking the needed `metrics` endpoint, all of the above tests pass when manually entering the relevant CLI commands. See the Python files for the CLI commands and testnet endpoints.
 
 ## Requirements
 We use [Poetry](https://python-poetry.org/docs/#installation) for packaging and dependency management:

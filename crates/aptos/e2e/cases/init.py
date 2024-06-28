@@ -10,6 +10,7 @@ from test_results import test_case
 
 
 @test_case
+
 def test_init(run_helper: RunHelper, test_name=None):
     # Inititalize a profile for the CLI to use. Note that we do not set the
     # --skip-faucet flag. This means that in addition to creating a profile locally,
@@ -17,10 +18,9 @@ def test_init(run_helper: RunHelper, test_name=None):
     # account with the default amount of 100000000 OCTA.
     run_helper.run_command(
         test_name,
-        ["aptos", "init", "--assume-yes", "--network", "local"],
-        input="\n",
+        ["movement", "init", "--assume-yes", "--network", "custom"],
+        input="https://aptos.testnet.suzuka.movementlabs.xyz/v1\nhttps://faucet.testnet.suzuka.movementlabs.xyz/\n\n",
     )
-
     # Assert that the CLI config is there.
     config_path = os.path.join(
         run_helper.host_working_directory, ".aptos", "config.yaml"

@@ -14,7 +14,7 @@ def test_config_show_profiles(run_helper: RunHelper, test_name=None):
     response = run_helper.run_command(
         test_name,
         [
-            "aptos",
+            "movement",
             "config",
             "show-profiles",
         ],

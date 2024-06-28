@@ -31,9 +31,9 @@ class AccountInfo:
 # account, send funds to it, etc. This is not the account created by the `aptos init`
 # test. To get details about that account use get_account_info on the RunHelper.
 OTHER_ACCOUNT_ONE = AccountInfo(
-    private_key="0x37368b46ce665362562c6d1d4ec01a08c8644c488690df5a17e13ba163e20221",
-    public_key="0x25caf00522e4d4664ec0a27166a69e8a32b5078959d0fc398da70d40d2893e8f",
-    account_address="0x585fc9f0f0c54183b039ffc770ca282ebd87307916c215a3e692f2f8e4305e82",
+    private_key="0xe2f8b838fad789a19065c7a8d970073023e7d00f447911ce2422f0849b75e390",
+    public_key="0x72564039aee0e1d463a6a09d88663433f879b57978a5bc8582a16584e4e4b2fd",
+    account_address="0x996679d644a2f991a96e871870b2c1b2a51eec67ceb230a305857e4fe6aa9b4b",
 )
 
 

@@ -21,7 +21,7 @@ def test_move_publish(run_helper: RunHelper, test_name=None):
     run_helper.run_command(
         test_name,
         [
-            "aptos",
+            "movement",
             "move",
             "publish",
             "--assume-yes",
@@ -36,7 +36,7 @@ def test_move_publish(run_helper: RunHelper, test_name=None):
     response = run_helper.run_command(
         test_name,
         [
-            "aptos",
+            "movement",
             "account",
             "list",
             "--account",
@@ -70,7 +70,7 @@ def test_move_compile(run_helper: RunHelper, test_name=None):
     response = run_helper.run_command(
         test_name,
         [
-            "aptos",
+            "movement",
             "move",
             "compile",
             "--package-dir",
@@ -93,7 +93,7 @@ def test_move_compile_dev_mode(run_helper: RunHelper, test_name=None):
     response = run_helper.run_command(
         test_name,
         [
-            "aptos",
+            "movement",
             "move",
             "compile",
             "--dev",
@@ -115,7 +115,7 @@ def test_move_compile_script(run_helper: RunHelper, test_name=None):
     response = run_helper.run_command(
         test_name,
         [
-            "aptos",
+            "movement",
             "move",
             "compile-script",
             "--package-dir",
@@ -137,7 +137,7 @@ def test_move_run(run_helper: RunHelper, test_name=None):
     response = run_helper.run_command(
         test_name,
         [
-            "aptos",
+            "movement",
             "move",
             "run",
             "--assume-yes",
@@ -159,7 +159,7 @@ def test_move_run(run_helper: RunHelper, test_name=None):
     response = run_helper.run_command(
         test_name,
         [
-            "aptos",
+            "movement",
             "move",
             "view",
             "--assume-yes",
@@ -184,7 +184,7 @@ def test_move_run(run_helper: RunHelper, test_name=None):
     response = run_helper.run_command(
         test_name,
         [
-            "aptos",
+            "movement",
             "move",
             "run",
             "--assume-yes",
@@ -215,7 +215,7 @@ def test_move_view(run_helper: RunHelper, test_name=None):
     response = run_helper.run_command(
         test_name,
         [
-            "aptos",
+            "movement",
             "move",
             "view",
             "--function-id",
@@ -238,7 +238,7 @@ def test_move_view(run_helper: RunHelper, test_name=None):
     response = run_helper.run_command(
         test_name,
         [
-            "aptos",
+            "movement",
             "move",
             "view",
             "--assume-yes",
@@ -267,7 +267,7 @@ def test_move_view(run_helper: RunHelper, test_name=None):
     response = run_helper.run_command(
         test_name,
         [
-            "aptos",
+            "movement",
             "move",
             "view",
             "--assume-yes",

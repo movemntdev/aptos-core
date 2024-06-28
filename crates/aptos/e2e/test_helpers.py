@@ -52,7 +52,7 @@ class RunHelper:
         self.cli_path = os.path.abspath(cli_path) if cli_path else cli_path
         self.base_network = base_network
         self.test_count = 0
-        self.api_client = RestClient(f"http://127.0.0.1:{NODE_PORT}/v1")
+        self.api_client = RestClient(f"https://aptos.testnet.suzuka.movementlabs.xyz/v1")
 
     def build_image_name(self):
         return build_image_name(self.image_repo_with_project, self.image_tag)
