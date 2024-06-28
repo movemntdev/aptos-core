@@ -49,7 +49,7 @@ docker: no matching manifest for linux/arm64/v8 in the manifest list entries.
 
 Try running the poetry command with this env var:
 ```
-DOCKER_DEFAULT_PLATFORM=linux/amd64 poetry run python main.py --base-network testnet --test-cli-path ~/aptos-core/target/debug/aptos
+DOCKER_DEFAULT_PLATFORM=linux/amd64 poetry run python main.py --base-network mainnet --test-cli-path ~/aptos-core/target/debug/aptos
 ```
 This makes the docker commands use the x86_64 images since we don't publish images for ARM.
 
