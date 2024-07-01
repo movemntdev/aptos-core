@@ -1,6 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+#[cfg(feature = "aptos")]
 use crate::{create_single_node_test_config, network};
 use aptos_config::config::{NodeConfig, WaypointConfig};
 use aptos_event_notifications::EventSubscriptionService;
@@ -16,6 +17,7 @@ pub struct MockDatabase;
 impl DbReader for MockDatabase {}
 impl DbWriter for MockDatabase {}
 
+#[cfg(feature = "aptos")]
 #[test]
 #[should_panic(expected = "Validator networks must always have mutual_authentication enabled!")]
 fn test_mutual_authentication_validators() {
@@ -49,6 +51,7 @@ fn test_aptos_vm_does_not_have_test_natives() {
     aptos_vm::natives::assert_no_test_natives(crate::utils::ERROR_MSG_BAD_FEATURE_FLAGS)
 }
 
+#[cfg(feature = "aptos")]
 // This test confirms that the overriding behavior works as intended.
 #[test]
 fn test_create_single_node_test_config() {
