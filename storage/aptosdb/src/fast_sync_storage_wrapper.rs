@@ -49,7 +49,6 @@ impl FastSyncStorageWrapper {
             config.storage.enable_indexer,
             config.storage.buffered_state_target_items,
             config.storage.max_num_nodes_per_lru_cache_shard,
-            config.indexer_table_info.enabled,
         )
         .map_err(|err| anyhow!("fast sync DB failed to open {}", err))?;
 
@@ -63,7 +62,7 @@ impl FastSyncStorageWrapper {
             && (db_main
                 .ledger_db
                 .metadata_db()
-                .get_latest_version()
+                .get_synced_version()
                 .map_or(0, |v| v)
                 == 0)
         {
@@ -76,7 +75,6 @@ impl FastSyncStorageWrapper {
                 config.storage.enable_indexer,
                 config.storage.buffered_state_target_items,
                 config.storage.max_num_nodes_per_lru_cache_shard,
-                config.indexer_table_info.enabled,
             )
             .map_err(|err| anyhow!("Secondary DB failed to open {}", err))?;
 

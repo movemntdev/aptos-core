@@ -18,7 +18,7 @@ use aptos_protos::{
     util::timestamp::FILE_DESCRIPTOR_SET as UTIL_TIMESTAMP_FILE_DESCRIPTOR_SET,
 };
 use aptos_storage_interface::DbReader;
-use aptos_types::chain_id::ChainId;
+use aptos_types::{chain_id::ChainId, indexer::indexer_db_reader::IndexerReader};
 use std::{net::ToSocketAddrs, sync::Arc};
 use tokio::runtime::Runtime;
 use tonic::{codec::CompressionEncoding, transport::Server};
@@ -34,6 +34,7 @@ pub fn bootstrap(
     chain_id: ChainId,
     db: Arc<dyn DbReader>,
     mp_sender: MempoolClientSender,
+    indexer_reader: Option<Arc<dyn IndexerReader>>,
 ) -> Option<Runtime> {
     if !config.indexer_grpc.enabled {
         return None;
@@ -50,7 +51,13 @@ pub fn bootstrap(
     let output_batch_size = node_config.indexer_grpc.output_batch_size;
 
     runtime.spawn(async move {
-        let context = Arc::new(Context::new(chain_id, db, mp_sender, node_config));
+        let context = Arc::new(Context::new(
+            chain_id,
+            db,
+            mp_sender,
+            node_config,
+            indexer_reader,
+        ));
         let service_context = ServiceContext {
             context: context.clone(),
             processor_task_count,
@@ -85,13 +92,15 @@ pub fn bootstrap(
         let router = match use_data_service_interface {
             false => {
                 let svc = FullnodeDataServer::new(server)
-                    .send_compressed(CompressionEncoding::Gzip)
+                    .send_compressed(CompressionEncoding::Zstd)
+                    .accept_compressed(CompressionEncoding::Zstd)
                     .accept_compressed(CompressionEncoding::Gzip);
                 tonic_server.add_service(svc)
             },
             true => {
                 let svc = RawDataServer::new(localnet_data_server)
-                    .send_compressed(CompressionEncoding::Gzip)
+                    .send_compressed(CompressionEncoding::Zstd)
+                    .accept_compressed(CompressionEncoding::Zstd)
                     .accept_compressed(CompressionEncoding::Gzip);
                 tonic_server.add_service(svc)
             },

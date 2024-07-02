@@ -1,4 +1,5 @@
-// Copyright © Aptos Foundation
+// Copyright (c) Aptos Foundation
+// SPDX-License-Identifier: Apache-2.0
 
 // @generated
 impl serde::Serialize for AccountSignature {
@@ -364,7 +365,7 @@ impl serde::Serialize for any_public_key::Type {
             Self::Ed25519 => "TYPE_ED25519",
             Self::Secp256k1Ecdsa => "TYPE_SECP256K1_ECDSA",
             Self::Secp256r1Ecdsa => "TYPE_SECP256R1_ECDSA",
-            Self::Zkid => "TYPE_ZKID",
+            Self::Keyless => "TYPE_KEYLESS",
         };
         serializer.serialize_str(variant)
     }
@@ -380,7 +381,7 @@ impl<'de> serde::Deserialize<'de> for any_public_key::Type {
             "TYPE_ED25519",
             "TYPE_SECP256K1_ECDSA",
             "TYPE_SECP256R1_ECDSA",
-            "TYPE_ZKID",
+            "TYPE_KEYLESS",
         ];
 
         struct GeneratedVisitor;
@@ -427,7 +428,7 @@ impl<'de> serde::Deserialize<'de> for any_public_key::Type {
                     "TYPE_ED25519" => Ok(any_public_key::Type::Ed25519),
                     "TYPE_SECP256K1_ECDSA" => Ok(any_public_key::Type::Secp256k1Ecdsa),
                     "TYPE_SECP256R1_ECDSA" => Ok(any_public_key::Type::Secp256r1Ecdsa),
-                    "TYPE_ZKID" => Ok(any_public_key::Type::Zkid),
+                    "TYPE_KEYLESS" => Ok(any_public_key::Type::Keyless),
                     _ => Err(serde::de::Error::unknown_variant(value, FIELDS)),
                 }
             }
@@ -446,7 +447,10 @@ impl serde::Serialize for AnySignature {
         if self.r#type != 0 {
             len += 1;
         }
-        if self.signature.is_some() {
+        if !self.signature.is_empty() {
+            len += 1;
+        }
+        if self.signature_variant.is_some() {
             len += 1;
         }
         let mut struct_ser = serializer.serialize_struct("aptos.transaction.v1.AnySignature", len)?;
@@ -455,19 +459,22 @@ impl serde::Serialize for AnySignature {
                 .ok_or_else(|| serde::ser::Error::custom(format!("Invalid variant {}", self.r#type)))?;
             struct_ser.serialize_field("type", &v)?;
         }
-        if let Some(v) = self.signature.as_ref() {
+        if !self.signature.is_empty() {
+            struct_ser.serialize_field("signature", pbjson::private::base64::encode(&self.signature).as_str())?;
+        }
+        if let Some(v) = self.signature_variant.as_ref() {
             match v {
-                any_signature::Signature::Ed25519(v) => {
+                any_signature::SignatureVariant::Ed25519(v) => {
                     struct_ser.serialize_field("ed25519", v)?;
                 }
-                any_signature::Signature::Secp256k1Ecdsa(v) => {
+                any_signature::SignatureVariant::Secp256k1Ecdsa(v) => {
                     struct_ser.serialize_field("secp256k1Ecdsa", v)?;
                 }
-                any_signature::Signature::Webauthn(v) => {
+                any_signature::SignatureVariant::Webauthn(v) => {
                     struct_ser.serialize_field("webauthn", v)?;
                 }
-                any_signature::Signature::Zkid(v) => {
-                    struct_ser.serialize_field("zkid", v)?;
+                any_signature::SignatureVariant::Keyless(v) => {
+                    struct_ser.serialize_field("keyless", v)?;
                 }
             }
         }
@@ -482,20 +489,22 @@ impl<'de> serde::Deserialize<'de> for AnySignature {
     {
         const FIELDS: &[&str] = &[
             "type",
+            "signature",
             "ed25519",
             "secp256k1_ecdsa",
             "secp256k1Ecdsa",
             "webauthn",
-            "zkid",
+            "keyless",
         ];
 
         #[allow(clippy::enum_variant_names)]
         enum GeneratedField {
             Type,
+            Signature,
             Ed25519,
             Secp256k1Ecdsa,
             Webauthn,
-            Zkid,
+            Keyless,
         }
         impl<'de> serde::Deserialize<'de> for GeneratedField {
             fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
@@ -518,10 +527,11 @@ impl<'de> serde::Deserialize<'de> for AnySignature {
                     {
                         match value {
                             "type" => Ok(GeneratedField::Type),
+                            "signature" => Ok(GeneratedField::Signature),
                             "ed25519" => Ok(GeneratedField::Ed25519),
                             "secp256k1Ecdsa" | "secp256k1_ecdsa" => Ok(GeneratedField::Secp256k1Ecdsa),
                             "webauthn" => Ok(GeneratedField::Webauthn),
-                            "zkid" => Ok(GeneratedField::Zkid),
+                            "keyless" => Ok(GeneratedField::Keyless),
                             _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
                         }
                     }
@@ -543,6 +553,7 @@ impl<'de> serde::Deserialize<'de> for AnySignature {
             {
                 let mut r#type__ = None;
                 let mut signature__ = None;
+                let mut signature_variant__ = None;
                 while let Some(k) = map.next_key()? {
                     match k {
                         GeneratedField::Type => {
@@ -551,39 +562,48 @@ impl<'de> serde::Deserialize<'de> for AnySignature {
                             }
                             r#type__ = Some(map.next_value::<any_signature::Type>()? as i32);
                         }
-                        GeneratedField::Ed25519 => {
+                        GeneratedField::Signature => {
                             if signature__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("signature"));
+                            }
+                            signature__ =
+                                Some(map.next_value::<::pbjson::private::BytesDeserialize<_>>()?.0)
+                            ;
+                        }
+                        GeneratedField::Ed25519 => {
+                            if signature_variant__.is_some() {
                                 return Err(serde::de::Error::duplicate_field("ed25519"));
                             }
-                            signature__ = map.next_value::<::std::option::Option<_>>()?.map(any_signature::Signature::Ed25519)
+                            signature_variant__ = map.next_value::<::std::option::Option<_>>()?.map(any_signature::SignatureVariant::Ed25519)
 ;
                         }
                         GeneratedField::Secp256k1Ecdsa => {
-                            if signature__.is_some() {
+                            if signature_variant__.is_some() {
                                 return Err(serde::de::Error::duplicate_field("secp256k1Ecdsa"));
                             }
-                            signature__ = map.next_value::<::std::option::Option<_>>()?.map(any_signature::Signature::Secp256k1Ecdsa)
+                            signature_variant__ = map.next_value::<::std::option::Option<_>>()?.map(any_signature::SignatureVariant::Secp256k1Ecdsa)
 ;
                         }
                         GeneratedField::Webauthn => {
-                            if signature__.is_some() {
+                            if signature_variant__.is_some() {
                                 return Err(serde::de::Error::duplicate_field("webauthn"));
                             }
-                            signature__ = map.next_value::<::std::option::Option<_>>()?.map(any_signature::Signature::Webauthn)
+                            signature_variant__ = map.next_value::<::std::option::Option<_>>()?.map(any_signature::SignatureVariant::Webauthn)
 ;
                         }
-                        GeneratedField::Zkid => {
-                            if signature__.is_some() {
-                                return Err(serde::de::Error::duplicate_field("zkid"));
+                        GeneratedField::Keyless => {
+                            if signature_variant__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("keyless"));
                             }
-                            signature__ = map.next_value::<::std::option::Option<_>>()?.map(any_signature::Signature::Zkid)
+                            signature_variant__ = map.next_value::<::std::option::Option<_>>()?.map(any_signature::SignatureVariant::Keyless)
 ;
                         }
                     }
                 }
                 Ok(AnySignature {
                     r#type: r#type__.unwrap_or_default(),
-                    signature: signature__,
+                    signature: signature__.unwrap_or_default(),
+                    signature_variant: signature_variant__,
                 })
             }
         }
@@ -601,7 +621,7 @@ impl serde::Serialize for any_signature::Type {
             Self::Ed25519 => "TYPE_ED25519",
             Self::Secp256k1Ecdsa => "TYPE_SECP256K1_ECDSA",
             Self::Webauthn => "TYPE_WEBAUTHN",
-            Self::Zkid => "TYPE_ZKID",
+            Self::Keyless => "TYPE_KEYLESS",
         };
         serializer.serialize_str(variant)
     }
@@ -617,7 +637,7 @@ impl<'de> serde::Deserialize<'de> for any_signature::Type {
             "TYPE_ED25519",
             "TYPE_SECP256K1_ECDSA",
             "TYPE_WEBAUTHN",
-            "TYPE_ZKID",
+            "TYPE_KEYLESS",
         ];
 
         struct GeneratedVisitor;
@@ -664,7 +684,7 @@ impl<'de> serde::Deserialize<'de> for any_signature::Type {
                     "TYPE_ED25519" => Ok(any_signature::Type::Ed25519),
                     "TYPE_SECP256K1_ECDSA" => Ok(any_signature::Type::Secp256k1Ecdsa),
                     "TYPE_WEBAUTHN" => Ok(any_signature::Type::Webauthn),
-                    "TYPE_ZKID" => Ok(any_signature::Type::Zkid),
+                    "TYPE_KEYLESS" => Ok(any_signature::Type::Keyless),
                     _ => Err(serde::de::Error::unknown_variant(value, FIELDS)),
                 }
             }
@@ -817,6 +837,248 @@ impl<'de> serde::Deserialize<'de> for Block {
             }
         }
         deserializer.deserialize_struct("aptos.transaction.v1.Block", FIELDS, GeneratedVisitor)
+    }
+}
+impl serde::Serialize for BlockEndInfo {
+    #[allow(deprecated)]
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut len = 0;
+        if self.block_gas_limit_reached {
+            len += 1;
+        }
+        if self.block_output_limit_reached {
+            len += 1;
+        }
+        if self.block_effective_block_gas_units != 0 {
+            len += 1;
+        }
+        if self.block_approx_output_size != 0 {
+            len += 1;
+        }
+        let mut struct_ser = serializer.serialize_struct("aptos.transaction.v1.BlockEndInfo", len)?;
+        if self.block_gas_limit_reached {
+            struct_ser.serialize_field("blockGasLimitReached", &self.block_gas_limit_reached)?;
+        }
+        if self.block_output_limit_reached {
+            struct_ser.serialize_field("blockOutputLimitReached", &self.block_output_limit_reached)?;
+        }
+        if self.block_effective_block_gas_units != 0 {
+            struct_ser.serialize_field("blockEffectiveBlockGasUnits", ToString::to_string(&self.block_effective_block_gas_units).as_str())?;
+        }
+        if self.block_approx_output_size != 0 {
+            struct_ser.serialize_field("blockApproxOutputSize", ToString::to_string(&self.block_approx_output_size).as_str())?;
+        }
+        struct_ser.end()
+    }
+}
+impl<'de> serde::Deserialize<'de> for BlockEndInfo {
+    #[allow(deprecated)]
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        const FIELDS: &[&str] = &[
+            "block_gas_limit_reached",
+            "blockGasLimitReached",
+            "block_output_limit_reached",
+            "blockOutputLimitReached",
+            "block_effective_block_gas_units",
+            "blockEffectiveBlockGasUnits",
+            "block_approx_output_size",
+            "blockApproxOutputSize",
+        ];
+
+        #[allow(clippy::enum_variant_names)]
+        enum GeneratedField {
+            BlockGasLimitReached,
+            BlockOutputLimitReached,
+            BlockEffectiveBlockGasUnits,
+            BlockApproxOutputSize,
+        }
+        impl<'de> serde::Deserialize<'de> for GeneratedField {
+            fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                struct GeneratedVisitor;
+
+                impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+                    type Value = GeneratedField;
+
+                    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        write!(formatter, "expected one of: {:?}", &FIELDS)
+                    }
+
+                    #[allow(unused_variables)]
+                    fn visit_str<E>(self, value: &str) -> std::result::Result<GeneratedField, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        match value {
+                            "blockGasLimitReached" | "block_gas_limit_reached" => Ok(GeneratedField::BlockGasLimitReached),
+                            "blockOutputLimitReached" | "block_output_limit_reached" => Ok(GeneratedField::BlockOutputLimitReached),
+                            "blockEffectiveBlockGasUnits" | "block_effective_block_gas_units" => Ok(GeneratedField::BlockEffectiveBlockGasUnits),
+                            "blockApproxOutputSize" | "block_approx_output_size" => Ok(GeneratedField::BlockApproxOutputSize),
+                            _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
+                        }
+                    }
+                }
+                deserializer.deserialize_identifier(GeneratedVisitor)
+            }
+        }
+        struct GeneratedVisitor;
+        impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+            type Value = BlockEndInfo;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("struct aptos.transaction.v1.BlockEndInfo")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> std::result::Result<BlockEndInfo, V::Error>
+                where
+                    V: serde::de::MapAccess<'de>,
+            {
+                let mut block_gas_limit_reached__ = None;
+                let mut block_output_limit_reached__ = None;
+                let mut block_effective_block_gas_units__ = None;
+                let mut block_approx_output_size__ = None;
+                while let Some(k) = map.next_key()? {
+                    match k {
+                        GeneratedField::BlockGasLimitReached => {
+                            if block_gas_limit_reached__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("blockGasLimitReached"));
+                            }
+                            block_gas_limit_reached__ = Some(map.next_value()?);
+                        }
+                        GeneratedField::BlockOutputLimitReached => {
+                            if block_output_limit_reached__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("blockOutputLimitReached"));
+                            }
+                            block_output_limit_reached__ = Some(map.next_value()?);
+                        }
+                        GeneratedField::BlockEffectiveBlockGasUnits => {
+                            if block_effective_block_gas_units__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("blockEffectiveBlockGasUnits"));
+                            }
+                            block_effective_block_gas_units__ =
+                                Some(map.next_value::<::pbjson::private::NumberDeserialize<_>>()?.0)
+                            ;
+                        }
+                        GeneratedField::BlockApproxOutputSize => {
+                            if block_approx_output_size__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("blockApproxOutputSize"));
+                            }
+                            block_approx_output_size__ =
+                                Some(map.next_value::<::pbjson::private::NumberDeserialize<_>>()?.0)
+                            ;
+                        }
+                    }
+                }
+                Ok(BlockEndInfo {
+                    block_gas_limit_reached: block_gas_limit_reached__.unwrap_or_default(),
+                    block_output_limit_reached: block_output_limit_reached__.unwrap_or_default(),
+                    block_effective_block_gas_units: block_effective_block_gas_units__.unwrap_or_default(),
+                    block_approx_output_size: block_approx_output_size__.unwrap_or_default(),
+                })
+            }
+        }
+        deserializer.deserialize_struct("aptos.transaction.v1.BlockEndInfo", FIELDS, GeneratedVisitor)
+    }
+}
+impl serde::Serialize for BlockEpilogueTransaction {
+    #[allow(deprecated)]
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut len = 0;
+        if self.block_end_info.is_some() {
+            len += 1;
+        }
+        let mut struct_ser = serializer.serialize_struct("aptos.transaction.v1.BlockEpilogueTransaction", len)?;
+        if let Some(v) = self.block_end_info.as_ref() {
+            struct_ser.serialize_field("blockEndInfo", v)?;
+        }
+        struct_ser.end()
+    }
+}
+impl<'de> serde::Deserialize<'de> for BlockEpilogueTransaction {
+    #[allow(deprecated)]
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        const FIELDS: &[&str] = &[
+            "block_end_info",
+            "blockEndInfo",
+        ];
+
+        #[allow(clippy::enum_variant_names)]
+        enum GeneratedField {
+            BlockEndInfo,
+        }
+        impl<'de> serde::Deserialize<'de> for GeneratedField {
+            fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                struct GeneratedVisitor;
+
+                impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+                    type Value = GeneratedField;
+
+                    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        write!(formatter, "expected one of: {:?}", &FIELDS)
+                    }
+
+                    #[allow(unused_variables)]
+                    fn visit_str<E>(self, value: &str) -> std::result::Result<GeneratedField, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        match value {
+                            "blockEndInfo" | "block_end_info" => Ok(GeneratedField::BlockEndInfo),
+                            _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
+                        }
+                    }
+                }
+                deserializer.deserialize_identifier(GeneratedVisitor)
+            }
+        }
+        struct GeneratedVisitor;
+        impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+            type Value = BlockEpilogueTransaction;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("struct aptos.transaction.v1.BlockEpilogueTransaction")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> std::result::Result<BlockEpilogueTransaction, V::Error>
+                where
+                    V: serde::de::MapAccess<'de>,
+            {
+                let mut block_end_info__ = None;
+                while let Some(k) = map.next_key()? {
+                    match k {
+                        GeneratedField::BlockEndInfo => {
+                            if block_end_info__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("blockEndInfo"));
+                            }
+                            block_end_info__ = map.next_value()?;
+                        }
+                    }
+                }
+                Ok(BlockEpilogueTransaction {
+                    block_end_info: block_end_info__,
+                })
+            }
+        }
+        deserializer.deserialize_struct("aptos.transaction.v1.BlockEpilogueTransaction", FIELDS, GeneratedVisitor)
     }
 }
 impl serde::Serialize for BlockMetadataTransaction {
@@ -2374,6 +2636,120 @@ impl<'de> serde::Deserialize<'de> for EventKey {
         deserializer.deserialize_struct("aptos.transaction.v1.EventKey", FIELDS, GeneratedVisitor)
     }
 }
+impl serde::Serialize for EventSizeInfo {
+    #[allow(deprecated)]
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut len = 0;
+        if self.type_tag_bytes != 0 {
+            len += 1;
+        }
+        if self.total_bytes != 0 {
+            len += 1;
+        }
+        let mut struct_ser = serializer.serialize_struct("aptos.transaction.v1.EventSizeInfo", len)?;
+        if self.type_tag_bytes != 0 {
+            struct_ser.serialize_field("typeTagBytes", &self.type_tag_bytes)?;
+        }
+        if self.total_bytes != 0 {
+            struct_ser.serialize_field("totalBytes", &self.total_bytes)?;
+        }
+        struct_ser.end()
+    }
+}
+impl<'de> serde::Deserialize<'de> for EventSizeInfo {
+    #[allow(deprecated)]
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        const FIELDS: &[&str] = &[
+            "type_tag_bytes",
+            "typeTagBytes",
+            "total_bytes",
+            "totalBytes",
+        ];
+
+        #[allow(clippy::enum_variant_names)]
+        enum GeneratedField {
+            TypeTagBytes,
+            TotalBytes,
+        }
+        impl<'de> serde::Deserialize<'de> for GeneratedField {
+            fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                struct GeneratedVisitor;
+
+                impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+                    type Value = GeneratedField;
+
+                    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        write!(formatter, "expected one of: {:?}", &FIELDS)
+                    }
+
+                    #[allow(unused_variables)]
+                    fn visit_str<E>(self, value: &str) -> std::result::Result<GeneratedField, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        match value {
+                            "typeTagBytes" | "type_tag_bytes" => Ok(GeneratedField::TypeTagBytes),
+                            "totalBytes" | "total_bytes" => Ok(GeneratedField::TotalBytes),
+                            _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
+                        }
+                    }
+                }
+                deserializer.deserialize_identifier(GeneratedVisitor)
+            }
+        }
+        struct GeneratedVisitor;
+        impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+            type Value = EventSizeInfo;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("struct aptos.transaction.v1.EventSizeInfo")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> std::result::Result<EventSizeInfo, V::Error>
+                where
+                    V: serde::de::MapAccess<'de>,
+            {
+                let mut type_tag_bytes__ = None;
+                let mut total_bytes__ = None;
+                while let Some(k) = map.next_key()? {
+                    match k {
+                        GeneratedField::TypeTagBytes => {
+                            if type_tag_bytes__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("typeTagBytes"));
+                            }
+                            type_tag_bytes__ =
+                                Some(map.next_value::<::pbjson::private::NumberDeserialize<_>>()?.0)
+                            ;
+                        }
+                        GeneratedField::TotalBytes => {
+                            if total_bytes__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("totalBytes"));
+                            }
+                            total_bytes__ =
+                                Some(map.next_value::<::pbjson::private::NumberDeserialize<_>>()?.0)
+                            ;
+                        }
+                    }
+                }
+                Ok(EventSizeInfo {
+                    type_tag_bytes: type_tag_bytes__.unwrap_or_default(),
+                    total_bytes: total_bytes__.unwrap_or_default(),
+                })
+            }
+        }
+        deserializer.deserialize_struct("aptos.transaction.v1.EventSizeInfo", FIELDS, GeneratedVisitor)
+    }
+}
 impl serde::Serialize for FeePayerSignature {
     #[allow(deprecated)]
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
@@ -2755,7 +3131,7 @@ impl<'de> serde::Deserialize<'de> for IndexedSignature {
         deserializer.deserialize_struct("aptos.transaction.v1.IndexedSignature", FIELDS, GeneratedVisitor)
     }
 }
-impl serde::Serialize for ModuleBundlePayload {
+impl serde::Serialize for Keyless {
     #[allow(deprecated)]
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
@@ -2763,29 +3139,29 @@ impl serde::Serialize for ModuleBundlePayload {
     {
         use serde::ser::SerializeStruct;
         let mut len = 0;
-        if !self.modules.is_empty() {
+        if !self.signature.is_empty() {
             len += 1;
         }
-        let mut struct_ser = serializer.serialize_struct("aptos.transaction.v1.ModuleBundlePayload", len)?;
-        if !self.modules.is_empty() {
-            struct_ser.serialize_field("modules", &self.modules)?;
+        let mut struct_ser = serializer.serialize_struct("aptos.transaction.v1.Keyless", len)?;
+        if !self.signature.is_empty() {
+            struct_ser.serialize_field("signature", pbjson::private::base64::encode(&self.signature).as_str())?;
         }
         struct_ser.end()
     }
 }
-impl<'de> serde::Deserialize<'de> for ModuleBundlePayload {
+impl<'de> serde::Deserialize<'de> for Keyless {
     #[allow(deprecated)]
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         const FIELDS: &[&str] = &[
-            "modules",
+            "signature",
         ];
 
         #[allow(clippy::enum_variant_names)]
         enum GeneratedField {
-            Modules,
+            Signature,
         }
         impl<'de> serde::Deserialize<'de> for GeneratedField {
             fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
@@ -2807,7 +3183,7 @@ impl<'de> serde::Deserialize<'de> for ModuleBundlePayload {
                         E: serde::de::Error,
                     {
                         match value {
-                            "modules" => Ok(GeneratedField::Modules),
+                            "signature" => Ok(GeneratedField::Signature),
                             _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
                         }
                     }
@@ -2817,33 +3193,35 @@ impl<'de> serde::Deserialize<'de> for ModuleBundlePayload {
         }
         struct GeneratedVisitor;
         impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
-            type Value = ModuleBundlePayload;
+            type Value = Keyless;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                formatter.write_str("struct aptos.transaction.v1.ModuleBundlePayload")
+                formatter.write_str("struct aptos.transaction.v1.Keyless")
             }
 
-            fn visit_map<V>(self, mut map: V) -> std::result::Result<ModuleBundlePayload, V::Error>
+            fn visit_map<V>(self, mut map: V) -> std::result::Result<Keyless, V::Error>
                 where
                     V: serde::de::MapAccess<'de>,
             {
-                let mut modules__ = None;
+                let mut signature__ = None;
                 while let Some(k) = map.next_key()? {
                     match k {
-                        GeneratedField::Modules => {
-                            if modules__.is_some() {
-                                return Err(serde::de::Error::duplicate_field("modules"));
+                        GeneratedField::Signature => {
+                            if signature__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("signature"));
                             }
-                            modules__ = Some(map.next_value()?);
+                            signature__ =
+                                Some(map.next_value::<::pbjson::private::BytesDeserialize<_>>()?.0)
+                            ;
                         }
                     }
                 }
-                Ok(ModuleBundlePayload {
-                    modules: modules__.unwrap_or_default(),
+                Ok(Keyless {
+                    signature: signature__.unwrap_or_default(),
                 })
             }
         }
-        deserializer.deserialize_struct("aptos.transaction.v1.ModuleBundlePayload", FIELDS, GeneratedVisitor)
+        deserializer.deserialize_struct("aptos.transaction.v1.Keyless", FIELDS, GeneratedVisitor)
     }
 }
 impl serde::Serialize for MoveAbility {
@@ -6276,6 +6654,9 @@ impl serde::Serialize for Transaction {
         if self.r#type != 0 {
             len += 1;
         }
+        if self.size_info.is_some() {
+            len += 1;
+        }
         if self.txn_data.is_some() {
             len += 1;
         }
@@ -6300,6 +6681,9 @@ impl serde::Serialize for Transaction {
                 .ok_or_else(|| serde::ser::Error::custom(format!("Invalid variant {}", self.r#type)))?;
             struct_ser.serialize_field("type", &v)?;
         }
+        if let Some(v) = self.size_info.as_ref() {
+            struct_ser.serialize_field("sizeInfo", v)?;
+        }
         if let Some(v) = self.txn_data.as_ref() {
             match v {
                 transaction::TxnData::BlockMetadata(v) => {
@@ -6316,6 +6700,9 @@ impl serde::Serialize for Transaction {
                 }
                 transaction::TxnData::Validator(v) => {
                     struct_ser.serialize_field("validator", v)?;
+                }
+                transaction::TxnData::BlockEpilogue(v) => {
+                    struct_ser.serialize_field("blockEpilogue", v)?;
                 }
             }
         }
@@ -6336,6 +6723,8 @@ impl<'de> serde::Deserialize<'de> for Transaction {
             "block_height",
             "blockHeight",
             "type",
+            "size_info",
+            "sizeInfo",
             "block_metadata",
             "blockMetadata",
             "genesis",
@@ -6343,6 +6732,8 @@ impl<'de> serde::Deserialize<'de> for Transaction {
             "stateCheckpoint",
             "user",
             "validator",
+            "block_epilogue",
+            "blockEpilogue",
         ];
 
         #[allow(clippy::enum_variant_names)]
@@ -6353,11 +6744,13 @@ impl<'de> serde::Deserialize<'de> for Transaction {
             Epoch,
             BlockHeight,
             Type,
+            SizeInfo,
             BlockMetadata,
             Genesis,
             StateCheckpoint,
             User,
             Validator,
+            BlockEpilogue,
         }
         impl<'de> serde::Deserialize<'de> for GeneratedField {
             fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
@@ -6385,11 +6778,13 @@ impl<'de> serde::Deserialize<'de> for Transaction {
                             "epoch" => Ok(GeneratedField::Epoch),
                             "blockHeight" | "block_height" => Ok(GeneratedField::BlockHeight),
                             "type" => Ok(GeneratedField::Type),
+                            "sizeInfo" | "size_info" => Ok(GeneratedField::SizeInfo),
                             "blockMetadata" | "block_metadata" => Ok(GeneratedField::BlockMetadata),
                             "genesis" => Ok(GeneratedField::Genesis),
                             "stateCheckpoint" | "state_checkpoint" => Ok(GeneratedField::StateCheckpoint),
                             "user" => Ok(GeneratedField::User),
                             "validator" => Ok(GeneratedField::Validator),
+                            "blockEpilogue" | "block_epilogue" => Ok(GeneratedField::BlockEpilogue),
                             _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
                         }
                     }
@@ -6415,6 +6810,7 @@ impl<'de> serde::Deserialize<'de> for Transaction {
                 let mut epoch__ = None;
                 let mut block_height__ = None;
                 let mut r#type__ = None;
+                let mut size_info__ = None;
                 let mut txn_data__ = None;
                 while let Some(k) = map.next_key()? {
                     match k {
@@ -6460,6 +6856,12 @@ impl<'de> serde::Deserialize<'de> for Transaction {
                             }
                             r#type__ = Some(map.next_value::<transaction::TransactionType>()? as i32);
                         }
+                        GeneratedField::SizeInfo => {
+                            if size_info__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("sizeInfo"));
+                            }
+                            size_info__ = map.next_value()?;
+                        }
                         GeneratedField::BlockMetadata => {
                             if txn_data__.is_some() {
                                 return Err(serde::de::Error::duplicate_field("blockMetadata"));
@@ -6495,6 +6897,13 @@ impl<'de> serde::Deserialize<'de> for Transaction {
                             txn_data__ = map.next_value::<::std::option::Option<_>>()?.map(transaction::TxnData::Validator)
 ;
                         }
+                        GeneratedField::BlockEpilogue => {
+                            if txn_data__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("blockEpilogue"));
+                            }
+                            txn_data__ = map.next_value::<::std::option::Option<_>>()?.map(transaction::TxnData::BlockEpilogue)
+;
+                        }
                     }
                 }
                 Ok(Transaction {
@@ -6504,6 +6913,7 @@ impl<'de> serde::Deserialize<'de> for Transaction {
                     epoch: epoch__.unwrap_or_default(),
                     block_height: block_height__.unwrap_or_default(),
                     r#type: r#type__.unwrap_or_default(),
+                    size_info: size_info__,
                     txn_data: txn_data__,
                 })
             }
@@ -6524,6 +6934,7 @@ impl serde::Serialize for transaction::TransactionType {
             Self::StateCheckpoint => "TRANSACTION_TYPE_STATE_CHECKPOINT",
             Self::User => "TRANSACTION_TYPE_USER",
             Self::Validator => "TRANSACTION_TYPE_VALIDATOR",
+            Self::BlockEpilogue => "TRANSACTION_TYPE_BLOCK_EPILOGUE",
         };
         serializer.serialize_str(variant)
     }
@@ -6541,6 +6952,7 @@ impl<'de> serde::Deserialize<'de> for transaction::TransactionType {
             "TRANSACTION_TYPE_STATE_CHECKPOINT",
             "TRANSACTION_TYPE_USER",
             "TRANSACTION_TYPE_VALIDATOR",
+            "TRANSACTION_TYPE_BLOCK_EPILOGUE",
         ];
 
         struct GeneratedVisitor;
@@ -6589,6 +7001,7 @@ impl<'de> serde::Deserialize<'de> for transaction::TransactionType {
                     "TRANSACTION_TYPE_STATE_CHECKPOINT" => Ok(transaction::TransactionType::StateCheckpoint),
                     "TRANSACTION_TYPE_USER" => Ok(transaction::TransactionType::User),
                     "TRANSACTION_TYPE_VALIDATOR" => Ok(transaction::TransactionType::Validator),
+                    "TRANSACTION_TYPE_BLOCK_EPILOGUE" => Ok(transaction::TransactionType::BlockEpilogue),
                     _ => Err(serde::de::Error::unknown_variant(value, FIELDS)),
                 }
             }
@@ -6869,9 +7282,6 @@ impl serde::Serialize for TransactionPayload {
                 transaction_payload::Payload::ScriptPayload(v) => {
                     struct_ser.serialize_field("scriptPayload", v)?;
                 }
-                transaction_payload::Payload::ModuleBundlePayload(v) => {
-                    struct_ser.serialize_field("moduleBundlePayload", v)?;
-                }
                 transaction_payload::Payload::WriteSetPayload(v) => {
                     struct_ser.serialize_field("writeSetPayload", v)?;
                 }
@@ -6895,8 +7305,6 @@ impl<'de> serde::Deserialize<'de> for TransactionPayload {
             "entryFunctionPayload",
             "script_payload",
             "scriptPayload",
-            "module_bundle_payload",
-            "moduleBundlePayload",
             "write_set_payload",
             "writeSetPayload",
             "multisig_payload",
@@ -6908,7 +7316,6 @@ impl<'de> serde::Deserialize<'de> for TransactionPayload {
             Type,
             EntryFunctionPayload,
             ScriptPayload,
-            ModuleBundlePayload,
             WriteSetPayload,
             MultisigPayload,
         }
@@ -6935,7 +7342,6 @@ impl<'de> serde::Deserialize<'de> for TransactionPayload {
                             "type" => Ok(GeneratedField::Type),
                             "entryFunctionPayload" | "entry_function_payload" => Ok(GeneratedField::EntryFunctionPayload),
                             "scriptPayload" | "script_payload" => Ok(GeneratedField::ScriptPayload),
-                            "moduleBundlePayload" | "module_bundle_payload" => Ok(GeneratedField::ModuleBundlePayload),
                             "writeSetPayload" | "write_set_payload" => Ok(GeneratedField::WriteSetPayload),
                             "multisigPayload" | "multisig_payload" => Ok(GeneratedField::MultisigPayload),
                             _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
@@ -6981,13 +7387,6 @@ impl<'de> serde::Deserialize<'de> for TransactionPayload {
                             payload__ = map.next_value::<::std::option::Option<_>>()?.map(transaction_payload::Payload::ScriptPayload)
 ;
                         }
-                        GeneratedField::ModuleBundlePayload => {
-                            if payload__.is_some() {
-                                return Err(serde::de::Error::duplicate_field("moduleBundlePayload"));
-                            }
-                            payload__ = map.next_value::<::std::option::Option<_>>()?.map(transaction_payload::Payload::ModuleBundlePayload)
-;
-                        }
                         GeneratedField::WriteSetPayload => {
                             if payload__.is_some() {
                                 return Err(serde::de::Error::duplicate_field("writeSetPayload"));
@@ -7023,7 +7422,6 @@ impl serde::Serialize for transaction_payload::Type {
             Self::Unspecified => "TYPE_UNSPECIFIED",
             Self::EntryFunctionPayload => "TYPE_ENTRY_FUNCTION_PAYLOAD",
             Self::ScriptPayload => "TYPE_SCRIPT_PAYLOAD",
-            Self::ModuleBundlePayload => "TYPE_MODULE_BUNDLE_PAYLOAD",
             Self::WriteSetPayload => "TYPE_WRITE_SET_PAYLOAD",
             Self::MultisigPayload => "TYPE_MULTISIG_PAYLOAD",
         };
@@ -7040,7 +7438,6 @@ impl<'de> serde::Deserialize<'de> for transaction_payload::Type {
             "TYPE_UNSPECIFIED",
             "TYPE_ENTRY_FUNCTION_PAYLOAD",
             "TYPE_SCRIPT_PAYLOAD",
-            "TYPE_MODULE_BUNDLE_PAYLOAD",
             "TYPE_WRITE_SET_PAYLOAD",
             "TYPE_MULTISIG_PAYLOAD",
         ];
@@ -7088,7 +7485,6 @@ impl<'de> serde::Deserialize<'de> for transaction_payload::Type {
                     "TYPE_UNSPECIFIED" => Ok(transaction_payload::Type::Unspecified),
                     "TYPE_ENTRY_FUNCTION_PAYLOAD" => Ok(transaction_payload::Type::EntryFunctionPayload),
                     "TYPE_SCRIPT_PAYLOAD" => Ok(transaction_payload::Type::ScriptPayload),
-                    "TYPE_MODULE_BUNDLE_PAYLOAD" => Ok(transaction_payload::Type::ModuleBundlePayload),
                     "TYPE_WRITE_SET_PAYLOAD" => Ok(transaction_payload::Type::WriteSetPayload),
                     "TYPE_MULTISIG_PAYLOAD" => Ok(transaction_payload::Type::MultisigPayload),
                     _ => Err(serde::de::Error::unknown_variant(value, FIELDS)),
@@ -7096,6 +7492,136 @@ impl<'de> serde::Deserialize<'de> for transaction_payload::Type {
             }
         }
         deserializer.deserialize_any(GeneratedVisitor)
+    }
+}
+impl serde::Serialize for TransactionSizeInfo {
+    #[allow(deprecated)]
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut len = 0;
+        if self.transaction_bytes != 0 {
+            len += 1;
+        }
+        if !self.event_size_info.is_empty() {
+            len += 1;
+        }
+        if !self.write_op_size_info.is_empty() {
+            len += 1;
+        }
+        let mut struct_ser = serializer.serialize_struct("aptos.transaction.v1.TransactionSizeInfo", len)?;
+        if self.transaction_bytes != 0 {
+            struct_ser.serialize_field("transactionBytes", &self.transaction_bytes)?;
+        }
+        if !self.event_size_info.is_empty() {
+            struct_ser.serialize_field("eventSizeInfo", &self.event_size_info)?;
+        }
+        if !self.write_op_size_info.is_empty() {
+            struct_ser.serialize_field("writeOpSizeInfo", &self.write_op_size_info)?;
+        }
+        struct_ser.end()
+    }
+}
+impl<'de> serde::Deserialize<'de> for TransactionSizeInfo {
+    #[allow(deprecated)]
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        const FIELDS: &[&str] = &[
+            "transaction_bytes",
+            "transactionBytes",
+            "event_size_info",
+            "eventSizeInfo",
+            "write_op_size_info",
+            "writeOpSizeInfo",
+        ];
+
+        #[allow(clippy::enum_variant_names)]
+        enum GeneratedField {
+            TransactionBytes,
+            EventSizeInfo,
+            WriteOpSizeInfo,
+        }
+        impl<'de> serde::Deserialize<'de> for GeneratedField {
+            fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                struct GeneratedVisitor;
+
+                impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+                    type Value = GeneratedField;
+
+                    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        write!(formatter, "expected one of: {:?}", &FIELDS)
+                    }
+
+                    #[allow(unused_variables)]
+                    fn visit_str<E>(self, value: &str) -> std::result::Result<GeneratedField, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        match value {
+                            "transactionBytes" | "transaction_bytes" => Ok(GeneratedField::TransactionBytes),
+                            "eventSizeInfo" | "event_size_info" => Ok(GeneratedField::EventSizeInfo),
+                            "writeOpSizeInfo" | "write_op_size_info" => Ok(GeneratedField::WriteOpSizeInfo),
+                            _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
+                        }
+                    }
+                }
+                deserializer.deserialize_identifier(GeneratedVisitor)
+            }
+        }
+        struct GeneratedVisitor;
+        impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+            type Value = TransactionSizeInfo;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("struct aptos.transaction.v1.TransactionSizeInfo")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> std::result::Result<TransactionSizeInfo, V::Error>
+                where
+                    V: serde::de::MapAccess<'de>,
+            {
+                let mut transaction_bytes__ = None;
+                let mut event_size_info__ = None;
+                let mut write_op_size_info__ = None;
+                while let Some(k) = map.next_key()? {
+                    match k {
+                        GeneratedField::TransactionBytes => {
+                            if transaction_bytes__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("transactionBytes"));
+                            }
+                            transaction_bytes__ =
+                                Some(map.next_value::<::pbjson::private::NumberDeserialize<_>>()?.0)
+                            ;
+                        }
+                        GeneratedField::EventSizeInfo => {
+                            if event_size_info__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("eventSizeInfo"));
+                            }
+                            event_size_info__ = Some(map.next_value()?);
+                        }
+                        GeneratedField::WriteOpSizeInfo => {
+                            if write_op_size_info__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("writeOpSizeInfo"));
+                            }
+                            write_op_size_info__ = Some(map.next_value()?);
+                        }
+                    }
+                }
+                Ok(TransactionSizeInfo {
+                    transaction_bytes: transaction_bytes__.unwrap_or_default(),
+                    event_size_info: event_size_info__.unwrap_or_default(),
+                    write_op_size_info: write_op_size_info__.unwrap_or_default(),
+                })
+            }
+        }
+        deserializer.deserialize_struct("aptos.transaction.v1.TransactionSizeInfo", FIELDS, GeneratedVisitor)
     }
 }
 impl serde::Serialize for UserTransaction {
@@ -7699,6 +8225,120 @@ impl<'de> serde::Deserialize<'de> for WriteModule {
             }
         }
         deserializer.deserialize_struct("aptos.transaction.v1.WriteModule", FIELDS, GeneratedVisitor)
+    }
+}
+impl serde::Serialize for WriteOpSizeInfo {
+    #[allow(deprecated)]
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut len = 0;
+        if self.key_bytes != 0 {
+            len += 1;
+        }
+        if self.value_bytes != 0 {
+            len += 1;
+        }
+        let mut struct_ser = serializer.serialize_struct("aptos.transaction.v1.WriteOpSizeInfo", len)?;
+        if self.key_bytes != 0 {
+            struct_ser.serialize_field("keyBytes", &self.key_bytes)?;
+        }
+        if self.value_bytes != 0 {
+            struct_ser.serialize_field("valueBytes", &self.value_bytes)?;
+        }
+        struct_ser.end()
+    }
+}
+impl<'de> serde::Deserialize<'de> for WriteOpSizeInfo {
+    #[allow(deprecated)]
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        const FIELDS: &[&str] = &[
+            "key_bytes",
+            "keyBytes",
+            "value_bytes",
+            "valueBytes",
+        ];
+
+        #[allow(clippy::enum_variant_names)]
+        enum GeneratedField {
+            KeyBytes,
+            ValueBytes,
+        }
+        impl<'de> serde::Deserialize<'de> for GeneratedField {
+            fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                struct GeneratedVisitor;
+
+                impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+                    type Value = GeneratedField;
+
+                    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        write!(formatter, "expected one of: {:?}", &FIELDS)
+                    }
+
+                    #[allow(unused_variables)]
+                    fn visit_str<E>(self, value: &str) -> std::result::Result<GeneratedField, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        match value {
+                            "keyBytes" | "key_bytes" => Ok(GeneratedField::KeyBytes),
+                            "valueBytes" | "value_bytes" => Ok(GeneratedField::ValueBytes),
+                            _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
+                        }
+                    }
+                }
+                deserializer.deserialize_identifier(GeneratedVisitor)
+            }
+        }
+        struct GeneratedVisitor;
+        impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+            type Value = WriteOpSizeInfo;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("struct aptos.transaction.v1.WriteOpSizeInfo")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> std::result::Result<WriteOpSizeInfo, V::Error>
+                where
+                    V: serde::de::MapAccess<'de>,
+            {
+                let mut key_bytes__ = None;
+                let mut value_bytes__ = None;
+                while let Some(k) = map.next_key()? {
+                    match k {
+                        GeneratedField::KeyBytes => {
+                            if key_bytes__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("keyBytes"));
+                            }
+                            key_bytes__ =
+                                Some(map.next_value::<::pbjson::private::NumberDeserialize<_>>()?.0)
+                            ;
+                        }
+                        GeneratedField::ValueBytes => {
+                            if value_bytes__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("valueBytes"));
+                            }
+                            value_bytes__ =
+                                Some(map.next_value::<::pbjson::private::NumberDeserialize<_>>()?.0)
+                            ;
+                        }
+                    }
+                }
+                Ok(WriteOpSizeInfo {
+                    key_bytes: key_bytes__.unwrap_or_default(),
+                    value_bytes: value_bytes__.unwrap_or_default(),
+                })
+            }
+        }
+        deserializer.deserialize_struct("aptos.transaction.v1.WriteOpSizeInfo", FIELDS, GeneratedVisitor)
     }
 }
 impl serde::Serialize for WriteResource {
@@ -8724,98 +9364,5 @@ impl<'de> serde::Deserialize<'de> for WriteTableItem {
             }
         }
         deserializer.deserialize_struct("aptos.transaction.v1.WriteTableItem", FIELDS, GeneratedVisitor)
-    }
-}
-impl serde::Serialize for ZkId {
-    #[allow(deprecated)]
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeStruct;
-        let mut len = 0;
-        if !self.signature.is_empty() {
-            len += 1;
-        }
-        let mut struct_ser = serializer.serialize_struct("aptos.transaction.v1.ZkId", len)?;
-        if !self.signature.is_empty() {
-            struct_ser.serialize_field("signature", pbjson::private::base64::encode(&self.signature).as_str())?;
-        }
-        struct_ser.end()
-    }
-}
-impl<'de> serde::Deserialize<'de> for ZkId {
-    #[allow(deprecated)]
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        const FIELDS: &[&str] = &[
-            "signature",
-        ];
-
-        #[allow(clippy::enum_variant_names)]
-        enum GeneratedField {
-            Signature,
-        }
-        impl<'de> serde::Deserialize<'de> for GeneratedField {
-            fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
-            where
-                D: serde::Deserializer<'de>,
-            {
-                struct GeneratedVisitor;
-
-                impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
-                    type Value = GeneratedField;
-
-                    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                        write!(formatter, "expected one of: {:?}", &FIELDS)
-                    }
-
-                    #[allow(unused_variables)]
-                    fn visit_str<E>(self, value: &str) -> std::result::Result<GeneratedField, E>
-                    where
-                        E: serde::de::Error,
-                    {
-                        match value {
-                            "signature" => Ok(GeneratedField::Signature),
-                            _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
-                        }
-                    }
-                }
-                deserializer.deserialize_identifier(GeneratedVisitor)
-            }
-        }
-        struct GeneratedVisitor;
-        impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
-            type Value = ZkId;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                formatter.write_str("struct aptos.transaction.v1.ZkId")
-            }
-
-            fn visit_map<V>(self, mut map: V) -> std::result::Result<ZkId, V::Error>
-                where
-                    V: serde::de::MapAccess<'de>,
-            {
-                let mut signature__ = None;
-                while let Some(k) = map.next_key()? {
-                    match k {
-                        GeneratedField::Signature => {
-                            if signature__.is_some() {
-                                return Err(serde::de::Error::duplicate_field("signature"));
-                            }
-                            signature__ =
-                                Some(map.next_value::<::pbjson::private::BytesDeserialize<_>>()?.0)
-                            ;
-                        }
-                    }
-                }
-                Ok(ZkId {
-                    signature: signature__.unwrap_or_default(),
-                })
-            }
-        }
-        deserializer.deserialize_struct("aptos.transaction.v1.ZkId", FIELDS, GeneratedVisitor)
     }
 }

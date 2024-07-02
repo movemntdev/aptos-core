@@ -13,7 +13,9 @@ use aptos_sdk::{
 };
 use args::TransactionTypeArg;
 use async_trait::async_trait;
+use clap::{Parser, ValueEnum};
 use rand::{rngs::StdRng, seq::SliceRandom, Rng};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     sync::{
@@ -27,6 +29,7 @@ mod account_generator;
 mod accounts_pool_wrapper;
 pub mod args;
 mod batch_transfer;
+mod bounded_batch_wrapper;
 mod call_custom_modules;
 mod entry_points;
 mod p2p_transaction_generator;
@@ -81,18 +84,39 @@ pub enum TransactionType {
         workflow_kind: WorkflowKind,
         num_modules: usize,
         use_account_pool: bool,
-        move_stages_by_phase: bool,
+        progress_type: WorkflowProgress,
     },
+}
+
+#[derive(Debug, Copy, Clone, ValueEnum, Default, Deserialize, Parser, Serialize)]
+pub enum AccountType {
+    #[default]
+    Local,
+    Keyless,
 }
 
 #[derive(Debug, Copy, Clone)]
 pub enum WorkflowKind {
-    CreateThenMint { count: usize, creation_balance: u64 },
+    CreateMintBurn { count: usize, creation_balance: u64 },
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum WorkflowProgress {
+    MoveByPhases,
+    WhenDone { delay_between_stages_s: u64 },
+}
+
+impl WorkflowProgress {
+    pub fn when_done_default() -> Self {
+        Self::WhenDone {
+            delay_between_stages_s: 10,
+        }
+    }
 }
 
 impl Default for TransactionType {
     fn default() -> Self {
-        TransactionTypeArg::CoinTransfer.materialize(1, false)
+        TransactionTypeArg::CoinTransfer.materialize_default()
     }
 }
 
@@ -185,9 +209,34 @@ impl CounterState {
     }
 }
 
+#[async_trait::async_trait]
+pub trait RootAccountHandle: Send + Sync {
+    async fn approve_funds(&self, amount: u64, reason: &str);
+
+    fn get_root_account(&self) -> Arc<LocalAccount>;
+}
+
+pub struct AlwaysApproveRootAccountHandle {
+    pub root_account: Arc<LocalAccount>,
+}
+
+#[async_trait::async_trait]
+impl RootAccountHandle for AlwaysApproveRootAccountHandle {
+    async fn approve_funds(&self, amount: u64, reason: &str) {
+        println!(
+            "Consuming funds from root/source account: up to {} for {}",
+            amount, reason
+        );
+    }
+
+    fn get_root_account(&self) -> Arc<LocalAccount> {
+        self.root_account.clone()
+    }
+}
+
 pub async fn create_txn_generator_creator(
     transaction_mix_per_phase: &[Vec<(TransactionType, usize)>],
-    root_account: &mut LocalAccount,
+    root_account: impl RootAccountHandle,
     source_accounts: &mut [LocalAccount],
     initial_burner_accounts: Vec<LocalAccount>,
     txn_executor: &dyn ReliableTransactionSubmitter,
@@ -293,7 +342,7 @@ pub async fn create_txn_generator_creator(
                         CustomModulesDelegationGeneratorCreator::new(
                             txn_factory.clone(),
                             init_txn_factory.clone(),
-                            root_account,
+                            &root_account,
                             txn_executor,
                             *num_modules,
                             entry_point.package_name(),
@@ -318,17 +367,18 @@ pub async fn create_txn_generator_creator(
                     num_modules,
                     use_account_pool,
                     workflow_kind,
-                    move_stages_by_phase,
+                    progress_type,
                 } => Box::new(
                     WorkflowTxnGeneratorCreator::create_workload(
                         *workflow_kind,
                         txn_factory.clone(),
                         init_txn_factory.clone(),
-                        root_account,
+                        &root_account,
                         txn_executor,
                         *num_modules,
                         use_account_pool.then(|| accounts_pool.clone()),
-                        move_stages_by_phase.then(|| cur_phase.clone()),
+                        cur_phase.clone(),
+                        *progress_type,
                     )
                     .await,
                 ),

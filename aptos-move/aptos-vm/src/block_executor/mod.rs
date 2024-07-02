@@ -10,7 +10,6 @@ use crate::{
 };
 use aptos_aggregator::{
     delayed_change::DelayedChange, delta_change_set::DeltaOp, resolver::TAggregatorV1View,
-    types::DelayedFieldID,
 };
 use aptos_block_executor::{
     errors::BlockExecutionError, executor::BlockExecutor,
@@ -21,9 +20,10 @@ use aptos_infallible::Mutex;
 use aptos_types::{
     block_executor::config::BlockExecutorConfig,
     contract_event::ContractEvent,
+    delayed_fields::PanicError,
     executable::ExecutableTestType,
     fee_statement::FeeStatement,
-    state_store::{state_key::StateKey, StateView, StateViewId},
+    state_store::{state_key::StateKey, state_value::StateValueMetadata, StateView, StateViewId},
     transaction::{
         signature_verified_transaction::SignatureVerifiedTransaction, BlockOutput,
         TransactionOutput, TransactionStatus,
@@ -31,14 +31,31 @@ use aptos_types::{
     write_set::WriteOp,
 };
 use aptos_vm_logging::{flush_speculative_logs, init_speculative_logs};
-use aptos_vm_types::{abstract_write_op::AbstractResourceWriteOp, output::VMOutput};
-use move_core_types::{language_storage::StructTag, value::MoveTypeLayout, vm_status::VMStatus};
-use once_cell::sync::OnceCell;
+use aptos_vm_types::{
+    abstract_write_op::AbstractResourceWriteOp, environment::Environment, output::VMOutput,
+};
+use move_core_types::{
+    language_storage::StructTag,
+    value::MoveTypeLayout,
+    vm_status::{StatusCode, VMStatus},
+};
+use move_vm_types::delayed_values::delayed_field_id::DelayedFieldID;
+use once_cell::sync::{Lazy, OnceCell};
 use rayon::ThreadPool;
 use std::{
     collections::{BTreeMap, HashSet},
     sync::Arc,
 };
+
+pub static RAYON_EXEC_POOL: Lazy<Arc<rayon::ThreadPool>> = Lazy::new(|| {
+    Arc::new(
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(num_cpus::get())
+            .thread_name(|index| format!("par_exec-{}", index))
+            .build()
+            .unwrap(),
+    )
+});
 
 /// Output type wrapper used by block executor. VM output is stored first, then
 /// transformed into TransactionOutput type that is returned.
@@ -85,6 +102,12 @@ impl BlockExecutorTransactionOutput for AptosTransactionOutput {
     /// problem creating the output (e.g. group serialization issue).
     fn skip_output() -> Self {
         Self::new(VMOutput::empty_with_status(TransactionStatus::Retry))
+    }
+
+    fn discard_output(discard_code: StatusCode) -> Self {
+        Self::new(VMOutput::empty_with_status(TransactionStatus::Discard(
+            discard_code,
+        )))
     }
 
     // TODO: get rid of the cloning data-structures in the following APIs.
@@ -144,7 +167,7 @@ impl BlockExecutorTransactionOutput for AptosTransactionOutput {
     }
 
     /// Should never be called after incorporating materialized output, as that consumes vm_output.
-    fn resource_write_set(&self) -> Vec<(StateKey, (WriteOp, Option<Arc<MoveTypeLayout>>))> {
+    fn resource_write_set(&self) -> Vec<(StateKey, Arc<WriteOp>, Option<Arc<MoveTypeLayout>>)> {
         self.vm_output
             .lock()
             .as_ref()
@@ -154,11 +177,12 @@ impl BlockExecutorTransactionOutput for AptosTransactionOutput {
             .iter()
             .flat_map(|(key, write)| match write {
                 AbstractResourceWriteOp::Write(write_op) => {
-                    Some((key.clone(), (write_op.clone(), None)))
+                    Some((key.clone(), Arc::new(write_op.clone()), None))
                 },
                 AbstractResourceWriteOp::WriteWithDelayedFields(write) => Some((
                     key.clone(),
-                    (write.write_op.clone(), Some(write.layout.clone())),
+                    Arc::new(write.write_op.clone()),
+                    Some(write.layout.clone()),
                 )),
                 _ => None,
             })
@@ -188,14 +212,16 @@ impl BlockExecutorTransactionOutput for AptosTransactionOutput {
     }
 
     /// Should never be called after incorporating materialized output, as that consumes vm_output.
-    fn aggregator_v1_delta_set(&self) -> BTreeMap<StateKey, DeltaOp> {
+    fn aggregator_v1_delta_set(&self) -> Vec<(StateKey, DeltaOp)> {
         self.vm_output
             .lock()
             .as_ref()
             .expect("Output must be set to get deltas")
             .change_set()
             .aggregator_v1_delta_set()
-            .clone()
+            .iter()
+            .map(|(key, op)| (key.clone(), *op))
+            .collect()
     }
 
     /// Should never be called after incorporating materialized output, as that consumes vm_output.
@@ -209,7 +235,9 @@ impl BlockExecutorTransactionOutput for AptosTransactionOutput {
             .clone()
     }
 
-    fn reads_needing_delayed_field_exchange(&self) -> Vec<(StateKey, Arc<MoveTypeLayout>)> {
+    fn reads_needing_delayed_field_exchange(
+        &self,
+    ) -> Vec<(StateKey, StateValueMetadata, Arc<MoveTypeLayout>)> {
         self.vm_output
             .lock()
             .as_ref()
@@ -219,7 +247,7 @@ impl BlockExecutorTransactionOutput for AptosTransactionOutput {
             .iter()
             .flat_map(|(key, write)| {
                 if let AbstractResourceWriteOp::InPlaceDelayedFieldChange(change) = write {
-                    Some((key.clone(), change.layout.clone()))
+                    Some((key.clone(), change.metadata.clone(), change.layout.clone()))
                 } else {
                     None
                 }
@@ -227,7 +255,7 @@ impl BlockExecutorTransactionOutput for AptosTransactionOutput {
             .collect()
     }
 
-    fn group_reads_needing_delayed_field_exchange(&self) -> Vec<(StateKey, WriteOp)> {
+    fn group_reads_needing_delayed_field_exchange(&self) -> Vec<(StateKey, StateValueMetadata)> {
         self.vm_output
             .lock()
             .as_ref()
@@ -239,7 +267,7 @@ impl BlockExecutorTransactionOutput for AptosTransactionOutput {
                 if let AbstractResourceWriteOp::ResourceGroupInPlaceDelayedFieldChange(change) =
                     write
                 {
-                    Some((key.clone(), change.metadata_op.clone()))
+                    Some((key.clone(), change.metadata.clone()))
                 } else {
                     None
                 }
@@ -270,9 +298,9 @@ impl BlockExecutorTransactionOutput for AptosTransactionOutput {
     fn incorporate_materialized_txn_output(
         &self,
         aggregator_v1_writes: Vec<(StateKey, WriteOp)>,
-        patched_resource_write_set: Vec<(StateKey, WriteOp)>,
-        patched_events: Vec<ContractEvent>,
-    ) {
+        materialized_resource_write_set: Vec<(StateKey, WriteOp)>,
+        materialized_events: Vec<ContractEvent>,
+    ) -> Result<(), PanicError> {
         assert!(
             self.committed_output
                 .set(
@@ -282,15 +310,14 @@ impl BlockExecutorTransactionOutput for AptosTransactionOutput {
                         .expect("Output must be set to incorporate materialized data")
                         .into_transaction_output_with_materialized_write_set(
                             aggregator_v1_writes,
-                            patched_resource_write_set,
-                            patched_events,
-                        )
-                        // TODO[agg_v2](fix) - propagate issued to block executor.
-                        .expect("Materialization must not fail"),
+                            materialized_resource_write_set,
+                            materialized_events,
+                        )?,
                 )
                 .is_ok(),
-            "Could not combine VMOutput with the patched resource and event data"
+            "Could not combine VMOutput with the materialized resource and event data"
         );
+        Ok(())
     }
 
     fn set_txn_output_for_non_dynamic_change_set(&self) {
@@ -305,7 +332,7 @@ impl BlockExecutorTransactionOutput for AptosTransactionOutput {
                         .expect("We should be able to always convert to transaction output"),
                 )
                 .is_ok(),
-            "Could not combine VMOutput with the patched resource and event data"
+            "Could not combine VMOutput with the materialized resource and event data"
         );
     }
 
@@ -379,7 +406,7 @@ impl BlockExecutorTransactionOutput for AptosTransactionOutput {
 pub struct BlockAptosVM();
 
 impl BlockAptosVM {
-    pub fn execute_block<
+    pub fn execute_block_on_thread_pool<
         S: StateView + Sync,
         L: TransactionCommitHook<Output = AptosTransactionOutput>,
     >(
@@ -400,16 +427,18 @@ impl BlockAptosVM {
         BLOCK_EXECUTOR_CONCURRENCY.set(config.local.concurrency_level as i64);
         let executor = BlockExecutor::<
             SignatureVerifiedTransaction,
-            AptosExecutorTask<S>,
+            AptosExecutorTask,
             S,
             L,
             ExecutableTestType,
         >::new(config, executor_thread_pool, transaction_commit_listener);
 
-        let ret = executor.execute_block(state_view, signature_verified_block, state_view);
+        let environment =
+            Arc::new(Environment::new(state_view).try_enable_delayed_field_optimization());
+        let ret = executor.execute_block(environment, signature_verified_block, state_view);
         match ret {
             Ok(block_output) => {
-                let transaction_outputs = block_output.into_inner();
+                let (transaction_outputs, block_end_info) = block_output.into_inner();
                 let output_vec: Vec<_> = transaction_outputs
                     .into_iter()
                     .map(|output| output.take_output())
@@ -424,15 +453,35 @@ impl BlockAptosVM {
                     flush_speculative_logs(pos);
                 }
 
-                Ok(BlockOutput::new(output_vec))
+                Ok(BlockOutput::new(output_vec, block_end_info))
             },
-            Err(BlockExecutionError::FallbackToSequential(e)) => {
-                unreachable!(
-                    "[Execution]: Must be handled by sequential fallback: {:?}",
-                    e
-                )
-            },
-            Err(BlockExecutionError::FatalVMError((err, _))) => Err(err),
+            Err(BlockExecutionError::FatalBlockExecutorError(PanicError::CodeInvariantError(
+                err_msg,
+            ))) => Err(VMStatus::Error {
+                status_code: StatusCode::DELAYED_MATERIALIZATION_CODE_INVARIANT_ERROR,
+                sub_status: None,
+                message: Some(err_msg),
+            }),
+            Err(BlockExecutionError::FatalVMError(err)) => Err(err),
         }
+    }
+
+    /// Uses shared thread pool to execute blocks.
+    pub fn execute_block<
+        S: StateView + Sync,
+        L: TransactionCommitHook<Output = AptosTransactionOutput>,
+    >(
+        signature_verified_block: &[SignatureVerifiedTransaction],
+        state_view: &S,
+        config: BlockExecutorConfig,
+        transaction_commit_listener: Option<L>,
+    ) -> Result<BlockOutput<TransactionOutput>, VMStatus> {
+        Self::execute_block_on_thread_pool::<S, L>(
+            Arc::clone(&RAYON_EXEC_POOL),
+            signature_verified_block,
+            state_view,
+            config,
+            transaction_commit_listener,
+        )
     }
 }

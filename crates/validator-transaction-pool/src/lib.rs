@@ -1,4 +1,5 @@
 // Copyright © Aptos Foundation
+// SPDX-License-Identifier: Apache-2.0
 
 use aptos_channels::aptos_channel;
 use aptos_crypto::{hash::CryptoHash, HashValue};
@@ -22,6 +23,10 @@ impl TransactionFilter {
 }
 
 impl TransactionFilter {
+    pub fn empty() -> Self {
+        Self::PendingTxnHashSet(HashSet::new())
+    }
+
     pub fn should_exclude(&self, txn: &ValidatorTransaction) -> bool {
         match self {
             TransactionFilter::PendingTxnHashSet(set) => set.contains(&txn.hash()),
@@ -87,6 +92,14 @@ impl VTxnPoolState {
             .lock()
             .pull(deadline, max_items, max_bytes, filter)
     }
+
+    #[cfg(any(test, feature = "fuzzing"))]
+    pub fn dummy_txn_guard(&self) -> TxnGuard {
+        TxnGuard {
+            pool: self.inner.clone(),
+            seq_num: u64::MAX,
+        }
+    }
 }
 
 struct PoolItem {
@@ -145,7 +158,9 @@ impl PoolStateInner {
     ) -> Vec<ValidatorTransaction> {
         let mut ret = vec![];
         let mut seq_num_lower_bound = 0;
-        while Instant::now() < deadline && max_items >= 1 && max_bytes >= 1 {
+
+        // Check deadline at the end of every iteration to ensure validator txns get a chance no matter what current proposal delay is.
+        while max_items >= 1 && max_bytes >= 1 {
             // Find the seq_num of the first txn that satisfies the quota.
             if let Some(seq_num) = self
                 .txn_queue
@@ -171,6 +186,10 @@ impl PoolStateInner {
                 max_bytes -= txn.size_in_bytes() as u64;
                 seq_num_lower_bound = seq_num + 1;
                 ret.push(txn.as_ref().clone());
+
+                if Instant::now() >= deadline {
+                    break;
+                }
             } else {
                 break;
             }

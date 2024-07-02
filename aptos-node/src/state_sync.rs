@@ -20,6 +20,7 @@ use aptos_network::application::{
     interface::{NetworkClient, NetworkClientInterface, NetworkServiceEvents},
     storage::PeersAndMetadata,
 };
+use aptos_schemadb::DB;
 use aptos_state_sync_driver::{
     driver_factory::{DriverFactory, StateSyncRuntimes},
     metadata_storage::PersistentMetadataStorage,
@@ -46,6 +47,7 @@ pub fn create_event_subscription_service(
     EventSubscriptionService,
     ReconfigNotificationListener<DbBackedOnChainConfig>,
     Option<ReconfigNotificationListener<DbBackedOnChainConfig>>,
+    Option<ReconfigNotificationListener<DbBackedOnChainConfig>>,
     Option<(
         ReconfigNotificationListener<DbBackedOnChainConfig>,
         EventNotificationListener,
@@ -53,7 +55,7 @@ pub fn create_event_subscription_service(
     Option<(
         ReconfigNotificationListener<DbBackedOnChainConfig>,
         EventNotificationListener,
-    )>, // (reconfig_events, jwk_map_updated_events) for JWK consensus
+    )>, // (reconfig_events, jwk_updated_events) for JWK consensus
 ) {
     // Create the event subscription service
     let mut event_subscription_service =
@@ -64,7 +66,19 @@ pub fn create_event_subscription_service(
         .subscribe_to_reconfigurations()
         .expect("Mempool must subscribe to reconfigurations");
 
-    // Create a reconfiguration subscription for consensus (if this is a validator)
+    // Create a reconfiguration subscription for consensus observer (if enabled)
+    let consensus_observer_reconfig_subscription =
+        if node_config.consensus_observer.observer_enabled {
+            Some(
+                event_subscription_service
+                    .subscribe_to_reconfigurations()
+                    .expect("Consensus observer must subscribe to reconfigurations"),
+            )
+        } else {
+            None
+        };
+
+    // Create a reconfiguration subscription for consensus
     let consensus_reconfig_subscription = if node_config.base.role.is_validator() {
         Some(
             event_subscription_service
@@ -75,6 +89,7 @@ pub fn create_event_subscription_service(
         None
     };
 
+    // Create reconfiguration subscriptions for DKG
     let dkg_subscriptions = if node_config.base.role.is_validator() {
         let reconfig_events = event_subscription_service
             .subscribe_to_reconfigurations()
@@ -87,12 +102,13 @@ pub fn create_event_subscription_service(
         None
     };
 
+    // Create reconfiguration subscriptions for JWK consensus
     let jwk_consensus_subscriptions = if node_config.base.role.is_validator() {
         let reconfig_events = event_subscription_service
             .subscribe_to_reconfigurations()
             .expect("JWK consensus must subscribe to reconfigurations");
         let jwk_updated_events = event_subscription_service
-            .subscribe_to_events(vec![], vec!["0x1::jwks::OnChainJWKMapUpdated".to_string()])
+            .subscribe_to_events(vec![], vec!["0x1::jwks::ObservedJWKsUpdated".to_string()])
             .expect("JWK consensus must subscribe to DKG events");
         Some((reconfig_events, jwk_updated_events))
     } else {
@@ -102,6 +118,7 @@ pub fn create_event_subscription_service(
     (
         event_subscription_service,
         mempool_reconfig_subscription,
+        consensus_observer_reconfig_subscription,
         consensus_reconfig_subscription,
         dkg_subscriptions,
         jwk_consensus_subscriptions,
@@ -115,6 +132,7 @@ pub fn start_state_sync_and_get_notification_handles(
     waypoint: Waypoint,
     event_subscription_service: EventSubscriptionService,
     db_rw: DbReaderWriter,
+    internal_indexer_db: Option<Arc<DB>>,
 ) -> anyhow::Result<(
     AptosDataClient,
     StateSyncRuntimes,
@@ -179,6 +197,7 @@ pub fn start_state_sync_and_get_notification_handles(
         aptos_data_client.clone(),
         streaming_service_client,
         TimeService::real(),
+        internal_indexer_db,
     );
 
     // Create a new state sync runtime handle

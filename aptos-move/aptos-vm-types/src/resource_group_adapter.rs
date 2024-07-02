@@ -30,9 +30,9 @@ pub enum GroupSizeKind {
 impl GroupSizeKind {
     pub fn from_gas_feature_version(
         gas_feature_version: u64,
-        resource_group_charge_as_size_sum_enabled: bool,
+        resource_groups_split_in_vm_change_set_enabled: bool,
     ) -> Self {
-        if resource_group_charge_as_size_sum_enabled {
+        if resource_groups_split_in_vm_change_set_enabled {
             GroupSizeKind::AsSum
         } else if gas_feature_version >= 9 {
             // Keep old caching behavior for replay.
@@ -86,7 +86,7 @@ fn test_group_size_same_as_bcs() {
                     address: PeerId::ONE,
                     module: Identifier::new("a").unwrap(),
                     name: Identifier::new(format!("a_{}", j)).unwrap(),
-                    type_params: vec![],
+                    type_args: vec![],
                 },
                 reused_vec.slice(0..j),
             );
@@ -122,12 +122,13 @@ impl<'r> ResourceGroupAdapter<'r> {
         maybe_resource_group_view: Option<&'r dyn ResourceGroupView>,
         resource_view: &'r dyn TResourceView<Key = StateKey, Layout = MoveTypeLayout>,
         gas_feature_version: u64,
-        resource_group_charge_as_size_sum_enabled: bool,
+        resource_groups_split_in_vm_change_set_enabled: bool,
     ) -> Self {
-        // TODO[agg_v2](fix) - when is_resource_group_split_in_change_set_capable is false,
-        // but resource_group_charge_as_size_sum_enabled is true, we still don't set
+        // when is_resource_groups_split_in_change_set_capable is false,
+        // but resource_groups_split_in_vm_change_set_enabled is true, we still don't set
         // group_size_kind to GroupSizeKind::AsSum, meaning that
-        // is_resource_group_split_in_change_set_capable affects gas charging. make sure that is correct
+        // is_resource_groups_split_in_change_set_capable affects gas charging.
+        // Onchain execution always needs to go through capable resolvers.
 
         let group_size_kind = GroupSizeKind::from_gas_feature_version(
             gas_feature_version,
@@ -139,9 +140,10 @@ impl<'r> ResourceGroupAdapter<'r> {
             //     (outside of BlockExecutor) i.e. unit tests, view functions, etc.
             //     In this case, disabled will lead to a different gas behavior,
             //     but gas is not relevant for those contexts.
-            resource_group_charge_as_size_sum_enabled
-                && maybe_resource_group_view
-                    .map_or(false, |v| v.is_resource_group_split_in_change_set_capable()),
+            resource_groups_split_in_vm_change_set_enabled
+                && maybe_resource_group_view.map_or(false, |v| {
+                    v.is_resource_groups_split_in_change_set_capable()
+                }),
         );
 
         Self {
@@ -203,7 +205,7 @@ impl TResourceGroupView for ResourceGroupAdapter<'_> {
     type Layout = MoveTypeLayout;
     type ResourceTag = StructTag;
 
-    fn is_resource_group_split_in_change_set_capable(&self) -> bool {
+    fn is_resource_groups_split_in_change_set_capable(&self) -> bool {
         self.group_size_kind == GroupSizeKind::AsSum
     }
 
@@ -319,8 +321,8 @@ mod tests {
         fn new() -> Self {
             let mut group = HashMap::new();
 
-            let key_0 = StateKey::raw(vec![0]);
-            let key_1 = StateKey::raw(vec![1]);
+            let key_0 = StateKey::raw(&[0]);
+            let key_1 = StateKey::raw(&[1]);
 
             // for testing purposes, o.w. state view should never contain an empty map.
             group.insert(key_0, MockGroup::new(BTreeMap::new()));
@@ -359,7 +361,7 @@ mod tests {
         type Layout = MoveTypeLayout;
         type ResourceTag = StructTag;
 
-        fn is_resource_group_split_in_change_set_capable(&self) -> bool {
+        fn is_resource_groups_split_in_change_set_capable(&self) -> bool {
             true
         }
 
@@ -440,7 +442,7 @@ mod tests {
         let adapter = ResourceGroupAdapter::new(None, &state_view, 3, false);
         assert_eq!(adapter.group_size_kind, GroupSizeKind::None);
 
-        let key_1 = StateKey::raw(vec![1]);
+        let key_1 = StateKey::raw(&[1]);
         let tag_0 = mock_tag_0();
 
         assert_ok_eq!(adapter.load_to_cache(&key_1), false);
@@ -454,9 +456,9 @@ mod tests {
         let adapter = ResourceGroupAdapter::new(None, &state_view, 5, false);
         assert_eq!(adapter.group_size_kind, GroupSizeKind::None);
 
-        let key_0 = StateKey::raw(vec![0]);
-        let key_1 = StateKey::raw(vec![1]);
-        let key_2 = StateKey::raw(vec![2]);
+        let key_0 = StateKey::raw(&[0]);
+        let key_1 = StateKey::raw(&[1]);
+        let key_2 = StateKey::raw(&[2]);
         let tag_0 = mock_tag_0();
         let tag_1 = mock_tag_1();
         let tag_2 = mock_tag_2();
@@ -507,19 +509,22 @@ mod tests {
 
     #[test_case(9, false)]
     #[test_case(12, true)] // Without view, this falls back to as_blob
-    fn size_as_blob_len(gas_feature_version: u64, resource_group_charge_as_size_sum_enabled: bool) {
+    fn size_as_blob_len(
+        gas_feature_version: u64,
+        resource_groups_split_in_vm_change_set_enabled: bool,
+    ) {
         let state_view = MockStateView::new();
         let adapter = ResourceGroupAdapter::new(
             None,
             &state_view,
             gas_feature_version,
-            resource_group_charge_as_size_sum_enabled,
+            resource_groups_split_in_vm_change_set_enabled,
         );
         assert_eq!(adapter.group_size_kind, GroupSizeKind::AsBlob);
 
-        let key_0 = StateKey::raw(vec![0]);
-        let key_1 = StateKey::raw(vec![1]);
-        let key_2 = StateKey::raw(vec![2]);
+        let key_0 = StateKey::raw(&[0]);
+        let key_1 = StateKey::raw(&[1]);
+        let key_2 = StateKey::raw(&[2]);
 
         let key_0_blob_len =
             ResourceGroupSize::Concrete(state_view.group.get(&key_0).unwrap().blob.len() as u64);
@@ -563,9 +568,9 @@ mod tests {
         let adapter = ResourceGroupAdapter::new(Some(&state_view), &state_view, 12, true);
         assert_eq!(adapter.group_size_kind, GroupSizeKind::AsSum);
 
-        let key_0 = StateKey::raw(vec![0]);
-        let key_1 = StateKey::raw(vec![1]);
-        let key_2 = StateKey::raw(vec![2]);
+        let key_0 = StateKey::raw(&[0]);
+        let key_1 = StateKey::raw(&[1]);
+        let key_2 = StateKey::raw(&[2]);
 
         let key_0_size_as_sum = state_view.group.get(&key_0).unwrap().size_as_sum;
         let key_1_size_as_sum = state_view.group.get(&key_1).unwrap().size_as_sum;
@@ -603,9 +608,9 @@ mod tests {
         let adapter = ResourceGroupAdapter::new(None, &state_view, 8, false);
         assert_eq!(adapter.group_size_kind, GroupSizeKind::None);
 
-        let key_0 = StateKey::raw(vec![0]);
-        let key_1 = StateKey::raw(vec![1]);
-        let key_2 = StateKey::raw(vec![2]);
+        let key_0 = StateKey::raw(&[0]);
+        let key_1 = StateKey::raw(&[1]);
+        let key_2 = StateKey::raw(&[2]);
 
         assert_ok_eq!(
             adapter.resource_group_size(&key_1),
@@ -639,9 +644,9 @@ mod tests {
         let adapter = ResourceGroupAdapter::new(None, &state_view, 0, false);
         assert_eq!(adapter.group_size_kind, GroupSizeKind::None);
 
-        let key_0 = StateKey::raw(vec![0]);
-        let key_1 = StateKey::raw(vec![1]);
-        let key_2 = StateKey::raw(vec![2]);
+        let key_0 = StateKey::raw(&[0]);
+        let key_1 = StateKey::raw(&[1]);
+        let key_2 = StateKey::raw(&[2]);
         let tag_0 = mock_tag_0();
         let tag_1 = mock_tag_1();
         let tag_2 = mock_tag_2();
@@ -670,9 +675,9 @@ mod tests {
         let adapter = ResourceGroupAdapter::new(None, &state_view, 3, false);
         assert_eq!(adapter.group_size_kind, GroupSizeKind::None);
 
-        let key_0 = StateKey::raw(vec![0]);
-        let key_1 = StateKey::raw(vec![1]);
-        let key_2 = StateKey::raw(vec![2]);
+        let key_0 = StateKey::raw(&[0]);
+        let key_1 = StateKey::raw(&[1]);
+        let key_2 = StateKey::raw(&[2]);
         let tag_0 = mock_tag_0();
         let tag_1 = mock_tag_1();
         let tag_2 = mock_tag_2();
