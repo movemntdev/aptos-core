@@ -1,7 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{components::get_signer_arg, utils::*};
+use crate::utils::*;
 use anyhow::Result;
 use aptos_types::on_chain_config::OnChainConsensusConfig;
 use move_model::{code_writer::CodeWriter, emit, emitln, model::Loc};
@@ -11,7 +11,6 @@ pub fn generate_consensus_upgrade_proposal(
     is_testnet: bool,
     next_execution_hash: Vec<u8>,
 ) -> Result<Vec<(String, String)>> {
-    let signer_arg = get_signer_arg(is_testnet, &next_execution_hash);
     let mut result = vec![];
 
     let writer = CodeWriter::new(Loc::default());
@@ -30,15 +29,20 @@ pub fn generate_consensus_upgrade_proposal(
             assert!(consensus_config_blob.len() < 65536);
 
             emit!(writer, "let consensus_blob: vector<u8> = ");
-            generate_blob_as_hex_string(writer, &consensus_config_blob);
+            generate_blob(writer, &consensus_config_blob);
             emitln!(writer, ";\n");
 
-            emitln!(
-                writer,
-                "consensus_config::set_for_next_epoch({}, consensus_blob);",
-                signer_arg
-            );
-            emitln!(writer, "aptos_governance::reconfigure({});", signer_arg);
+            if is_testnet && next_execution_hash.is_empty() {
+                emitln!(
+                    writer,
+                    "consensus_config::set(framework_signer, consensus_blob);"
+                );
+            } else {
+                emitln!(
+                    writer,
+                    "consensus_config::set(&framework_signer, consensus_blob);"
+                );
+            }
         },
     );
 

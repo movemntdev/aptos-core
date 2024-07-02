@@ -11,7 +11,6 @@ use crate::{
 use anyhow::{format_err, Result};
 use bytes::Bytes;
 use move_core_types::{
-    account_address::AccountAddress,
     ident_str,
     identifier::{IdentStr, Identifier},
     language_storage::StructTag,
@@ -24,13 +23,9 @@ mod approved_execution_hashes;
 mod aptos_features;
 mod aptos_version;
 mod chain_id;
-mod commit_history;
 mod consensus_config;
 mod execution_config;
 mod gas_schedule;
-mod jwk_consensus_config;
-pub mod randomness_api_v0_config;
-mod randomness_config;
 mod timed_features;
 mod timestamp;
 mod transaction_fee;
@@ -40,25 +35,17 @@ pub use self::{
     approved_execution_hashes::ApprovedExecutionHashes,
     aptos_features::*,
     aptos_version::{
-        AptosVersion, APTOS_MAX_KNOWN_VERSION, APTOS_VERSION_2, APTOS_VERSION_3, APTOS_VERSION_4,
+        Version, APTOS_MAX_KNOWN_VERSION, APTOS_VERSION_2, APTOS_VERSION_3, APTOS_VERSION_4,
     },
-    commit_history::CommitHistoryResource,
     consensus_config::{
-        AnchorElectionMode, ConsensusAlgorithmConfig, ConsensusConfigV1, DagConsensusConfigV1,
-        LeaderReputationType, OnChainConsensusConfig, ProposerAndVoterConfig, ProposerElectionType,
-        ValidatorTxnConfig,
+        ConsensusAlgorithmConfig, ConsensusConfigV1, DagConsensusConfigV1, LeaderReputationType,
+        OnChainConsensusConfig, ProposerAndVoterConfig, ProposerElectionType, ValidatorTxnConfig,
     },
     execution_config::{
-        BlockGasLimitType, ExecutionConfigV1, ExecutionConfigV2, ExecutionConfigV4,
-        OnChainExecutionConfig, TransactionDeduperType, TransactionShufflerType,
+        BlockGasLimitType, ExecutionConfigV1, ExecutionConfigV2, OnChainExecutionConfig,
+        TransactionDeduperType, TransactionShufflerType,
     },
-    gas_schedule::{DiffItem, GasSchedule, GasScheduleV2, StorageGasSchedule},
-    jwk_consensus_config::{
-        ConfigV1 as JWKConsensusConfigV1, OIDCProvider, OnChainJWKConsensusConfig,
-    },
-    randomness_config::{
-        OnChainRandomnessConfig, RandomnessConfigMoveStruct, RandomnessConfigSeqNum,
-    },
+    gas_schedule::{GasSchedule, GasScheduleV2, StorageGasSchedule},
     timed_features::{TimedFeatureFlag, TimedFeatureOverride, TimedFeatures, TimedFeaturesBuilder},
     timestamp::CurrentTimeMicroseconds,
     transaction_fee::TransactionFeeBurnCap,
@@ -138,7 +125,7 @@ impl<P: OnChainConfigProvider> OnChainConfigPayload<P> {
 
 /// Trait to be implemented by a storage type from which to read on-chain configs
 pub trait ConfigStorage {
-    fn fetch_config_bytes(&self, state_key: &StateKey) -> Option<Bytes>;
+    fn fetch_config(&self, access_path: AccessPath) -> Option<Bytes>;
 }
 
 /// Trait to be implemented by a Rust struct representation of an on-chain config
@@ -173,18 +160,19 @@ pub trait OnChainConfig: Send + Sync + DeserializeOwned {
         Self::deserialize_default_impl(bytes)
     }
 
-    /// TODO: This does not work if `T`'s reflection on the Move side is using resource groups.
     fn fetch_config<T>(storage: &T) -> Option<Self>
     where
         T: ConfigStorage + ?Sized,
     {
-        let state_key = StateKey::on_chain_config::<Self>().ok()?;
-        let bytes = storage.fetch_config_bytes(&state_key)?;
-        Self::deserialize_into_config(&bytes).ok()
+        let access_path = Self::access_path().ok()?;
+        match storage.fetch_config(access_path) {
+            Some(bytes) => Self::deserialize_into_config(&bytes).ok(),
+            None => None,
+        }
     }
 
-    fn address() -> &'static AccountAddress {
-        &CORE_CODE_ADDRESS
+    fn access_path() -> anyhow::Result<AccessPath> {
+        access_path_for_config(Self::CONFIG_ID)
     }
 
     fn struct_tag() -> StructTag {
@@ -193,8 +181,9 @@ pub trait OnChainConfig: Send + Sync + DeserializeOwned {
 }
 
 impl<S: StateView> ConfigStorage for S {
-    fn fetch_config_bytes(&self, state_key: &StateKey) -> Option<Bytes> {
-        self.get_state_value(state_key)
+    fn fetch_config(&self, access_path: AccessPath) -> Option<Bytes> {
+        let state_key = StateKey::access_path(access_path);
+        self.get_state_value(&state_key)
             .ok()?
             .map(|s| s.bytes().clone())
     }
@@ -217,7 +206,7 @@ pub fn struct_tag_for_config(config_id: ConfigID) -> StructTag {
         address: CORE_CODE_ADDRESS,
         module: Identifier::new(config_id.1).expect("fail to make identifier"),
         name: Identifier::new(config_id.2).expect("fail to make identifier"),
-        type_args: vec![],
+        type_params: vec![],
     }
 }
 

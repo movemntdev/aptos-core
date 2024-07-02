@@ -1,7 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{wait_for_all_nodes_to_catchup_to_version, AptosPublicInfo};
+use crate::{wait_for_all_nodes_to_catchup_to_version, Swarm, SwarmExt};
 use anyhow::{bail, Context, Result};
 use aptos_config::config::DEFAULT_MAX_PAGE_SIZE;
 use aptos_rest_client::Client as RestClient;
@@ -53,16 +53,14 @@ async fn get_node_state(validator_client: &RestClient) -> NodeState {
 /// I.e. if part is shorter than how long it takes for empty block to be
 /// generated, we can make sure one block gets created on every part.
 pub async fn test_consensus_fault_tolerance(
-    // swarm: Arc<tokio::sync::RwLock<Box<(dyn Swarm)>>>,
-    validator_clients: Vec<(String, RestClient)>,
-    public_info: AptosPublicInfo,
+    swarm: &mut dyn Swarm,
     cycles: usize,
     cycle_duration_s: f32,
     parts_in_cycle: usize,
-    mut failure_injection: Box<dyn FailureInjection + Send>,
+    mut failure_injection: Box<dyn FailureInjection>,
     // (cycle, executed_epochs, executed_rounds, executed_transactions, current_state, previous_state)
     mut check_cycle: Box<
-        dyn FnMut(usize, u64, u64, u64, Vec<NodeState>, Vec<NodeState>) -> Result<()> + Send,
+        dyn FnMut(usize, u64, u64, u64, Vec<NodeState>, Vec<NodeState>) -> Result<()>,
     >,
     new_epoch_on_cycle: bool,
     // Instead of failing on first check, we check the full run,
@@ -70,6 +68,8 @@ pub async fn test_consensus_fault_tolerance(
     // Can allow us to better see if state would've gotten resolved by itself, etc.
     raise_check_error_at_the_end: bool,
 ) -> Result<()> {
+    let validator_clients = swarm.get_validator_clients_with_names();
+
     async fn get_all_states(validator_clients: &[(String, RestClient)]) -> Vec<NodeState> {
         join_all(
             validator_clients
@@ -99,11 +99,14 @@ pub async fn test_consensus_fault_tolerance(
 
         let cur = get_all_states(&validator_clients).await;
 
-        let (cur_epoch, cur_round) = cur.iter().map(|s| (s.epoch, s.round)).max().unwrap();
-        let (prev_epoch, prev_round) = previous.iter().map(|s| (s.epoch, s.round)).max().unwrap();
-        let epochs = cur_epoch.saturating_sub(prev_epoch);
-        let rounds = cur_round.saturating_sub(prev_round);
-
+        let epochs = cur.iter().map(|s| s.epoch).max().unwrap()
+            - previous.iter().map(|s| s.epoch).max().unwrap();
+        let rounds = cur
+            .iter()
+            .map(|s| s.round)
+            .max()
+            .unwrap()
+            .saturating_sub(previous.iter().map(|s| s.round).max().unwrap());
         let transactions = cur.iter().map(|s| s.version).max().unwrap()
             - previous.iter().map(|s| s.version).max().unwrap();
 
@@ -142,7 +145,7 @@ pub async fn test_consensus_fault_tolerance(
         }
 
         if new_epoch_on_cycle {
-            public_info.reconfig().await;
+            swarm.aptos_public_info().reconfig().await;
         }
     }
 
@@ -237,7 +240,7 @@ impl FailureInjection for NoFailureInjection {
     async fn clear(&mut self, _: &[(String, RestClient)]) {}
 }
 
-pub fn no_failure_injection() -> Box<dyn FailureInjection + Send> {
+pub fn no_failure_injection() -> Box<dyn FailureInjection> {
     Box::new(NoFailureInjection {})
 }
 

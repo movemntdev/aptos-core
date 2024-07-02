@@ -150,7 +150,10 @@ impl P2PBlockGenerator {
 ///
 /// Also print a summary of the partitioning result.
 #[cfg(test)]
-pub fn verify_partitioner_output(input: &[AnalyzedTransaction], output: &PartitionedTransactions) {
+pub fn verify_partitioner_output(
+    input: &Vec<AnalyzedTransaction>,
+    output: &PartitionedTransactions,
+) {
     let old_txn_id_by_txn_hash: HashMap<HashValue, usize> = HashMap::from_iter(
         input
             .iter()
@@ -306,7 +309,7 @@ pub fn verify_partitioner_output(input: &[AnalyzedTransaction], output: &Partiti
 }
 
 #[cfg(test)]
-fn is_sorted(arr: &[usize]) -> bool {
+fn is_sorted(arr: &Vec<usize>) -> bool {
     let num = arr.len();
     for i in 1..num {
         if arr[i - 1] >= arr[i] {

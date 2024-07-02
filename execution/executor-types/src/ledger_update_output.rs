@@ -13,10 +13,7 @@ use aptos_types::{
     ledger_info::LedgerInfoWithSignatures,
     proof::accumulator::InMemoryTransactionAccumulator,
     state_store::{combine_or_add_sharded_state_updates, ShardedStateUpdates},
-    transaction::{
-        block_epilogue::BlockEndInfo, TransactionInfo, TransactionStatus, TransactionToCommit,
-        Version,
-    },
+    transaction::{Transaction, TransactionInfo, TransactionStatus, TransactionToCommit, Version},
 };
 use itertools::zip_eq;
 use std::sync::Arc;
@@ -32,7 +29,6 @@ pub struct LedgerUpdateOutput {
     /// The in-memory Merkle Accumulator representing a blockchain state consistent with the
     /// `state_tree`.
     pub transaction_accumulator: Arc<InMemoryTransactionAccumulator>,
-    pub block_end_info: Option<BlockEndInfo>,
 }
 
 impl LedgerUpdateOutput {
@@ -64,9 +60,10 @@ impl LedgerUpdateOutput {
     /// block.
     pub fn ensure_ends_with_state_checkpoint(&self) -> Result<()> {
         ensure!(
-            self.to_commit
-                .last()
-                .map_or(true, |txn| txn.transaction().is_non_reconfig_block_ending()),
+            self.to_commit.last().map_or(true, |txn| matches!(
+                txn.transaction(),
+                Transaction::StateCheckpoint(_)
+            )),
             "Block not ending with a state checkpoint.",
         );
         Ok(())
@@ -176,13 +173,10 @@ impl LedgerUpdateOutput {
             self.statuses_for_input_txns.clone(),
             self.transaction_info_hashes.clone(),
             self.subscribable_events.clone(),
-            self.block_end_info.clone(),
         )
     }
 
     pub fn combine(&mut self, rhs: Self) {
-        assert!(self.block_end_info.is_none());
-        assert!(rhs.block_end_info.is_none());
         let Self {
             statuses_for_input_txns,
             to_commit,
@@ -191,7 +185,6 @@ impl LedgerUpdateOutput {
             state_updates_until_last_checkpoint: state_updates_before_last_checkpoint,
             sharded_state_cache,
             transaction_accumulator,
-            block_end_info: _block_end_info,
         } = rhs;
 
         if let Some(updates) = state_updates_before_last_checkpoint {

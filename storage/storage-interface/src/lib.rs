@@ -3,16 +3,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::cached_state_view::ShardedStateCache;
+use anyhow::anyhow;
 use aptos_crypto::{hash::CryptoHash, HashValue};
-pub use aptos_types::indexer::indexer_db_reader::Order;
 use aptos_types::{
+    access_path::AccessPath,
     account_address::AccountAddress,
-    account_config::NewBlockEvent,
+    account_config::{NewBlockEvent, CORE_CODE_ADDRESS},
     contract_event::{ContractEvent, EventWithVersion},
     epoch_change::EpochChangeProof,
     epoch_state::EpochState,
     event::EventKey,
     ledger_info::LedgerInfoWithSignatures,
+    move_resource::MoveStorage,
+    on_chain_config::{access_path_for_config, ConfigID},
     proof::{
         AccumulatorConsistencyProof, SparseMerkleProof, SparseMerkleProofExt,
         SparseMerkleRangeProof, TransactionAccumulatorRangeProof, TransactionAccumulatorSummary,
@@ -20,15 +23,15 @@ use aptos_types::{
     state_proof::StateProof,
     state_store::{
         state_key::StateKey,
+        state_key_prefix::StateKeyPrefix,
         state_storage_usage::StateStorageUsage,
         state_value::{StateValue, StateValueChunkWithProof},
         table::{TableHandle, TableInfo},
         ShardedStateUpdates,
     },
     transaction::{
-        AccountTransactionsWithProof, Transaction, TransactionAuxiliaryData, TransactionInfo,
-        TransactionListWithProof, TransactionOutputListWithProof, TransactionToCommit,
-        TransactionWithProof, Version,
+        AccountTransactionsWithProof, Transaction, TransactionInfo, TransactionListWithProof,
+        TransactionOutputListWithProof, TransactionToCommit, TransactionWithProof, Version,
     },
     write_set::WriteSet,
 };
@@ -49,8 +52,6 @@ pub mod state_view;
 
 use crate::state_delta::StateDelta;
 use aptos_scratchpad::SparseMerkleTree;
-pub use aptos_types::block_info::BlockHeight;
-use aptos_types::state_store::state_key::prefix::StateKeyPrefix;
 pub use errors::AptosDbError;
 pub use executed_trees::ExecutedTrees;
 
@@ -96,6 +97,12 @@ impl From<aptos_secure_net::Error> for Error {
             error: format!("{}", error),
         }
     }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum Order {
+    Ascending,
+    Descending,
 }
 
 macro_rules! delegate_read {
@@ -162,20 +169,15 @@ pub trait DbReader: Send + Sync {
             fetch_events: bool,
         ) -> Result<TransactionWithProof>;
 
-        fn get_transaction_auxiliary_data_by_version(
-            &self,
-            version: Version,
-        ) -> Result<Option<TransactionAuxiliaryData>>;
-
         /// See [AptosDB::get_first_txn_version].
         ///
         /// [AptosDB::get_first_txn_version]: ../aptosdb/struct.AptosDB.html#method.get_first_txn_version
         fn get_first_txn_version(&self) -> Result<Option<Version>>;
 
-        /// See [AptosDB::get_first_viable_block].
+        /// See [AptosDB::get_first_viable_txn_version].
         ///
-        /// [AptosDB::get_first_viable_block]: ../aptosdb/struct.AptosDB.html#method.get_first_viable_block
-        fn get_first_viable_block(&self) -> Result<(Version, BlockHeight)>;
+        /// [AptosDB::get_first_viable_txn_version]: ../aptosdb/struct.AptosDB.html#method.get_first_viable_txn_version
+        fn get_first_viable_txn_version(&self) -> Result<Version>;
 
         /// See [AptosDB::get_first_write_set_version].
         ///
@@ -239,7 +241,9 @@ pub trait DbReader: Send + Sync {
         /// ../aptosdb/struct.AptosDB.html#method.get_block_timestamp
         fn get_block_timestamp(&self, version: Version) -> Result<u64>;
 
-        /// See `AptosDB::get_latest_block_events`.
+        fn get_next_block_event(&self, version: Version) -> Result<(Version, NewBlockEvent)>;
+
+        /// See [AptosDB::get_latest_block_events].
         fn get_latest_block_events(&self, num_events: usize) -> Result<Vec<EventWithVersion>>;
 
         /// Returns the start_version, end_version and NewBlockEvent of the block containing the input
@@ -281,8 +285,8 @@ pub trait DbReader: Send + Sync {
         /// Returns the latest ledger info, if any.
         fn get_latest_ledger_info_option(&self) -> Result<Option<LedgerInfoWithSignatures>>;
 
-        /// Returns the latest "synced" transaction version, potentially not "committed" yet.
-        fn get_synced_version(&self) -> Result<Version>;
+        /// Returns the latest committed version, error on on non-bootstrapped/empty DB.
+        fn get_latest_version(&self) -> Result<Version>;
 
         /// Returns the latest state checkpoint version if any.
         fn get_latest_state_checkpoint_version(&self) -> Result<Option<Version>>;
@@ -355,7 +359,6 @@ pub trait DbReader: Send + Sync {
             &self,
             state_key: &StateKey,
             version: Version,
-            root_depth: usize,
         ) -> Result<SparseMerkleProofExt>;
 
         /// Gets a state value by state key along with the proof, out of the ledger state indicated by the state
@@ -370,7 +373,6 @@ pub trait DbReader: Send + Sync {
             &self,
             state_key: &StateKey,
             version: Version,
-            root_depth: usize,
         ) -> Result<(Option<StateValue>, SparseMerkleProofExt)>;
 
         /// Gets the latest ExecutedTrees no matter if db has been bootstrapped.
@@ -448,14 +450,18 @@ pub trait DbReader: Send + Sync {
         /// Returns whether the internal indexer DB has been enabled or not
         fn indexer_enabled(&self) -> bool;
 
+        /// Returns whether the internal indexer async v2 DB has been enabled or not
+        fn indexer_async_v2_enabled(&self) -> bool;
+
+        /// Returns the next version which internal indexer async v2 DB should parse
+        fn get_indexer_async_v2_next_version(&self) -> Result<Version>;
+
+        /// Returns boolean whether indexer async v2 pending on items are empty
+        /// if so, the whole batches are processed completely, if not, need to retry
+        fn is_indexer_async_v2_pending_on_empty(&self) -> Result<bool>;
+
         /// Returns state storage usage at the end of an epoch.
         fn get_state_storage_usage(&self, version: Option<Version>) -> Result<StateStorageUsage>;
-
-        fn get_event_by_version_and_index(
-            &self,
-            version: Version,
-            index: u64,
-        ) -> Result<ContractEvent>;
     ); // end delegated
 
     /// Returns the latest ledger info.
@@ -463,13 +469,6 @@ pub trait DbReader: Send + Sync {
         self.get_latest_ledger_info_option().and_then(|opt| {
             opt.ok_or_else(|| AptosDbError::Other("Latest LedgerInfo not found.".to_string()))
         })
-    }
-
-    /// Returns the latest committed version, error on on non-bootstrapped/empty DB.
-    /// N.b. different from `get_synced_version()`.
-    fn get_latest_ledger_info_version(&self) -> Result<Version> {
-        self.get_latest_ledger_info()
-            .map(|li| li.ledger_info().version())
     }
 
     /// Returns the latest version and committed block timestamp
@@ -484,8 +483,49 @@ pub trait DbReader: Send + Sync {
         state_key: &StateKey,
         version: Version,
     ) -> Result<(Option<StateValue>, SparseMerkleProof)> {
-        self.get_state_value_with_proof_by_version_ext(state_key, version, 0)
+        self.get_state_value_with_proof_by_version_ext(state_key, version)
             .map(|(value, proof_ext)| (value, proof_ext.into()))
+    }
+}
+
+impl MoveStorage for &dyn DbReader {
+    fn fetch_resource_by_version(
+        &self,
+        access_path: AccessPath,
+        version: Version,
+    ) -> Result<Vec<u8>, anyhow::Error> {
+        let state_value =
+            self.get_state_value_by_version(&StateKey::access_path(access_path), version)?;
+
+        state_value
+            .ok_or_else(|| anyhow!("no value found in DB".to_string()))
+            .map(|value| value.bytes().to_vec())
+    }
+
+    fn fetch_config_by_version(
+        &self,
+        config_id: ConfigID,
+        version: Version,
+    ) -> Result<Vec<u8>, anyhow::Error> {
+        let config_value_option = self.get_state_value_by_version(
+            &StateKey::access_path(AccessPath::new(
+                CORE_CODE_ADDRESS,
+                access_path_for_config(config_id)?.path,
+            )),
+            version,
+        )?;
+        config_value_option
+            .map(|x| x.bytes().to_vec())
+            .ok_or_else(|| anyhow!("no config {} found in aptos root account state", config_id))
+    }
+
+    fn fetch_synced_version(&self) -> Result<u64, anyhow::Error> {
+        self.get_latest_version().map_err(Into::into)
+    }
+
+    fn fetch_latest_state_checkpoint_version(&self) -> Result<Version, anyhow::Error> {
+        self.get_latest_state_checkpoint_version()?
+            .ok_or_else(|| anyhow!("[MoveStorage] Latest state checkpoint not found.".to_string()))
     }
 }
 
@@ -535,6 +575,28 @@ pub trait DbWriter: Send + Sync {
         state_updates_until_last_checkpoint: Option<ShardedStateUpdates>,
         sharded_state_cache: Option<&ShardedStateCache>,
     ) -> Result<()> {
+        unimplemented!()
+    }
+
+    /// Index table info mapping for the indexer async v2 rocksdb.
+    /// Called by the table info service when its constantly parsing the table info.
+    fn index_table_info(
+        &self,
+        db_reader: Arc<dyn DbReader>,
+        first_version: Version,
+        write_sets: &[&WriteSet],
+        end_early_if_pending_on_empty: bool,
+    ) -> Result<()> {
+        unimplemented!()
+    }
+
+    /// Clean up pending on items in the indexer async v2 rocksdb.
+    /// Called by the table info service when all threads finish processing.
+    fn cleanup_pending_on_items(&self) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn update_next_version(&self, end_version: u64) -> Result<()> {
         unimplemented!()
     }
 }

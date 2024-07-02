@@ -1,5 +1,4 @@
 // Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
 
 use crate::utils::{
     constants::MAX_RETRY_TIME_SECONDS,
@@ -21,14 +20,13 @@ use std::time::Duration;
 
 /// Writes JSON Value to GCS
 pub async fn write_json_to_gcs(
-    bucket: &str,
-    uri: &str,
+    bucket: String,
+    id: String,
     json: &Value,
     client: &Client,
 ) -> anyhow::Result<String> {
     GCS_UPLOAD_INVOCATION_COUNT.inc();
-    let hashed_uri = sha256::digest(uri);
-    let filename = format!("cdn/{}.json", hashed_uri);
+    let filename = format!("cdn/{}.json", id);
     let json_string = json.to_string();
     let json_bytes = json_string.into_bytes();
 
@@ -43,7 +41,7 @@ pub async fn write_json_to_gcs(
             Ok(client
                 .upload_object(
                     &UploadObjectRequest {
-                        bucket: bucket.to_string(),
+                        bucket: bucket.clone(),
                         ..Default::default()
                     },
                     json_bytes.clone(),
@@ -75,13 +73,12 @@ pub async fn write_json_to_gcs(
 /// Infers file type and writes image to GCS
 pub async fn write_image_to_gcs(
     img_format: ImageFormat,
-    bucket: &str,
-    uri: &str,
+    bucket: String,
+    id: String,
     buffer: Vec<u8>,
     client: &Client,
 ) -> anyhow::Result<String> {
     GCS_UPLOAD_INVOCATION_COUNT.inc();
-    let hashed_uri = sha256::digest(uri);
     let extension = match img_format {
         ImageFormat::Gif | ImageFormat::Avif | ImageFormat::Png => img_format
             .extensions_str()
@@ -91,7 +88,7 @@ pub async fn write_image_to_gcs(
         _ => "jpeg".to_string(),
     };
 
-    let filename = format!("cdn/{}.{}", hashed_uri, extension);
+    let filename = format!("cdn/{}.{}", id, extension);
     let upload_type = UploadType::Simple(Media {
         name: filename.clone().into(),
         content_type: format!("image/{}", extension).into(),
@@ -103,7 +100,7 @@ pub async fn write_image_to_gcs(
             Ok(client
                 .upload_object(
                     &UploadObjectRequest {
-                        bucket: bucket.to_string(),
+                        bucket: bucket.clone(),
                         ..Default::default()
                     },
                     buffer.clone(),

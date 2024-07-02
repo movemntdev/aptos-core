@@ -18,6 +18,11 @@ use aptos_peer_monitoring_service_types::{
 use aptos_time_service::TimeService;
 use enum_dispatch::enum_dispatch;
 use std::{fmt::Display, sync::Arc};
+#[cfg(feature = "network-perf-test")] // Disabled by default
+use {
+    crate::peer_states::performance_monitoring::PerformanceMonitoringState,
+    aptos_peer_monitoring_service_types::request::PerformanceMonitoringRequest,
+};
 
 /// A simple enum representing the different types of
 /// states held for each peer.
@@ -26,6 +31,9 @@ pub enum PeerStateKey {
     LatencyInfo,
     NetworkInfo,
     NodeInfo,
+
+    #[cfg(feature = "network-perf-test")] // Disabled by default
+    PerformanceMonitoring,
 }
 
 impl PeerStateKey {
@@ -35,6 +43,8 @@ impl PeerStateKey {
             PeerStateKey::LatencyInfo,
             PeerStateKey::NetworkInfo,
             PeerStateKey::NodeInfo,
+            #[cfg(feature = "network-perf-test")] // Disabled by default
+            PeerStateKey::PerformanceMonitoring,
         ]
     }
 
@@ -44,6 +54,9 @@ impl PeerStateKey {
             PeerStateKey::LatencyInfo => "latency_info",
             PeerStateKey::NetworkInfo => "network_info",
             PeerStateKey::NodeInfo => "node_info",
+
+            #[cfg(feature = "network-perf-test")] // Disabled by default
+            PeerStateKey::PerformanceMonitoring => "performance_monitoring",
         }
     }
 
@@ -59,6 +72,17 @@ impl PeerStateKey {
                 PeerMonitoringServiceRequest::GetNetworkInformation.get_label()
             },
             PeerStateKey::NodeInfo => PeerMonitoringServiceRequest::GetNodeInformation.get_label(),
+
+            #[cfg(feature = "network-perf-test")] // Disabled by default
+            PeerStateKey::PerformanceMonitoring => {
+                PeerMonitoringServiceRequest::PerformanceMonitoringRequest(
+                    PerformanceMonitoringRequest {
+                        request_counter: 0,
+                        data: vec![],
+                    },
+                )
+                .get_label()
+            },
         }
     }
 }
@@ -104,6 +128,9 @@ pub enum PeerStateValue {
     LatencyInfoState,
     NetworkInfoState,
     NodeInfoState,
+
+    #[cfg(feature = "network-perf-test")] // Disabled by default
+    PerformanceMonitoringState,
 }
 
 impl PeerStateValue {
@@ -123,6 +150,13 @@ impl PeerStateValue {
                 let node_monitoring_config = node_config.peer_monitoring_service.node_monitoring;
                 NodeInfoState::new(node_monitoring_config, time_service).into()
             },
+
+            #[cfg(feature = "network-perf-test")] // Disabled by default
+            PeerStateKey::PerformanceMonitoring => {
+                let performance_monitoring_config =
+                    node_config.peer_monitoring_service.performance_monitoring;
+                PerformanceMonitoringState::new(performance_monitoring_config, time_service).into()
+            },
         }
     }
 }
@@ -134,6 +168,11 @@ impl Display for PeerStateValue {
             PeerStateValue::LatencyInfoState(state) => write!(f, "LatencyInfoState: {}", state),
             PeerStateValue::NetworkInfoState(state) => write!(f, "NetworkInfoState: {}", state),
             PeerStateValue::NodeInfoState(state) => write!(f, "NodeInfoState: {}", state),
+
+            #[cfg(feature = "network-perf-test")] // Disabled by default
+            PeerStateValue::PerformanceMonitoringState(state) => {
+                write!(f, "PerformanceMonitoringState: {}", state)
+            },
         }
     }
 }

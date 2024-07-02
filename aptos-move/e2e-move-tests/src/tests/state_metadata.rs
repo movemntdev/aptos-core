@@ -26,10 +26,7 @@ fn test_metadata_tracking() {
     let account1 = harness.new_account_at(address1);
 
     // Disable storage slot metadata tracking
-    harness.enable_features(vec![], vec![
-        FeatureFlag::STORAGE_SLOT_METADATA,
-        FeatureFlag::REFUNDABLE_BYTES,
-    ]);
+    harness.enable_features(vec![], vec![FeatureFlag::STORAGE_SLOT_METADATA]);
     // Create and fund account2
     harness.run_transaction_payload(
         &account1,
@@ -37,54 +34,50 @@ fn test_metadata_tracking() {
     );
     // Observe that metadata is not tracked for address2 resources
     assert_eq!(
-        harness
-            .read_resource_metadata(&address2, coin_store.clone())
-            .unwrap(),
-        StateValueMetadata::none()
+        harness.read_resource_metadata(&address2, coin_store.clone()),
+        Some(StateValueMetadata::none()),
     );
 
     // Enable storage slot metadata tracking
-    harness.enable_features(
-        vec![
-            FeatureFlag::STORAGE_SLOT_METADATA,
-            FeatureFlag::REFUNDABLE_BYTES,
-        ],
-        vec![],
-    );
+    harness.enable_features(vec![FeatureFlag::STORAGE_SLOT_METADATA], vec![]);
     // Create and fund account3
     harness.run_transaction_payload(
         &account1,
         aptos_cached_packages::aptos_stdlib::aptos_account_transfer(address3, 100),
     );
 
+    let slot_fee = harness
+        .new_vm()
+        .gas_params()
+        .unwrap()
+        .vm
+        .txn
+        .storage_fee_per_state_slot_create
+        .into();
+    assert!(slot_fee > 0);
+
     // Observe that metadata is tracked for address3 resources
-    let meta3a = harness
-        .read_resource_metadata(&address3, coin_store.clone())
-        .unwrap();
-    assert!(meta3a.slot_deposit() > 0);
-    assert!(meta3a.bytes_deposit() > 0);
-    assert_eq!(meta3a.creation_time_usecs(), timestamp.microseconds);
-
-    // Bump the timestamp and modify the resource, observe that metadata doesn't change.
-    harness.new_epoch();
-    harness.run_transaction_payload(
-        &account1,
-        aptos_cached_packages::aptos_stdlib::aptos_account_transfer(address3, 100),
+    assert_eq!(
+        harness.read_resource_metadata(&address3, coin_store.clone()),
+        Some(StateValueMetadata::legacy(slot_fee, &timestamp)),
     );
-    let meta3b = harness
-        .read_resource_metadata(&address3, coin_store.clone())
-        .unwrap();
-    assert_eq!(meta3a, meta3b);
 
-    // However, enabling refundable_bytes does make StateValueMetadata::None automatically upgrade
+    // Bump the timestamp and modify the resources, observe that metadata doesn't change.
+    harness.new_epoch();
     harness.run_transaction_payload(
         &account1,
         aptos_cached_packages::aptos_stdlib::aptos_account_transfer(address2, 100),
     );
+    harness.run_transaction_payload(
+        &account1,
+        aptos_cached_packages::aptos_stdlib::aptos_account_transfer(address3, 100),
+    );
     assert_eq!(
-        harness
-            .read_resource_metadata(&address2, coin_store.clone())
-            .unwrap(),
-        StateValueMetadata::new(0, 0, &CurrentTimeMicroseconds { microseconds: 0 })
+        harness.read_resource_metadata(&address2, coin_store.clone()),
+        Some(StateValueMetadata::none()),
+    );
+    assert_eq!(
+        harness.read_resource_metadata(&address3, coin_store),
+        Some(StateValueMetadata::legacy(slot_fee, &timestamp)),
     );
 }

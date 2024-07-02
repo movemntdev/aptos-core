@@ -134,15 +134,6 @@ pub static RETRIED_DATA_REQUESTS: Lazy<IntCounterVec> = Lazy::new(|| {
     .unwrap()
 });
 
-/// Counter for the number of max concurrent prefetching requests
-pub static MAX_CONCURRENT_PREFETCHING_REQUESTS: Lazy<IntGauge> = Lazy::new(|| {
-    register_int_gauge!(
-        "aptos_data_streaming_service_max_concurrent_prefetching_requests",
-        "The number of max concurrent prefetching requests",
-    )
-    .unwrap()
-});
-
 /// Counter for the number of pending data responses
 pub static PENDING_DATA_RESPONSES: Lazy<IntGauge> = Lazy::new(|| {
     register_int_gauge!(
@@ -259,11 +250,6 @@ pub fn observe_values(
 /// Sets the number of active data streams
 pub fn set_active_data_streams(value: usize) {
     ACTIVE_DATA_STREAMS.set(value as i64);
-}
-
-/// Sets the number of max concurrent requests
-pub fn set_max_concurrent_requests(value: u64) {
-    MAX_CONCURRENT_PREFETCHING_REQUESTS.set(value as i64);
 }
 
 /// Sets the number of complete pending data responses

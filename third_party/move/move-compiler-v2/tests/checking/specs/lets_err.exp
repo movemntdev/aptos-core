@@ -1,6 +1,6 @@
 
 Diagnostics:
-error: undeclared `one`
+error: undeclared `M::one`
   ┌─ tests/checking/specs/lets_err.move:6:16
   │
 6 │     let zero = one;

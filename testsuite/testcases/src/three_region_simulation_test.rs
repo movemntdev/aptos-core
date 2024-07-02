@@ -3,12 +3,10 @@
 
 use crate::{LoadDestination, NetworkLoadTest};
 use aptos_forge::{
-    GroupNetworkBandwidth, GroupNetworkDelay, NetworkContext, NetworkContextSynchronizer,
-    NetworkTest, SwarmChaos, SwarmNetworkBandwidth, SwarmNetworkDelay, Test,
+    GroupNetworkBandwidth, GroupNetworkDelay, NetworkContext, NetworkTest, Swarm, SwarmChaos,
+    SwarmNetworkBandwidth, SwarmNetworkDelay, Test,
 };
 use aptos_logger::info;
-use aptos_types::account_address::AccountAddress;
-use async_trait::async_trait;
 
 /// Represents a test that simulates a network with 3 regions, all in the same cloud.
 pub struct ThreeRegionSameCloudSimulationTest;
@@ -24,11 +22,9 @@ impl Test for ThreeRegionSameCloudSimulationTest {
 /// 2. Each region has minimal network delay amongst its nodes
 /// 3. Each region has a network delay to the other two regions, as estimated by https://www.cloudping.co/grid
 /// 4. Currently simulating a 50 percentile network delay between us-west <--> af-south <--> eu-north
-///
-/// This is deprecated and flawed. Use [crate::multi_region_network_test::MultiRegionNetworkEmulationTest] instead
-fn create_three_region_swarm_network_delay(
-    all_validators: Vec<AccountAddress>,
-) -> SwarmNetworkDelay {
+fn create_three_region_swarm_network_delay(swarm: &dyn Swarm) -> SwarmNetworkDelay {
+    let all_validators = swarm.validators().map(|v| v.peer_id()).collect::<Vec<_>>();
+
     // each region has 1/3 of the validators
     let region_size = all_validators.len() / 3;
     let mut us_west = all_validators;
@@ -84,40 +80,29 @@ fn create_bandwidth_limit() -> SwarmNetworkBandwidth {
     }
 }
 
-#[async_trait]
 impl NetworkLoadTest for ThreeRegionSameCloudSimulationTest {
-    async fn setup<'a>(&self, ctx: &mut NetworkContext<'a>) -> anyhow::Result<LoadDestination> {
+    fn setup(&self, ctx: &mut NetworkContext) -> anyhow::Result<LoadDestination> {
         // inject network delay
-        let all_validators = {
-            ctx.swarm
-                .read()
-                .await
-                .validators()
-                .map(|v| v.peer_id())
-                .collect::<Vec<_>>()
-        };
-        let delay = create_three_region_swarm_network_delay(all_validators);
-        let mut swarm = ctx.swarm.write().await;
+        let delay = create_three_region_swarm_network_delay(ctx.swarm());
         let chaos = SwarmChaos::Delay(delay);
-        swarm.inject_chaos(chaos).await?;
+        ctx.runtime.block_on(ctx.swarm.inject_chaos(chaos))?;
 
         // inject bandwidth limit
         let bandwidth = create_bandwidth_limit();
         let chaos = SwarmChaos::Bandwidth(bandwidth);
-        swarm.inject_chaos(chaos).await?;
+        ctx.runtime.block_on(ctx.swarm.inject_chaos(chaos))?;
 
         Ok(LoadDestination::FullnodesOtherwiseValidators)
     }
 
-    async fn finish<'a>(&self, ctx: &mut NetworkContext<'a>) -> anyhow::Result<()> {
-        ctx.swarm.write().await.remove_all_chaos().await?;
+    fn finish(&self, ctx: &mut NetworkContext) -> anyhow::Result<()> {
+        ctx.runtime.block_on(ctx.swarm.remove_all_chaos())?;
         Ok(())
     }
 }
 
-#[async_trait]
 impl NetworkTest for ThreeRegionSameCloudSimulationTest {
-    async fn run<'a>(&self, ctx: NetworkContextSynchronizer<'a>) -> anyhow::Result<()> {
-        <dyn NetworkLoadTest>::run(self, ctx).await
+    fn run(&self, ctx: &mut NetworkContext<'_>) -> anyhow::Result<()> {
+        <dyn NetworkLoadTest>::run(self, ctx)
     }
 }

@@ -25,6 +25,7 @@ aptos-native-interface = { workspace = true }
 aptos-table-natives = { workspace = true }
 aptos-types = { workspace = true }
 aptos-vm = { workspace = true }
+aptos-vm-genesis = { workspace = true }
 
 move-binary-format = { workspace = true }
 move-core-types = { workspace = true }

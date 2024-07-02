@@ -1,5 +1,4 @@
 // Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
 
 use crate::{
     network_interface::{DKGNetworkClient, RPC},
@@ -24,7 +23,7 @@ use futures::{
 };
 use futures_channel::oneshot;
 use move_core_types::account_address::AccountAddress;
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 use tokio::time::timeout;
 
 pub struct IncomingRpcRequest {
@@ -69,12 +68,10 @@ impl NetworkSender {
         if receiver == self.author() {
             let (tx, rx) = oneshot::channel();
             let protocol = RPC[0];
-            let self_msg = Event::RpcRequest(self.author, msg.clone(), RPC[0], tx);
+            let self_msg = Event::RpcRequest(receiver, msg.clone(), RPC[0], tx);
             self.self_sender.clone().send(self_msg).await?;
             if let Ok(Ok(Ok(bytes))) = timeout(timeout_duration, rx).await {
-                let response_msg =
-                    tokio::task::spawn_blocking(move || protocol.from_bytes(&bytes)).await??;
-                Ok(response_msg)
+                Ok(protocol.from_bytes(&bytes)?)
             } else {
                 bail!("self rpc failed");
             }
@@ -89,18 +86,6 @@ impl NetworkSender {
 
 #[async_trait]
 impl RBNetworkSender<DKGMessage> for NetworkSender {
-    async fn send_rb_rpc_raw(
-        &self,
-        receiver: AccountAddress,
-        raw_message: Bytes,
-        timeout: Duration,
-    ) -> anyhow::Result<DKGMessage> {
-        Ok(self
-            .dkg_network_client
-            .send_rpc_raw(receiver, raw_message, timeout)
-            .await?)
-    }
-
     async fn send_rb_rpc(
         &self,
         receiver: AccountAddress,
@@ -108,18 +93,6 @@ impl RBNetworkSender<DKGMessage> for NetworkSender {
         timeout: Duration,
     ) -> anyhow::Result<DKGMessage> {
         self.send_rpc(receiver, message, timeout).await
-    }
-
-    fn to_bytes_by_protocol(
-        &self,
-        peers: Vec<AccountAddress>,
-        message: DKGMessage,
-    ) -> anyhow::Result<HashMap<AccountAddress, Bytes>> {
-        self.dkg_network_client.to_bytes_by_protocol(peers, message)
-    }
-
-    fn sort_peers_by_latency(&self, peers: &mut [AccountAddress]) {
-        self.dkg_network_client.sort_peers_by_latency(peers)
     }
 }
 

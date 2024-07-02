@@ -3,6 +3,7 @@
 
 //! This module defines physical storage schemas for DAG.
 //!
+//! ```
 
 use crate::{
     consensusdb::schema::ensure_slice_len_eq,

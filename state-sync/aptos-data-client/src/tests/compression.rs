@@ -12,7 +12,7 @@ use aptos_config::{config::AptosDataClientConfig, network_id::NetworkId};
 use aptos_network::protocols::wire::handshake::v1::ProtocolId;
 use aptos_storage_service_types::{
     requests::{DataRequest, TransactionsWithProofRequest},
-    responses::{CompleteDataRange, DataResponse, StorageServiceResponse},
+    responses::{DataResponse, StorageServiceResponse},
 };
 use aptos_types::transaction::TransactionListWithProof;
 use claims::assert_matches;
@@ -44,47 +44,22 @@ async fn compression_mismatch_disabled() {
         utils::advance_polling_timer(&mut mock_time, &data_client_config).await;
 
         // Receive their request and respond
-        let highest_synced_version = 100;
         let network_request = utils::get_network_request(&mut mock_network, network_id).await;
-        let data_response = DataResponse::StorageServerSummary(utils::create_storage_summary(
-            highest_synced_version,
-        ));
+        let data_response = DataResponse::StorageServerSummary(utils::create_storage_summary(200));
         network_request.response_sender.send(Ok(
             StorageServiceResponse::new(data_response, false).unwrap()
         ));
 
-        // Wait for the poller to process the response
-        let transaction_range = CompleteDataRange::new(0, highest_synced_version).unwrap();
-        utils::wait_for_transaction_advertisement(
-            &client,
-            &mut mock_time,
-            &data_client_config,
-            transaction_range,
-        )
-        .await;
+        // Let the poller finish processing the response
+        tokio::task::yield_now().await;
 
         // Handle the client's transactions request using compression
         tokio::spawn(async move {
-            loop {
-                // Verify the received network request
-                let network_request =
-                    utils::get_network_request(&mut mock_network, network_id).await;
-                assert!(!network_request.storage_service_request.use_compression);
+            let network_request = utils::get_network_request(&mut mock_network, network_id).await;
+            assert!(!network_request.storage_service_request.use_compression);
 
-                // Fulfill the request if it is for transactions
-                if matches!(
-                    network_request.storage_service_request.data_request,
-                    DataRequest::GetTransactionsWithProof(TransactionsWithProofRequest {
-                        start_version: 50,
-                        end_version: 100,
-                        proof_version: 100,
-                        include_events: false,
-                    })
-                ) {
-                    // Compress the response
-                    utils::handle_transactions_request(network_request, true);
-                }
-            }
+            // Compress the response
+            utils::handle_transactions_request(network_request, true);
         });
 
         // The client should receive a compressed response and return an error
@@ -124,45 +99,19 @@ async fn compression_mismatch_enabled() {
         utils::advance_polling_timer(&mut mock_time, &data_client_config).await;
 
         // Receive their request and respond
-        let highest_synced_version = 200;
         let network_request = utils::get_network_request(&mut mock_network, network_id).await;
-        utils::handle_storage_summary_request(
-            network_request,
-            utils::create_storage_summary(highest_synced_version),
-        );
+        utils::handle_storage_summary_request(network_request, utils::create_storage_summary(200));
 
-        // Wait for the poller to process the response
-        let transaction_range = CompleteDataRange::new(0, highest_synced_version).unwrap();
-        utils::wait_for_transaction_advertisement(
-            &client,
-            &mut mock_time,
-            &data_client_config,
-            transaction_range,
-        )
-        .await;
+        // Let the poller finish processing the response
+        tokio::task::yield_now().await;
 
         // Handle the client's transactions request without compression
         tokio::spawn(async move {
-            loop {
-                // Verify the received network request
-                let network_request =
-                    utils::get_network_request(&mut mock_network, network_id).await;
-                assert!(network_request.storage_service_request.use_compression);
+            let network_request = utils::get_network_request(&mut mock_network, network_id).await;
+            assert!(network_request.storage_service_request.use_compression);
 
-                // Fulfill the request if it is for transactions
-                if matches!(
-                    network_request.storage_service_request.data_request,
-                    DataRequest::GetTransactionsWithProof(TransactionsWithProofRequest {
-                        start_version: 50,
-                        end_version: 100,
-                        proof_version: 100,
-                        include_events: false,
-                    })
-                ) {
-                    // Don't compress the response
-                    utils::handle_transactions_request(network_request, false);
-                }
-            }
+            // Don't compress the response
+            utils::handle_transactions_request(network_request, false);
         });
 
         // The client should receive a compressed response and return an error
@@ -216,50 +165,40 @@ async fn disable_compression() {
         );
 
         // Fulfill their request
-        let highest_synced_version = 200;
-        let data_response = DataResponse::StorageServerSummary(utils::create_storage_summary(
-            highest_synced_version,
-        ));
+        let data_response = DataResponse::StorageServerSummary(utils::create_storage_summary(200));
         network_request.response_sender.send(Ok(
             StorageServiceResponse::new(data_response, false).unwrap()
         ));
 
-        // Wait for the poller to process the response
-        let transaction_range = CompleteDataRange::new(0, highest_synced_version).unwrap();
-        utils::wait_for_transaction_advertisement(
-            &client,
-            &mut mock_time,
-            &data_client_config,
-            transaction_range,
-        )
-        .await;
+        // Let the poller finish processing the response
+        tokio::task::yield_now().await;
 
-        // Handle the client's requests
+        // Handle the client's transactions request
         tokio::spawn(async move {
-            loop {
-                // Verify the received network request
-                let network_request =
-                    utils::get_network_request(&mut mock_network, network_id).await;
-                assert_eq!(network_request.peer_network_id, peer);
-                assert_eq!(network_request.protocol_id, ProtocolId::StorageServiceRpc);
-                assert!(!network_request.storage_service_request.use_compression);
+            // Verify the received network request
+            let network_request = utils::get_network_request(&mut mock_network, network_id).await;
+            assert_eq!(network_request.peer_network_id, peer);
+            assert_eq!(network_request.protocol_id, ProtocolId::StorageServiceRpc);
+            assert!(!network_request.storage_service_request.use_compression);
+            assert_matches!(
+                network_request.storage_service_request.data_request,
+                DataRequest::GetTransactionsWithProof(TransactionsWithProofRequest {
+                    start_version: 50,
+                    end_version: 100,
+                    proof_version: 100,
+                    include_events: false,
+                })
+            );
 
-                // Fulfill the request if it is for transactions
-                if matches!(
-                    network_request.storage_service_request.data_request,
-                    DataRequest::GetTransactionsWithProof(TransactionsWithProofRequest {
-                        start_version: 50,
-                        end_version: 100,
-                        proof_version: 100,
-                        include_events: false,
-                    })
-                ) {
-                    utils::handle_transactions_request(network_request, false);
-                }
-            }
+            // Fulfill the request
+            let data_response =
+                DataResponse::TransactionsWithProof(TransactionListWithProof::new_empty());
+            let storage_response = StorageServiceResponse::new(data_response, false).unwrap();
+            network_request.response_sender.send(Ok(storage_response));
         });
 
-        // The request should succeed since a peer has advertised the data
+        // The client's request should succeed since a peer finally has advertised
+        // data for this range.
         let request_timeout = data_client_config.response_timeout_ms;
         let response = client
             .get_transactions_with_proof(100, 50, 100, false, request_timeout)

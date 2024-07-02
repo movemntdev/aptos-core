@@ -10,19 +10,18 @@ use aptos_sdk::{
     types::{chain_id::ChainId, LocalAccount},
 };
 use reqwest::Url;
-use std::sync::Arc;
 
 #[derive(Debug)]
-pub struct ChainInfo {
-    pub root_account: Arc<LocalAccount>,
+pub struct ChainInfo<'t> {
+    pub root_account: &'t mut LocalAccount,
     pub rest_api_url: String,
     pub inspection_service_url: String,
     pub chain_id: ChainId,
 }
 
-impl ChainInfo {
+impl<'t> ChainInfo<'t> {
     pub fn new(
-        root_account: Arc<LocalAccount>,
+        root_account: &'t mut LocalAccount,
         rest_api_url: String,
         inspection_service_url: String,
         chain_id: ChainId,
@@ -35,13 +34,15 @@ impl ChainInfo {
         }
     }
 
-    pub fn root_account(&self) -> Arc<LocalAccount> {
-        self.root_account.clone()
+    pub fn root_account(&mut self) -> &mut LocalAccount {
+        self.root_account
     }
 
     pub async fn resync_root_account_seq_num(&mut self, client: &RestClient) -> Result<()> {
-        let root_address = { self.root_account.address() };
-        let account = client.get_account(root_address).await?.into_inner();
+        let account = client
+            .get_account(self.root_account.address())
+            .await?
+            .into_inner();
         self.root_account
             .set_sequence_number(account.sequence_number);
         Ok(())
@@ -63,12 +64,12 @@ impl ChainInfo {
         TransactionFactory::new(self.chain_id())
     }
 
-    pub fn into_aptos_public_info(self) -> AptosPublicInfo {
+    pub fn into_aptos_public_info(self) -> AptosPublicInfo<'t> {
         AptosPublicInfo::new(
             self.chain_id,
             self.inspection_service_url.clone(),
             self.rest_api_url.clone(),
-            self.root_account.clone(),
+            self.root_account,
         )
     }
 }

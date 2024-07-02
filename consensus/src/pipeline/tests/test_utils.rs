@@ -6,7 +6,7 @@ use crate::{metrics_safety_rules::MetricsSafetyRules, test_utils::MockStorage};
 use aptos_consensus_types::{
     block::block_test_utils::certificate_for_genesis,
     common::{Payload, Round},
-    pipelined_block::PipelinedBlock,
+    executed_block::ExecutedBlock,
     quorum_cert::QuorumCert,
     vote_proposal::VoteProposal,
 };
@@ -63,20 +63,14 @@ pub fn prepare_executed_blocks_with_ledger_info(
     init_qc: Option<QuorumCert>,
     init_round: Round,
 ) -> (
-    Vec<PipelinedBlock>,
+    Vec<ExecutedBlock>,
     LedgerInfoWithSignatures,
     Vec<VoteProposal>,
 ) {
     assert!(num_blocks > 0);
 
     let p1 = if let Some(parent) = some_parent {
-        make_proposal_with_parent(
-            Payload::empty(false, true),
-            init_round,
-            &parent,
-            None,
-            signer,
-        )
+        make_proposal_with_parent(Payload::empty(false), init_round, &parent, None, signer)
     } else {
         make_proposal_with_qc(init_round, init_qc.unwrap(), signer)
     };
@@ -86,13 +80,8 @@ pub fn prepare_executed_blocks_with_ledger_info(
     for i in 1..num_blocks {
         println!("Generating {}", i);
         let parent = proposals.last().unwrap();
-        let proposal = make_proposal_with_parent(
-            Payload::empty(false, true),
-            init_round + i,
-            parent,
-            None,
-            signer,
-        );
+        let proposal =
+            make_proposal_with_parent(Payload::empty(false), init_round + i, parent, None, signer);
         proposals.push(proposal);
     }
 
@@ -106,7 +95,6 @@ pub fn prepare_executed_blocks_with_ledger_info(
         vec![],
         vec![],
         vec![],
-        None, // block end info
     );
 
     let li = LedgerInfo::new(
@@ -120,10 +108,10 @@ pub fn prepare_executed_blocks_with_ledger_info(
 
     let li_sig = generate_ledger_info_with_sig(&[signer.clone()], li);
 
-    let executed_blocks: Vec<PipelinedBlock> = proposals
+    let executed_blocks: Vec<ExecutedBlock> = proposals
         .iter()
         .map(|proposal| {
-            PipelinedBlock::new(proposal.block().clone(), vec![], compute_result.clone())
+            ExecutedBlock::new(proposal.block().clone(), vec![], compute_result.clone())
         })
         .collect();
 
@@ -132,7 +120,7 @@ pub fn prepare_executed_blocks_with_ledger_info(
 
 pub fn prepare_executed_blocks_with_executed_ledger_info(
     signer: &ValidatorSigner,
-) -> (Vec<PipelinedBlock>, LedgerInfoWithSignatures) {
+) -> (Vec<ExecutedBlock>, LedgerInfoWithSignatures) {
     let genesis_qc = certificate_for_genesis();
     let (executed_blocks, li_sig, _) = prepare_executed_blocks_with_ledger_info(
         signer,
@@ -148,7 +136,7 @@ pub fn prepare_executed_blocks_with_executed_ledger_info(
 
 pub fn prepare_executed_blocks_with_ordered_ledger_info(
     signer: &ValidatorSigner,
-) -> (Vec<PipelinedBlock>, LedgerInfoWithSignatures) {
+) -> (Vec<ExecutedBlock>, LedgerInfoWithSignatures) {
     let genesis_qc = certificate_for_genesis();
     let (executed_blocks, li_sig, _) = prepare_executed_blocks_with_ledger_info(
         signer,

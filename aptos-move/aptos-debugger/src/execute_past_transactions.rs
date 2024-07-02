@@ -4,6 +4,7 @@
 use crate::{aptos_debugger::AptosDebugger, common::Opts};
 use anyhow::Result;
 use aptos_rest_client::Client;
+use aptos_vm::AptosVM;
 use clap::Parser;
 use url::Url;
 
@@ -20,16 +21,12 @@ pub struct Command {
 
     #[clap(long)]
     skip_result: bool,
-
-    #[clap(long)]
-    repeat_execution_times: Option<u64>,
-
-    #[clap(long)]
-    use_same_block_boundaries: bool,
 }
 
 impl Command {
     pub async fn run(self) -> Result<()> {
+        AptosVM::set_concurrency_level_once(self.opts.concurrency_level);
+
         let debugger = if let Some(rest_endpoint) = self.opts.target.rest_endpoint {
             AptosDebugger::rest_client(Client::new(Url::parse(&rest_endpoint)?))?
         } else if let Some(db_path) = self.opts.target.db_path {
@@ -39,13 +36,7 @@ impl Command {
         };
 
         let result = debugger
-            .execute_past_transactions(
-                self.begin_version,
-                self.limit,
-                self.use_same_block_boundaries,
-                self.repeat_execution_times.unwrap_or(1),
-                &self.opts.concurrency_level,
-            )
+            .execute_past_transactions(self.begin_version, self.limit)
             .await?;
 
         if !self.skip_result {

@@ -1,5 +1,4 @@
 // Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
 
 #[macro_export]
 macro_rules! time_fn {

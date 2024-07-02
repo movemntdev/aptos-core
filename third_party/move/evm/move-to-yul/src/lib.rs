@@ -59,7 +59,6 @@ pub fn run_to_yul<W: WriteColor>(error_writer: &mut W, mut options: Options) -> 
             paths: options.sources.clone(),
             named_address_map: addrs.clone(),
         }],
-        vec![],
         vec![PackagePaths {
             name: None,
             paths: options.dependencies.clone(),
@@ -116,7 +115,6 @@ pub fn run_to_abi_metadata<W: WriteColor>(
             paths: options.sources.clone(),
             named_address_map: addrs.clone(),
         }],
-        vec![],
         vec![PackagePaths {
             name: None,
             paths: options.dependencies.clone(),

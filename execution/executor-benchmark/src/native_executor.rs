@@ -17,10 +17,7 @@ use aptos_types::{
     contract_event::ContractEvent,
     event::EventKey,
     state_store::state_key::StateKey,
-    transaction::{
-        ExecutionStatus, Transaction, TransactionAuxiliaryData, TransactionOutput,
-        TransactionStatus,
-    },
+    transaction::{ExecutionStatus, Transaction, TransactionOutput, TransactionStatus},
     vm_status::AbortLocation,
     write_set::{WriteOp, WriteSet, WriteSetMut},
 };
@@ -45,7 +42,6 @@ impl IncrementalOutput {
             self.events,
             /*gas_used=*/ 1,
             TransactionStatus::Keep(ExecutionStatus::Success),
-            TransactionAuxiliaryData::default(),
         ))
     }
 
@@ -55,13 +51,7 @@ impl IncrementalOutput {
     }
 
     fn to_abort(status: TransactionStatus) -> TransactionOutput {
-        TransactionOutput::new(
-            Default::default(),
-            vec![],
-            0,
-            status,
-            TransactionAuxiliaryData::default(),
-        )
+        TransactionOutput::new(Default::default(), vec![], 0, status)
     }
 }
 
@@ -341,7 +331,6 @@ impl NativeExecutor {
             vec![],
             /*gas_used=*/ 0,
             TransactionStatus::Keep(ExecutionStatus::Success),
-            TransactionAuxiliaryData::default(),
         ))
     }
 }
@@ -426,7 +415,6 @@ impl TransactionBlockExecutor for NativeExecutor {
             transactions: transactions.into_iter().map(|t| t.into_inner()).collect(),
             transaction_outputs,
             state_cache: state_view.into_state_cache(),
-            block_end_info: None,
         })
     }
 }

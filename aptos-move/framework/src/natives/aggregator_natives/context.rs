@@ -8,12 +8,13 @@ use aptos_aggregator::{
     delayed_field_extension::DelayedFieldData,
     delta_change_set::DeltaOp,
     resolver::{AggregatorV1Resolver, DelayedFieldResolver},
+    types::DelayedFieldID,
 };
-use aptos_types::state_store::{state_key::StateKey, state_value::StateValueMetadata};
+use aptos_types::{
+    delayed_fields::PanicError, state_store::state_key::StateKey, write_set::WriteOp,
+};
 use better_any::{Tid, TidAble};
-use move_binary_format::errors::PartialVMResult;
 use move_core_types::value::MoveTypeLayout;
-use move_vm_types::delayed_values::delayed_field_id::DelayedFieldID;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, HashSet},
@@ -37,8 +38,8 @@ pub enum AggregatorChangeV1 {
 pub struct AggregatorChangeSet {
     pub aggregator_v1_changes: BTreeMap<StateKey, AggregatorChangeV1>,
     pub delayed_field_changes: BTreeMap<DelayedFieldID, DelayedChange<DelayedFieldID>>,
-    pub reads_needing_exchange: BTreeMap<StateKey, (StateValueMetadata, u64, Arc<MoveTypeLayout>)>,
-    pub group_reads_needing_exchange: BTreeMap<StateKey, (StateValueMetadata, u64)>,
+    pub reads_needing_exchange: BTreeMap<StateKey, (WriteOp, Arc<MoveTypeLayout>)>,
+    pub group_reads_needing_exchange: BTreeMap<StateKey, (WriteOp, u64)>,
 }
 
 /// Native context that can be attached to VM `NativeContextExtensions`.
@@ -49,7 +50,6 @@ pub struct NativeAggregatorContext<'a> {
     txn_hash: [u8; 32],
     pub(crate) aggregator_v1_resolver: &'a dyn AggregatorV1Resolver,
     pub(crate) aggregator_v1_data: RefCell<AggregatorData>,
-    pub(crate) delayed_field_optimization_enabled: bool,
     pub(crate) delayed_field_resolver: &'a dyn DelayedFieldResolver,
     pub(crate) delayed_field_data: RefCell<DelayedFieldData>,
 }
@@ -60,7 +60,6 @@ impl<'a> NativeAggregatorContext<'a> {
     pub fn new(
         txn_hash: [u8; 32],
         aggregator_v1_resolver: &'a dyn AggregatorV1Resolver,
-        delayed_field_optimization_enabled: bool,
         delayed_field_resolver: &'a dyn DelayedFieldResolver,
     ) -> Self {
         Self {
@@ -68,7 +67,6 @@ impl<'a> NativeAggregatorContext<'a> {
             aggregator_v1_resolver,
             aggregator_v1_data: Default::default(),
             delayed_field_resolver,
-            delayed_field_optimization_enabled,
             delayed_field_data: Default::default(),
         }
     }
@@ -80,7 +78,7 @@ impl<'a> NativeAggregatorContext<'a> {
 
     /// Returns all changes made within this context (i.e. by a single
     /// transaction).
-    pub fn into_change_set(self) -> PartialVMResult<AggregatorChangeSet> {
+    pub fn into_change_set(self) -> Result<AggregatorChangeSet, PanicError> {
         let NativeAggregatorContext {
             aggregator_v1_data,
             delayed_field_data,
@@ -118,7 +116,7 @@ impl<'a> NativeAggregatorContext<'a> {
         }
 
         let delayed_field_changes = delayed_field_data.into_inner().into();
-        let delayed_write_set_ids = delayed_field_changes
+        let delayed_write_set_keys = delayed_field_changes
             .keys()
             .cloned()
             .collect::<HashSet<_>>();
@@ -127,18 +125,18 @@ impl<'a> NativeAggregatorContext<'a> {
             delayed_field_changes,
             // is_empty check covers both whether delayed fields are enabled or not, as well as whether there
             // are any changes that would require computing reads needing exchange.
-            // TODO[agg_v2](optimize) we only later compute the write set, so cannot pass the correct skip values here.
-            reads_needing_exchange: if delayed_write_set_ids.is_empty() {
+            // TODO[agg_v2](optimize) we only later compute the the write set, so cannot pass the correct skip values here.
+            reads_needing_exchange: if delayed_write_set_keys.is_empty() {
                 BTreeMap::new()
             } else {
                 self.delayed_field_resolver
-                    .get_reads_needing_exchange(&delayed_write_set_ids, &HashSet::new())?
+                    .get_reads_needing_exchange(&delayed_write_set_keys, &HashSet::new())?
             },
-            group_reads_needing_exchange: if delayed_write_set_ids.is_empty() {
+            group_reads_needing_exchange: if delayed_write_set_keys.is_empty() {
                 BTreeMap::new()
             } else {
                 self.delayed_field_resolver
-                    .get_group_reads_needing_exchange(&delayed_write_set_ids, &HashSet::new())?
+                    .get_group_reads_needing_exchange(&delayed_write_set_keys, &HashSet::new())?
             },
         })
     }
@@ -162,7 +160,7 @@ mod test {
         types::DelayedFieldValue, FakeAggregatorView,
     };
     use aptos_types::delayed_fields::{
-        calculate_width_for_integer_embedded_string, SnapshotToStringFormula,
+        calculate_width_for_integer_embeded_string, SnapshotToStringFormula,
     };
     use claims::{assert_matches, assert_ok, assert_ok_eq, assert_some_eq};
 
@@ -223,7 +221,7 @@ mod test {
     #[test]
     fn test_v1_into_change_set() {
         let resolver = get_test_resolver_v1();
-        let context = NativeAggregatorContext::new([0; 32], &resolver, true, &resolver);
+        let context = NativeAggregatorContext::new([0; 32], &resolver, &resolver);
         test_set_up_v1(&context);
 
         let AggregatorChangeSet {
@@ -413,7 +411,7 @@ mod test {
             id_from_fake_idx(2, 8)
         );
 
-        let derived_width = assert_ok!(calculate_width_for_integer_embedded_string(
+        let derived_width = assert_ok!(calculate_width_for_integer_embeded_string(
             "prefixsuffix".as_bytes().len(),
             id_from_fake_idx(0, 8)
         )) as u32;
@@ -461,7 +459,7 @@ mod test {
     #[test]
     fn test_v2_into_change_set() {
         let resolver = get_test_resolver_v2();
-        let context = NativeAggregatorContext::new([0; 32], &resolver, true, &resolver);
+        let context = NativeAggregatorContext::new([0; 32], &resolver, &resolver);
         test_set_up_v2(&context);
         let delayed_field_changes = context.into_delayed_fields();
         assert!(!delayed_field_changes.contains_key(&DelayedFieldID::new_with_width(1000, 8)));
@@ -499,7 +497,7 @@ mod test {
             &DelayedChange::Create(DelayedFieldValue::Snapshot(500)),
         );
 
-        let derived_width = assert_ok!(calculate_width_for_integer_embedded_string(
+        let derived_width = assert_ok!(calculate_width_for_integer_embeded_string(
             "prefixsuffix".as_bytes().len(),
             id_from_fake_idx(0, 8)
         )) as u32;

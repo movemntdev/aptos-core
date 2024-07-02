@@ -36,7 +36,7 @@ fn rotate_auth_key_ed25519_to_ed25519() {
         *account1.address(),
         0,
         account2.privkey.clone(),
-        account2.pubkey.to_bytes(),
+        account2.pubkey.clone(),
     );
 
     // verify that we can still get to account1's originating address
@@ -60,7 +60,7 @@ fn rotate_auth_key_ed25519_to_multi_ed25519() {
         *account1.address(),
         0,
         private_key,
-        public_key.to_bytes(),
+        public_key,
     );
 
     // verify that we can still get to account1's originating address
@@ -82,10 +82,10 @@ fn rotate_auth_key_twice() {
         *account1.address(),
         0,
         account2.privkey.clone(),
-        account2.pubkey.to_bytes(),
+        account2.pubkey.clone(),
     );
     // rotate account1's keypair to account2
-    account1.rotate_key(account2.privkey, account2.pubkey.as_ed25519().unwrap());
+    account1.rotate_key(account2.privkey, account2.pubkey);
     // verify that we can still get to account1's originating address
     verify_originating_address(&mut harness, account1.auth_key(), *account1.address(), 1);
 
@@ -98,9 +98,9 @@ fn rotate_auth_key_twice() {
         *account1.address(),
         1,
         account3.privkey.clone(),
-        account3.pubkey.to_bytes(),
+        account3.pubkey.clone(),
     );
-    account1.rotate_key(account3.privkey, account3.pubkey.as_ed25519().unwrap());
+    account1.rotate_key(account3.privkey, account3.pubkey);
     verify_originating_address(&mut harness, account1.auth_key(), *account1.address(), 2);
 }
 
@@ -174,7 +174,10 @@ fn run_rotate_auth_key_with_rotation_capability(
     )
 }
 
-pub fn assert_successful_key_rotation_transaction<S: SigningKey + ValidCryptoMaterial>(
+pub fn assert_successful_key_rotation_transaction<
+    S: SigningKey + ValidCryptoMaterial,
+    V: ValidCryptoMaterial,
+>(
     from_scheme: u8,
     to_scheme: u8,
     harness: &mut MoveHarness,
@@ -182,7 +185,7 @@ pub fn assert_successful_key_rotation_transaction<S: SigningKey + ValidCryptoMat
     originator: AccountAddress,
     sequence_number: u64,
     new_private_key: S,
-    new_public_key_bytes: Vec<u8>,
+    new_public_key: V,
 ) {
     // Construct a proof challenge struct that proves that
     // the user intends to rotate their auth key.
@@ -193,7 +196,7 @@ pub fn assert_successful_key_rotation_transaction<S: SigningKey + ValidCryptoMat
         sequence_number,
         originator,
         current_auth_key: AccountAddress::from_bytes(current_account.auth_key()).unwrap(),
-        new_public_key: new_public_key_bytes.clone(),
+        new_public_key: new_public_key.to_bytes().to_vec(),
     };
 
     let rotation_msg = bcs::to_bytes(&rotation_proof).unwrap();
@@ -208,9 +211,9 @@ pub fn assert_successful_key_rotation_transaction<S: SigningKey + ValidCryptoMat
         &current_account,
         aptos_stdlib::account_rotate_authentication_key(
             from_scheme,
-            current_account.pubkey.to_bytes(),
+            current_account.pubkey.to_bytes().to_vec(),
             to_scheme,
-            new_public_key_bytes,
+            new_public_key.to_bytes().to_vec(),
             signature_by_curr_privkey.to_bytes().to_vec(),
             signature_by_new_privkey.to_bytes().to_vec(),
         )
@@ -230,7 +233,10 @@ pub fn verify_originating_address(
             parse_struct_tag("0x1::account::OriginatingAddress").unwrap(),
         )
         .unwrap();
-    let state_key = &StateKey::table_item(&originating_address_handle, &auth_key);
+    let state_key = &StateKey::table_item(
+        originating_address_handle,
+        AccountAddress::from_bytes(auth_key).unwrap().to_vec(),
+    );
     // Verify that the value in the address redirection table is expected
     let result = harness.read_state_value_bytes(state_key).unwrap();
     assert_eq!(result, expected_address.to_vec());

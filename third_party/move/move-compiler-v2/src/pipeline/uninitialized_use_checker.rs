@@ -190,9 +190,7 @@ impl DataflowAnalysis for InitializedStateAnalysis {}
 
 /// Checker which verifies that all locals are definitely initialized before use.
 /// Violations are reported as errors.
-pub struct UninitializedUseChecker {
-    pub keep_annotations: bool,
-}
+pub struct UninitializedUseChecker {}
 
 impl UninitializedUseChecker {
     /// Check whether all locals are definitely initialized before use in the function `target`.
@@ -248,9 +246,7 @@ impl FunctionTargetProcessor for UninitializedUseChecker {
             InitializedStateAnalysis::new(target.get_parameter_count(), target.get_local_count());
         let annotation = analysis.analyze(&target);
         self.perform_checks(&target, &annotation);
-        if self.keep_annotations {
-            data.annotations.set(annotation, true); // for testing.
-        }
+        data.annotations.set(annotation, true); // for testing.
         data
     }
 

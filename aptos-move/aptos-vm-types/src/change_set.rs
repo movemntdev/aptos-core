@@ -7,19 +7,18 @@ use crate::{
         ResourceGroupInPlaceDelayedFieldChangeOp, WriteWithDelayedFieldsOp,
     },
     check_change_set::CheckChangeSet,
-    resolver::ExecutorView,
 };
 use aptos_aggregator::{
     delayed_change::DelayedChange,
     delta_change_set::{serialize, DeltaOp},
     resolver::AggregatorV1Resolver,
-    types::code_invariant_error,
+    types::{code_invariant_error, DelayedFieldID},
 };
 use aptos_types::{
     contract_event::ContractEvent,
     delayed_fields::PanicError,
     state_store::{
-        state_key::{inner::StateKeyInner, StateKey},
+        state_key::{StateKey, StateKeyInner},
         state_value::StateValueMetadata,
     },
     transaction::ChangeSet as StorageChangeSet,
@@ -34,7 +33,6 @@ use move_core_types::{
     value::MoveTypeLayout,
     vm_status::StatusCode,
 };
-use move_vm_types::delayed_values::delayed_field_id::DelayedFieldID;
 use rand::Rng;
 use std::{
     collections::{
@@ -149,11 +147,8 @@ impl VMChangeSet {
         aggregator_v1_write_set: BTreeMap<StateKey, WriteOp>,
         aggregator_v1_delta_set: BTreeMap<StateKey, DeltaOp>,
         delayed_field_change_set: BTreeMap<DelayedFieldID, DelayedChange<DelayedFieldID>>,
-        reads_needing_delayed_field_exchange: BTreeMap<
-            StateKey,
-            (StateValueMetadata, u64, Arc<MoveTypeLayout>),
-        >,
-        group_reads_needing_delayed_field_exchange: BTreeMap<StateKey, (StateValueMetadata, u64)>,
+        reads_needing_delayed_field_exchange: BTreeMap<StateKey, (WriteOp, Arc<MoveTypeLayout>)>,
+        group_reads_needing_delayed_field_exchange: BTreeMap<StateKey, (WriteOp, u64)>,
         events: Vec<(ContractEvent, Option<MoveTypeLayout>)>,
         checker: &dyn CheckChangeSet,
     ) -> PartialVMResult<Self> {
@@ -171,27 +166,39 @@ impl VMChangeSet {
                         .into_iter()
                         .map(|(k, w)| Ok((k, AbstractResourceWriteOp::WriteResourceGroup(w)))),
                 )
-                .chain(reads_needing_delayed_field_exchange.into_iter().map(
-                    |(k, (metadata, size, layout))| {
-                        Ok((
-                            k,
-                            AbstractResourceWriteOp::InPlaceDelayedFieldChange(
-                                InPlaceDelayedFieldChangeOp {
-                                    layout,
-                                    materialized_size: size,
-                                    metadata,
-                                },
-                            ),
-                        ))
-                    },
-                ))
+                .chain(
+                    reads_needing_delayed_field_exchange
+                        .into_iter()
+                        .map(|(k, (w, layout))| {
+                            Ok((
+                                k,
+                                AbstractResourceWriteOp::InPlaceDelayedFieldChange(
+                                    InPlaceDelayedFieldChangeOp {
+                                        layout,
+                                        materialized_size: WriteOpSize::from(&w)
+                                            .write_len()
+                                            .ok_or_else(|| {
+                                                PartialVMError::new(
+                                                    StatusCode::DELAYED_FIELDS_CODE_INVARIANT_ERROR,
+                                                )
+                                                .with_message(
+                                                    "Read with exchange cannot be a delete."
+                                                        .to_string(),
+                                                )
+                                            })?,
+                                        metadata: w.into_metadata(),
+                                    },
+                                ),
+                            ))
+                        }),
+                )
                 .chain(group_reads_needing_delayed_field_exchange.into_iter().map(
-                    |(k, (metadata, materialized_size))| {
+                    |(k, (metadata_op, materialized_size))| {
                         Ok((
                             k,
                             AbstractResourceWriteOp::ResourceGroupInPlaceDelayedFieldChange(
                                 ResourceGroupInPlaceDelayedFieldChangeOp {
-                                    metadata,
+                                    metadata_op,
                                     materialized_size,
                                 },
                             ),
@@ -204,7 +211,7 @@ impl VMChangeSet {
                         let (key, value) = element?;
                         if acc.insert(key, value).is_some() {
                             Err(PartialVMError::new(
-                                StatusCode::DELAYED_MATERIALIZATION_CODE_INVARIANT_ERROR,
+                                StatusCode::DELAYED_FIELDS_CODE_INVARIANT_ERROR,
                             )
                             .with_message(
                                 "Found duplicate key across resource change sets.".to_string(),
@@ -354,7 +361,7 @@ impl VMChangeSet {
                 self.module_write_set()
                     .iter()
                     .chain(self.aggregator_v1_write_set().iter())
-                    .map(|(k, v)| (k, v.write_op_size())),
+                    .map(|(k, v)| (k, WriteOpSize::from(v))),
             )
     }
 
@@ -366,38 +373,18 @@ impl VMChangeSet {
 
     /// Deposit amount is inserted into metadata at a different time than the WriteOp is created.
     /// So this method is needed to be able to update metadata generically across different variants.
-    pub fn write_op_info_iter_mut<'a>(
-        &'a mut self,
-        executor_view: &'a dyn ExecutorView,
-    ) -> impl Iterator<Item = PartialVMResult<WriteOpInfo>> {
-        let resources = self.resource_write_set.iter_mut().map(|(key, op)| {
-            Ok(WriteOpInfo {
-                key,
-                op_size: op.materialized_size(),
-                prev_size: op.prev_materialized_size(key, executor_view)?,
-                metadata_mut: op.get_metadata_mut(),
-            })
-        });
-        let modules = self.module_write_set.iter_mut().map(|(key, op)| {
-            Ok(WriteOpInfo {
-                key,
-                op_size: op.write_op_size(),
-                prev_size: executor_view.get_module_state_value_size(key)?.unwrap_or(0),
-                metadata_mut: op.get_metadata_mut(),
-            })
-        });
-        let v1_aggregators = self.aggregator_v1_write_set.iter_mut().map(|(key, op)| {
-            Ok(WriteOpInfo {
-                key,
-                op_size: op.write_op_size(),
-                prev_size: executor_view
-                    .get_aggregator_v1_state_value_size(key)?
-                    .unwrap_or(0),
-                metadata_mut: op.get_metadata_mut(),
-            })
-        });
-
-        resources.chain(modules).chain(v1_aggregators)
+    pub fn write_set_iter_mut(
+        &mut self,
+    ) -> impl Iterator<Item = (&StateKey, WriteOpSize, &mut StateValueMetadata)> {
+        self.resource_write_set
+            .iter_mut()
+            .map(|(k, v)| (k, v.materialized_size(), v.get_metadata_mut()))
+            .chain(
+                self.module_write_set
+                    .iter_mut()
+                    .chain(self.aggregator_v1_write_set.iter_mut())
+                    .map(|(k, v)| (k, WriteOpSize::from(v as &WriteOp), v.get_metadata_mut())),
+            )
     }
 
     pub fn resource_write_set(&self) -> &BTreeMap<StateKey, AbstractResourceWriteOp> {
@@ -420,9 +407,9 @@ impl VMChangeSet {
     // Called by `into_transaction_output_with_materialized_writes` only.
     pub(crate) fn extend_resource_write_set(
         &mut self,
-        materialized_resource_writes: impl Iterator<Item = (StateKey, WriteOp)>,
+        patched_resource_writes: impl Iterator<Item = (StateKey, WriteOp)>,
     ) -> Result<(), PanicError> {
-        for (key, new_write) in materialized_resource_writes {
+        for (key, new_write) in patched_resource_writes {
             let abstract_write = self.resource_write_set.get_mut(&key).ok_or_else(|| {
                 code_invariant_error(format!(
                     "Cannot patch a resource which does not exist, for: {:?}.",
@@ -437,7 +424,7 @@ impl VMChangeSet {
                 )));
             }
 
-            let new_length = new_write.write_op_size().write_len();
+            let new_length = WriteOpSize::from(&new_write).write_len();
             let old_length = abstract_write.materialized_size().write_len();
             if new_length != old_length {
                 return Err(code_invariant_error(format!(
@@ -451,8 +438,8 @@ impl VMChangeSet {
     }
 
     /// The events are set to the input events.
-    pub(crate) fn set_events(&mut self, materialized_events: impl Iterator<Item = ContractEvent>) {
-        self.events = materialized_events
+    pub(crate) fn set_events(&mut self, patched_events: impl Iterator<Item = ContractEvent>) {
+        self.events = patched_events
             .map(|event| (event, None))
             .collect::<Vec<_>>();
     }
@@ -744,7 +731,6 @@ impl VMChangeSet {
                                 metadata_op: additional_metadata_op,
                                 inner_ops: additional_inner_ops,
                                 maybe_group_op_size: additional_maybe_group_op_size,
-                                prev_group_size: _, // n.b. group.prev_group_size deliberately kept as is
                             }),
                         ) => {
                             // Squashing creation and deletion is a no-op. In that case, we have to
@@ -768,11 +754,6 @@ impl VMChangeSet {
                                 )?;
 
                                 group.maybe_group_op_size = *additional_maybe_group_op_size;
-
-                                //
-                                // n.b. group.prev_group_size deliberately kept as is
-                                //
-
                                 (false, false)
                             }
                         },
@@ -785,19 +766,8 @@ impl VMChangeSet {
                                 materialized_size: additional_materialized_size,
                                 ..
                             }),
-                        ) => {
-                            // Read cannot change the size (i.e. delayed fields don't modify size)
-                            if materialized_size != &Some(*additional_materialized_size) {
-                                return Err(code_invariant_error(format!(
-                                    "Trying to squash writes where read has different size: {:?}: {:?}",
-                                    materialized_size,
-                                    additional_materialized_size
-                                )));
-                            }
-                            // any newer read should've read the original write and contain all info from it
-                            (false, false)
-                        },
-                        (
+                        )
+                        | (
                             WriteResourceGroup(GroupWrite {
                                 maybe_group_op_size: materialized_size,
                                 ..
@@ -809,17 +779,9 @@ impl VMChangeSet {
                                 },
                             ),
                         ) => {
-                            // Read cannot change the size (i.e. delayed fields don't modify size)
-                            if materialized_size.map(|v| v.get())
-                                != Some(*additional_materialized_size)
-                            {
-                                return Err(code_invariant_error(format!(
-                                    "Trying to squash group writes where read has different size: {:?}: {:?}",
-                                    materialized_size,
-                                    additional_materialized_size
-                                )));
-                            }
-                            // any newer read should've read the original write and contain all info from it
+                            // newer read should've read the original write and contain all info from it,
+                            // but could have additional delayed field writes, that change the size.
+                            *materialized_size = Some(*additional_materialized_size);
                             (false, false)
                         },
                         // If previous value is a read, newer value overwrites it
@@ -919,13 +881,6 @@ impl VMChangeSet {
         self.write_set_size_iter()
             .any(|(_key, op_size)| matches!(op_size, WriteOpSize::Creation { .. }))
     }
-}
-
-pub struct WriteOpInfo<'a> {
-    pub key: &'a StateKey,
-    pub op_size: WriteOpSize,
-    pub prev_size: u64,
-    pub metadata_mut: &'a mut StateValueMetadata,
 }
 
 // Tests are in test_change_set.rs.

@@ -1,5 +1,4 @@
 // Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
 
 use crate::remote_executor_service::ExecutorService;
 use aptos_logger::info;

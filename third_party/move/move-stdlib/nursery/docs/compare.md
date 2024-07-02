@@ -1,5 +1,5 @@
 
-<a id="0x1_compare"></a>
+<a name="0x1_compare"></a>
 
 # Module `0x1::compare`
 
@@ -16,12 +16,12 @@ Utilities for comparing Move values based on their representation in BCS.
 
 
 
-<a id="@Constants_0"></a>
+<a name="@Constants_0"></a>
 
 ## Constants
 
 
-<a id="0x1_compare_EQUAL"></a>
+<a name="0x1_compare_EQUAL"></a>
 
 
 
@@ -30,7 +30,7 @@ Utilities for comparing Move values based on their representation in BCS.
 
 
 
-<a id="0x1_compare_GREATER_THAN"></a>
+<a name="0x1_compare_GREATER_THAN"></a>
 
 
 
@@ -39,7 +39,7 @@ Utilities for comparing Move values based on their representation in BCS.
 
 
 
-<a id="0x1_compare_LESS_THAN"></a>
+<a name="0x1_compare_LESS_THAN"></a>
 
 
 
@@ -48,7 +48,7 @@ Utilities for comparing Move values based on their representation in BCS.
 
 
 
-<a id="0x1_compare_cmp_bcs_bytes"></a>
+<a name="0x1_compare_cmp_bcs_bytes"></a>
 
 ## Function `cmp_bcs_bytes`
 
@@ -116,7 +116,7 @@ Keep this in mind when using this function to compare addresses.
 
 </details>
 
-<a id="0x1_compare_cmp_u8"></a>
+<a name="0x1_compare_cmp_u8"></a>
 
 ## Function `cmp_u8`
 
@@ -143,7 +143,7 @@ Compare two <code>u8</code>'s
 
 </details>
 
-<a id="0x1_compare_cmp_u64"></a>
+<a name="0x1_compare_cmp_u64"></a>
 
 ## Function `cmp_u64`
 

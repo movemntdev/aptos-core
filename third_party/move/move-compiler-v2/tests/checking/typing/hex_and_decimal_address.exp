@@ -1,4 +1,4 @@
-// -- Model dump before bytecode pipeline
+// ---- Model Dump
 module 0x7b::M {
     struct S {
         dummy_field: bool,
@@ -7,6 +7,12 @@ module 0x7b::M {
         pack M::S(false)
     }
     public fun take(_s: M::S) {
+        Tuple()
+    }
+    spec fun $s(): M::S {
+        pack M::S(false)
+    }
+    spec fun $take(_s: M::S) {
         Tuple()
     }
 } // end 0x7b::M
@@ -18,4 +24,5 @@ module <SELF>_0 {
         M::take(M::s());
         Tuple()
     }
+    spec fun $main();
 } // end <SELF>_0

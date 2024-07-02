@@ -1,5 +1,4 @@
 // Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
 
 use crate::pipeline::signing_phase::CommitSignerProvider;
 use aptos_crypto::bls12381;

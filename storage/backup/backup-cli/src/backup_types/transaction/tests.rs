@@ -66,10 +66,7 @@ fn end_to_end() {
                         start_version: 0,
                         num_transactions: first_ver_to_backup as usize,
                     },
-                    GlobalBackupOpt {
-                        max_chunk_size,
-                        concurrent_data_requests: 2,
-                    },
+                    GlobalBackupOpt { max_chunk_size },
                     client.clone(),
                     Arc::clone(&store),
                 )
@@ -86,10 +83,7 @@ fn end_to_end() {
                     start_version: first_ver_to_backup,
                     num_transactions: num_txns_to_backup,
                 },
-                GlobalBackupOpt {
-                    max_chunk_size,
-                    concurrent_data_requests: 2,
-                },
+                GlobalBackupOpt { max_chunk_size },
                 client,
                 Arc::clone(&store),
             )
@@ -143,7 +137,7 @@ fn end_to_end() {
         assert_eq!(restore_ws, org_ws);
     }
 
-    assert_eq!(tgt_db.get_synced_version().unwrap(), target_version);
+    assert_eq!(tgt_db.get_latest_version().unwrap(), target_version);
     let recovered_transactions = tgt_db
         .get_transactions(
             0,

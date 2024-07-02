@@ -1,7 +1,6 @@
 locals {
   forge_helm_chart_path = "${path.module}/../../helm/forge"
 }
-
 resource "helm_release" "forge" {
   count       = var.enable_forge ? 1 : 0
   name        = "forge"

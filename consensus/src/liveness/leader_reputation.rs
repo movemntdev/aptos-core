@@ -30,8 +30,6 @@ use std::{
     sync::Arc,
 };
 
-pub type VotingPowerRatio = f64;
-
 /// Interface to query committed NewBlockEvent.
 pub trait MetadataBackend: Send + Sync {
     /// Return a contiguous NewBlockEvent window in which last one is at target_round or
@@ -136,33 +134,23 @@ impl AptosDBBackend {
 
         if result.len() < self.window_size && !hit_end {
             error!(
-                "We are not fetching far enough in history, we filtered from {} to {}, but asked for {}. Target ({}, {}), received from {:?} to {:?}.",
+                "We are not fetching far enough in history, we filtered from {} to {}, but asked for {}",
                 events.len(),
                 result.len(),
-                self.window_size,
-                target_epoch,
-                target_round,
-                events.last().map_or((0, 0), |e| (e.event.epoch(), e.event.round())),
-                events.first().map_or((0, 0), |e| (e.event.epoch(), e.event.round())),
+                self.window_size
             );
         }
-
-        if result.is_empty() {
-            warn!("No events in the requested window could be found");
-            (result, HashValue::zero())
-        } else {
-            let root_hash = self
-                .aptos_db
-                .get_accumulator_root_hash(max_version)
-                .unwrap_or_else(|_| {
-                    error!(
-                        "We couldn't fetch accumulator hash for the {} version, for {} epoch, {} round",
-                        max_version, target_epoch, target_round,
-                    );
-                    HashValue::zero()
-                });
-            (result, root_hash)
-        }
+        let root_hash = self
+            .aptos_db
+            .get_accumulator_root_hash(max_version)
+            .unwrap_or_else(|_| {
+                error!(
+                    "We couldn't fetch accumulator hash for the {} version, for {} epoch, {} round",
+                    max_version, target_epoch, target_round,
+                );
+                HashValue::zero()
+            });
+        (result, root_hash)
     }
 }
 
@@ -181,7 +169,7 @@ impl MetadataBackend for AptosDBBackend {
         let has_larger = events.first().map_or(false, |e| {
             (e.event.epoch(), e.event.round()) >= (target_epoch, target_round)
         });
-        let latest_db_version = self.aptos_db.get_latest_ledger_info_version().unwrap_or(0);
+        let latest_db_version = self.aptos_db.get_latest_version().unwrap_or(0);
         // check if fresher data has potential to give us different result
         if !has_larger && version < latest_db_version {
             let fresh_db_result = self.refresh_db_result(locked, latest_db_version);
@@ -190,8 +178,7 @@ impl MetadataBackend for AptosDBBackend {
                     self.get_from_db_result(target_epoch, target_round, &events, hit_end)
                 },
                 Err(e) => {
-                    // fails if requested events were pruned / or we never backfil them.
-                    warn!(
+                    error!(
                         error = ?e, "[leader reputation] Fail to refresh window",
                     );
                     (vec![], HashValue::zero())
@@ -589,11 +576,7 @@ impl LeaderReputation {
     // Compute chain health metrics, and
     // - return participating voting power percentage for the window_for_chain_health
     // - update metric counters for different windows
-    fn compute_chain_health_and_add_metrics(
-        &self,
-        history: &[NewBlockEvent],
-        round: Round,
-    ) -> VotingPowerRatio {
+    fn compute_chain_health_and_add_metrics(&self, history: &[NewBlockEvent], round: Round) -> f64 {
         let candidates = self.epoch_to_proposers.get(&self.epoch).unwrap();
         // use f64 counter, as total voting power is u128
         let total_voting_power = self.voting_powers.iter().map(|v| *v as f64).sum();
@@ -656,7 +639,7 @@ impl LeaderReputation {
 
                 if chosen {
                     // do not treat chain as unhealthy, if chain just started, and we don't have enough history to decide.
-                    let voting_power_participation_ratio: VotingPowerRatio =
+                    let voting_power_participation_ratio =
                         if history.len() < *participants_window_size && self.epoch <= 2 {
                             1.0
                         } else if total_voting_power >= 1.0 {
@@ -688,7 +671,7 @@ impl ProposerElection for LeaderReputation {
     fn get_valid_proposer_and_voting_power_participation_ratio(
         &self,
         round: Round,
-    ) -> (Author, VotingPowerRatio) {
+    ) -> (Author, f64) {
         let target_round = round.saturating_sub(self.exclude_round);
         let (sliding_window, root_hash) = self.backend.get_block_metadata(self.epoch, target_round);
         let voting_power_participation_ratio =
@@ -730,7 +713,7 @@ impl ProposerElection for LeaderReputation {
             .0
     }
 
-    fn get_voting_power_participation_ratio(&self, round: Round) -> VotingPowerRatio {
+    fn get_voting_power_participation_ratio(&self, round: Round) -> f64 {
         self.get_valid_proposer_and_voting_power_participation_ratio(round)
             .1
     }

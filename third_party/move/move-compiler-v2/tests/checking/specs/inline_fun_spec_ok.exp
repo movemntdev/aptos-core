@@ -1,10 +1,6 @@
-// -- Model dump before bytecode pipeline
+// ---- Model Dump
 module 0x42::M {
-    public inline fun f(): u64 {
-        spec {
-          assert true;
-        }
-        ;
+    spec fun $f(): u64 {
         42
     }
 } // end 0x42::M

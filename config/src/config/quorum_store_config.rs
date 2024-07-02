@@ -3,6 +3,7 @@
 
 use crate::config::{
     config_sanitizer::ConfigSanitizer, node_config_loader::NodeType, Error, NodeConfig,
+    MAX_SENDING_BLOCK_TXNS_QUORUM_STORE_OVERRIDE,
 };
 use aptos_global_constants::DEFAULT_BUCKETS;
 use aptos_types::chain_id::ChainId;
@@ -28,15 +29,14 @@ impl Default for QuorumStoreBackPressureConfig {
     fn default() -> QuorumStoreBackPressureConfig {
         QuorumStoreBackPressureConfig {
             // QS will be backpressured if the remaining total txns is more than this number
-            // Roughly, target TPS * commit latency seconds
-            backlog_txn_limit_count: 12_000,
+            backlog_txn_limit_count: MAX_SENDING_BLOCK_TXNS_QUORUM_STORE_OVERRIDE * 4,
             // QS will create batches at the max rate until this number is reached
             backlog_per_validator_batch_limit_count: 4,
             decrease_duration_ms: 1000,
             increase_duration_ms: 1000,
             decrease_fraction: 0.5,
             dynamic_min_txn_per_s: 160,
-            dynamic_max_txn_per_s: 4000,
+            dynamic_max_txn_per_s: 2000,
         }
     }
 }
@@ -49,48 +49,28 @@ pub struct QuorumStoreConfig {
     pub batch_generation_poll_interval_ms: usize,
     pub batch_generation_min_non_empty_interval_ms: usize,
     pub batch_generation_max_interval_ms: usize,
-    /// The maximum number of transactions that the batch generator puts in a batch.
     pub sender_max_batch_txns: usize,
-    /// The maximum number of bytes that the batch generator puts in a batch.
     pub sender_max_batch_bytes: usize,
-    /// The maximum number of batches that the batch generator creates every time it pull transactions
-    /// from the mempool. This is NOT the maximum number of batches that the batch generator can create
-    /// per second.
     pub sender_max_num_batches: usize,
-    /// The maximum number of transactions that the batch generator pulls from the mempool at a time.
-    /// After the transactions are pulled, the batch generator splits them into multiple batches. This is NOT
-    /// the maximum number of transactions the batch generator includes in batches per second.
     pub sender_max_total_txns: usize,
-    /// The maximum number of bytes that the batch generator pulls from the mempool at a time. This is NOT
-    /// the maximum number of bytes the batch generator includes in batches per second.
     pub sender_max_total_bytes: usize,
-    /// The maximum number of transactions a single batch received from peers could contain.
     pub receiver_max_batch_txns: usize,
-    /// The maximum number of bytes a single batch received from peers could contain.
     pub receiver_max_batch_bytes: usize,
-    /// The maximum number of batches a BatchMsg received from peers can contain.
     pub receiver_max_num_batches: usize,
-    /// The maximum number of transactions a BatchMsg received from peers can contain. Each BatchMsg can contain
-    /// multiple batches.
     pub receiver_max_total_txns: usize,
-    /// The maximum number of bytes a BatchMsg received from peers can contain. Each BatchMsg can contain
-    /// multiple batches.
     pub receiver_max_total_bytes: usize,
     pub batch_request_num_peers: usize,
     pub batch_request_retry_limit: usize,
     pub batch_request_retry_interval_ms: usize,
     pub batch_request_rpc_timeout_ms: usize,
-    /// Duration for expiring locally created batches.
+    /// Used when setting up the expiration time for the batch initation.
     pub batch_expiry_gap_when_init_usecs: u64,
-    /// Duration for expiring remotely created batches. The txns are filtered to prevent dupliation across validators.
-    pub remote_batch_expiry_gap_when_init_usecs: u64,
     pub memory_quota: usize,
     pub db_quota: usize,
     pub batch_quota: usize,
     pub back_pressure: QuorumStoreBackPressureConfig,
     pub num_workers_for_remote_batches: usize,
     pub batch_buckets: Vec<u64>,
-    pub allow_batches_without_pos_in_proposal: bool,
 }
 
 impl Default for QuorumStoreConfig {
@@ -120,7 +100,6 @@ impl Default for QuorumStoreConfig {
             batch_request_retry_interval_ms: 1000,
             batch_request_rpc_timeout_ms: 5000,
             batch_expiry_gap_when_init_usecs: Duration::from_secs(60).as_micros() as u64,
-            remote_batch_expiry_gap_when_init_usecs: Duration::from_millis(500).as_micros() as u64,
             memory_quota: 120_000_000,
             db_quota: 300_000_000,
             batch_quota: 300_000,
@@ -128,7 +107,6 @@ impl Default for QuorumStoreConfig {
             // number of batch coordinators to handle QS batch messages, should be >= 1
             num_workers_for_remote_batches: 10,
             batch_buckets: DEFAULT_BUCKETS.to_vec(),
-            allow_batches_without_pos_in_proposal: true,
         }
     }
 }

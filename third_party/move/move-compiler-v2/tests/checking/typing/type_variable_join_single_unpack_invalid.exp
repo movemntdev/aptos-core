@@ -1,12 +1,12 @@
 
 Diagnostics:
-error: cannot adapt `u64` to annotated type `bool`
+error: expected `bool` but found `u64`
    ┌─ tests/checking/typing/type_variable_join_single_unpack_invalid.move:11:10
    │
 11 │         (f2: bool);
    │          ^^
 
-error: cannot adapt `Box<u64>` to annotated type `Box<bool>`
+error: expected `bool` but found `u64`
    ┌─ tests/checking/typing/type_variable_join_single_unpack_invalid.move:14:10
    │
 14 │         (f2: Box<bool>);

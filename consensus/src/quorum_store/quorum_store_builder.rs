@@ -3,7 +3,6 @@
 
 use super::quorum_store_db::QuorumStoreStorage;
 use crate::{
-    consensus_observer::publisher::ConsensusPublisher,
     error::error_kind,
     network::{IncomingBatchRetrievalRequest, NetworkSender},
     network_interface::ConsensusMsg,
@@ -25,9 +24,7 @@ use crate::{
 };
 use aptos_channels::{aptos_channel, message_queues::QueueStyle};
 use aptos_config::config::{QuorumStoreConfig, SecureBackend};
-use aptos_consensus_types::{
-    common::Author, proof_of_store::ProofCache, request_response::GetPayloadCommand,
-};
+use aptos_consensus_types::{common::Author, request_response::GetPayloadCommand};
 use aptos_global_constants::CONSENSUS_KEY;
 use aptos_logger::prelude::*;
 use aptos_mempool::QuorumStoreRequest;
@@ -49,16 +46,13 @@ pub enum QuorumStoreBuilder {
 impl QuorumStoreBuilder {
     pub fn init_payload_manager(
         &mut self,
-        consensus_publisher: Option<Arc<ConsensusPublisher>>,
     ) -> (
         Arc<PayloadManager>,
         Option<aptos_channel::Sender<AccountAddress, VerifiedEvent>>,
     ) {
         match self {
             QuorumStoreBuilder::DirectMempool(inner) => inner.init_payload_manager(),
-            QuorumStoreBuilder::QuorumStore(inner) => {
-                inner.init_payload_manager(consensus_publisher)
-            },
+            QuorumStoreBuilder::QuorumStore(inner) => inner.init_payload_manager(),
         }
     }
 
@@ -128,7 +122,6 @@ pub struct InnerBuilder {
     aptos_db: Arc<dyn DbReader>,
     network_sender: NetworkSender,
     verifier: ValidatorVerifier,
-    proof_cache: ProofCache,
     backend: SecureBackend,
     coordinator_tx: Sender<CoordinatorCommand>,
     coordinator_rx: Option<Receiver<CoordinatorCommand>>,
@@ -162,7 +155,6 @@ impl InnerBuilder {
         aptos_db: Arc<dyn DbReader>,
         network_sender: NetworkSender,
         verifier: ValidatorVerifier,
-        proof_cache: ProofCache,
         backend: SecureBackend,
         quorum_store_storage: Arc<dyn QuorumStoreStorage>,
         broadcast_proofs: bool,
@@ -201,7 +193,6 @@ impl InnerBuilder {
             aptos_db,
             network_sender,
             verifier,
-            proof_cache,
             backend,
             coordinator_tx,
             coordinator_rx: Some(coordinator_rx),
@@ -300,7 +291,6 @@ impl InnerBuilder {
             self.author,
             self.config.clone(),
             self.quorum_store_storage.clone(),
-            self.batch_store.clone().unwrap(),
             self.quorum_store_to_mempool_sender,
             self.mempool_txn_pull_timeout_ms,
         );
@@ -320,8 +310,6 @@ impl InnerBuilder {
             let batch_coordinator = BatchCoordinator::new(
                 self.author,
                 self.network_sender.clone(),
-                self.proof_manager_cmd_tx.clone(),
-                self.batch_generator_cmd_tx.clone(),
                 self.batch_store.clone().unwrap(),
                 self.config.receiver_max_batch_txns as u64,
                 self.config.receiver_max_batch_bytes as u64,
@@ -342,7 +330,6 @@ impl InnerBuilder {
             self.author,
             self.batch_reader.clone().unwrap(),
             self.batch_generator_cmd_tx.clone(),
-            self.proof_cache,
             self.broadcast_proofs,
         );
         spawn_named!(
@@ -362,8 +349,6 @@ impl InnerBuilder {
                 .back_pressure
                 .backlog_per_validator_batch_limit_count
                 * self.num_validators,
-            self.batch_store.clone().unwrap(),
-            self.config.allow_batches_without_pos_in_proposal,
         );
         spawn_named!(
             "proof_manager",
@@ -392,6 +377,8 @@ impl InnerBuilder {
                 Some(&counters::BATCH_RETRIEVAL_TASK_MSGS),
             );
         let aptos_db_clone = self.aptos_db.clone();
+        // TODO: Once v2 handler is released, remove this flag and always use v2
+        let use_v2 = false;
         spawn_named!("batch_serve", async move {
             info!(epoch = epoch, "Batch retrieval task starts");
             while let Some(rpc_request) = batch_retrieval_rx.next().await {
@@ -411,15 +398,23 @@ impl InnerBuilder {
                         },
                     }
                 };
+                let msg = if use_v2 {
+                    Some(ConsensusMsg::BatchResponseV2(Box::new(response)))
+                } else if let BatchResponse::Batch(batch) = response {
+                    Some(ConsensusMsg::BatchResponse(Box::new(batch)))
+                } else {
+                    None
+                };
 
-                let msg = ConsensusMsg::BatchResponseV2(Box::new(response));
-                let bytes = rpc_request.protocol.to_bytes(&msg).unwrap();
-                if let Err(e) = rpc_request
-                    .response_sender
-                    .send(Ok(bytes.into()))
-                    .map_err(|_| anyhow::anyhow!("Failed to send block retrieval response"))
-                {
-                    warn!(epoch = epoch, error = ?e, kind = error_kind(&e));
+                if let Some(msg) = msg {
+                    let bytes = rpc_request.protocol.to_bytes(&msg).unwrap();
+                    if let Err(e) = rpc_request
+                        .response_sender
+                        .send(Ok(bytes.into()))
+                        .map_err(|_| anyhow::anyhow!("Failed to send block retrieval response"))
+                    {
+                        warn!(epoch = epoch, error = ?e, kind = error_kind(&e));
+                    }
                 }
             }
             info!(epoch = epoch, "Batch retrieval task stops");
@@ -430,7 +425,6 @@ impl InnerBuilder {
 
     fn init_payload_manager(
         &mut self,
-        consensus_publisher: Option<Arc<ConsensusPublisher>>,
     ) -> (
         Arc<PayloadManager>,
         Option<aptos_channel::Sender<AccountAddress, VerifiedEvent>>,
@@ -442,7 +436,6 @@ impl InnerBuilder {
                 batch_reader,
                 // TODO: remove after splitting out clean requests
                 self.coordinator_tx.clone(),
-                consensus_publisher,
             )),
             Some(self.quorum_store_msg_tx.clone()),
         )

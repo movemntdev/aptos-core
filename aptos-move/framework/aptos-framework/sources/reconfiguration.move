@@ -11,7 +11,6 @@ module aptos_framework::reconfiguration {
     use aptos_framework::system_addresses;
     use aptos_framework::timestamp;
     use aptos_framework::chain_status;
-    use aptos_framework::reconfiguration_state;
     use aptos_framework::storage_gas;
     use aptos_framework::transaction_fee;
 
@@ -22,21 +21,11 @@ module aptos_framework::reconfiguration {
     friend aptos_framework::gas_schedule;
     friend aptos_framework::genesis;
     friend aptos_framework::version;
-    friend aptos_framework::reconfiguration_with_dkg;
 
-    #[event]
     /// Event that signals consensus to start a new epoch,
     /// with new configuration information. This is also called a
     /// "reconfiguration event"
     struct NewEpochEvent has drop, store {
-        epoch: u64,
-    }
-
-    #[event]
-    /// Event that signals consensus to start a new epoch,
-    /// with new configuration information. This is also called a
-    /// "reconfiguration event"
-    struct NewEpoch has drop, store {
         epoch: u64,
     }
 
@@ -129,8 +118,6 @@ module aptos_framework::reconfiguration {
             return
         };
 
-        reconfiguration_state::on_reconfig_start();
-
         // Reconfiguration "forces the block" to end, as mentioned above. Therefore, we must process the collected fees
         // explicitly so that staking can distribute them.
         //
@@ -156,21 +143,12 @@ module aptos_framework::reconfiguration {
         };
         config_ref.epoch = config_ref.epoch + 1;
 
-        if (std::features::module_event_migration_enabled()) {
-            event::emit(
-                NewEpoch {
-                    epoch: config_ref.epoch,
-                },
-            );
-        };
         event::emit_event<NewEpochEvent>(
             &mut config_ref.events,
             NewEpochEvent {
                 epoch: config_ref.epoch,
             },
         );
-
-        reconfiguration_state::on_reconfig_finish();
     }
 
     public fun last_reconfiguration_time(): u64 acquires Configuration {
@@ -188,13 +166,6 @@ module aptos_framework::reconfiguration {
         assert!(config_ref.epoch == 0 && config_ref.last_reconfiguration_time == 0, error::invalid_state(ECONFIGURATION));
         config_ref.epoch = 1;
 
-        if (std::features::module_event_migration_enabled()) {
-            event::emit(
-                NewEpoch {
-                    epoch: config_ref.epoch,
-                },
-            );
-        };
         event::emit_event<NewEpochEvent>(
             &mut config_ref.events,
             NewEpochEvent {

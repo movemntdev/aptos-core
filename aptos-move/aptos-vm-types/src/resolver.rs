@@ -1,7 +1,10 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use aptos_aggregator::resolver::{TAggregatorV1View, TDelayedFieldView};
+use aptos_aggregator::{
+    resolver::{TAggregatorV1View, TDelayedFieldView},
+    types::DelayedFieldID,
+};
 use aptos_types::{
     serde_helper::bcs_utils::size_u32_as_uleb128,
     state_store::{
@@ -16,7 +19,6 @@ use aptos_types::{
 use bytes::Bytes;
 use move_binary_format::errors::{PartialVMError, PartialVMResult};
 use move_core_types::{language_storage::StructTag, value::MoveTypeLayout, vm_status::StatusCode};
-use move_vm_types::delayed_values::delayed_field_id::DelayedFieldID;
 use std::collections::{BTreeMap, HashMap};
 
 /// Allows to query resources from the state.
@@ -52,11 +54,6 @@ pub trait TResourceView {
             .map(|maybe_state_value| maybe_state_value.map(StateValue::into_metadata))
     }
 
-    fn get_resource_state_value_size(&self, state_key: &Self::Key) -> PartialVMResult<Option<u64>> {
-        self.get_resource_state_value(state_key, None)
-            .map(|maybe_state_value| maybe_state_value.map(|state_value| state_value.size() as u64))
-    }
-
     fn resource_exists(&self, state_key: &Self::Key) -> PartialVMResult<bool> {
         // For existence, layouts are not important.
         self.get_resource_state_value(state_key, None)
@@ -74,7 +71,7 @@ pub trait TResourceGroupView {
 
     /// Some resolvers might not be capable of the optimization, and should return false.
     /// Others might return based on the config or the run parameters.
-    fn is_resource_groups_split_in_change_set_capable(&self) -> bool {
+    fn is_resource_group_split_in_change_set_capable(&self) -> bool {
         false
     }
 
@@ -163,11 +160,6 @@ pub trait TModuleView {
         Ok(maybe_state_value.map(StateValue::into_metadata))
     }
 
-    fn get_module_state_value_size(&self, state_key: &Self::Key) -> PartialVMResult<Option<u64>> {
-        let maybe_state_value = self.get_module_state_value(state_key)?;
-        Ok(maybe_state_value.map(|state_value| state_value.size() as u64))
-    }
-
     fn module_exists(&self, state_key: &Self::Key) -> PartialVMResult<bool> {
         self.get_module_state_value(state_key)
             .map(|maybe_state_value| maybe_state_value.is_some())
@@ -202,7 +194,7 @@ pub trait TExecutorView<K, T, L, I, V>:
     TResourceView<Key = K, Layout = L>
     + TModuleView<Key = K>
     + TAggregatorV1View<Identifier = K>
-    + TDelayedFieldView<Identifier = I, ResourceKey = K, ResourceGroupTag = T>
+    + TDelayedFieldView<Identifier = I, ResourceKey = K, ResourceGroupTag = T, ResourceValue = V>
     + StateStorageView
 {
 }
@@ -211,7 +203,7 @@ impl<A, K, T, L, I, V> TExecutorView<K, T, L, I, V> for A where
     A: TResourceView<Key = K, Layout = L>
         + TModuleView<Key = K>
         + TAggregatorV1View<Identifier = K>
-        + TDelayedFieldView<Identifier = I, ResourceKey = K, ResourceGroupTag = T>
+        + TDelayedFieldView<Identifier = I, ResourceKey = K, ResourceGroupTag = T, ResourceValue = V>
         + StateStorageView
 {
 }

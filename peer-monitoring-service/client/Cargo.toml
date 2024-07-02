@@ -23,6 +23,7 @@ aptos-network = { workspace = true }
 aptos-peer-monitoring-service-types = { workspace = true }
 aptos-time-service = { workspace = true }
 aptos-types = { workspace = true }
+async-trait = { workspace = true }
 enum_dispatch = { workspace = true }
 futures = { workspace = true }
 once_cell = { workspace = true }
@@ -41,3 +42,6 @@ aptos-peer-monitoring-service-server = { workspace = true }
 bcs = { workspace = true }
 maplit = { workspace = true }
 tokio-stream = { workspace = true }
+
+[features]
+network-perf-test = ["aptos-peer-monitoring-service-server/network-perf-test", "aptos-peer-monitoring-service-types/network-perf-test"]

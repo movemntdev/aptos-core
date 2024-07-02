@@ -399,9 +399,7 @@ async fn execute_release(
     } else {
         scripts_path.path()
     };
-    release_config
-        .generate_release_proposal_scripts(proposal_folder)
-        .await?;
+    release_config.generate_release_proposal_scripts(proposal_folder)?;
 
     network_config.increase_lockup().await?;
 
@@ -468,9 +466,7 @@ async fn execute_release(
             },
         };
         if validate_release {
-            release_config
-                .validate_upgrade(&network_config.endpoint, proposal)
-                .await?;
+            release_config.validate_upgrade(&network_config.endpoint, proposal)?;
         }
     }
     Ok(())

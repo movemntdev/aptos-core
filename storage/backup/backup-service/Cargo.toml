@@ -13,6 +13,7 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+anyhow = { workspace = true }
 aptos-crypto = { workspace = true }
 aptos-db = { workspace = true }
 aptos-logger = { workspace = true }
@@ -26,7 +27,6 @@ hyper = { workspace = true }
 once_cell = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
-tokio-stream = { workspace = true }
 warp = { workspace = true }
 
 [dev-dependencies]

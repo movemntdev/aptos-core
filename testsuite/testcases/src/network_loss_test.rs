@@ -2,12 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{LoadDestination, NetworkLoadTest};
-use aptos_forge::{
-    NetworkContext, NetworkContextSynchronizer, NetworkTest, SwarmChaos, SwarmNetworkLoss, Test,
-};
-use async_trait::async_trait;
+use aptos_forge::{NetworkContext, NetworkTest, SwarmChaos, SwarmNetworkLoss, Test};
 
-/// This is deprecated. Use [crate::multi_region_network_test::MultiRegionNetworkEmulationTest] instead
 pub struct NetworkLossTest;
 
 // Loss parameters
@@ -20,17 +16,13 @@ impl Test for NetworkLossTest {
     }
 }
 
-#[async_trait]
 impl NetworkLoadTest for NetworkLossTest {
-    async fn setup<'a>(&self, ctx: &mut NetworkContext<'a>) -> anyhow::Result<LoadDestination> {
-        ctx.swarm
-            .write()
-            .await
-            .inject_chaos(SwarmChaos::Loss(SwarmNetworkLoss {
+    fn setup(&self, ctx: &mut NetworkContext) -> anyhow::Result<LoadDestination> {
+        ctx.runtime
+            .block_on(ctx.swarm.inject_chaos(SwarmChaos::Loss(SwarmNetworkLoss {
                 loss_percentage: LOSS_PERCENTAGE,
                 correlation_percentage: CORRELATION_PERCENTAGE,
-            }))
-            .await?;
+            })))?;
 
         let msg = format!(
             "Injected {}% loss with {}% correlation loss to namespace",
@@ -41,22 +33,18 @@ impl NetworkLoadTest for NetworkLossTest {
         Ok(LoadDestination::FullnodesOtherwiseValidators)
     }
 
-    async fn finish<'a>(&self, ctx: &mut NetworkContext<'a>) -> anyhow::Result<()> {
-        ctx.swarm
-            .write()
-            .await
-            .remove_chaos(SwarmChaos::Loss(SwarmNetworkLoss {
+    fn finish(&self, ctx: &mut NetworkContext) -> anyhow::Result<()> {
+        ctx.runtime
+            .block_on(ctx.swarm.remove_chaos(SwarmChaos::Loss(SwarmNetworkLoss {
                 loss_percentage: LOSS_PERCENTAGE,
                 correlation_percentage: CORRELATION_PERCENTAGE,
-            }))
-            .await?;
+            })))?;
         Ok(())
     }
 }
 
-#[async_trait]
 impl NetworkTest for NetworkLossTest {
-    async fn run<'a>(&self, ctx: NetworkContextSynchronizer<'a>) -> anyhow::Result<()> {
-        <dyn NetworkLoadTest>::run(self, ctx).await
+    fn run(&self, ctx: &mut NetworkContext<'_>) -> anyhow::Result<()> {
+        <dyn NetworkLoadTest>::run(self, ctx)
     }
 }

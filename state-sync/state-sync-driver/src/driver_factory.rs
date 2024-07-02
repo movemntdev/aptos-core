@@ -20,11 +20,10 @@ use aptos_event_notifications::{EventNotificationSender, EventSubscriptionServic
 use aptos_executor_types::ChunkExecutorTrait;
 use aptos_infallible::Mutex;
 use aptos_mempool_notifications::MempoolNotificationSender;
-use aptos_schemadb::DB;
 use aptos_storage_interface::DbReaderWriter;
 use aptos_storage_service_notifications::StorageServiceNotificationSender;
 use aptos_time_service::TimeService;
-use aptos_types::waypoint::Waypoint;
+use aptos_types::{move_resource::MoveStorage, waypoint::Waypoint};
 use futures::{
     channel::{mpsc, mpsc::UnboundedSender},
     executor::block_on,
@@ -59,7 +58,6 @@ impl DriverFactory {
         aptos_data_client: AptosDataClient,
         streaming_service_client: StreamingServiceClient,
         time_service: TimeService,
-        internal_indexer_db: Option<Arc<DB>>,
     ) -> Self {
         let (driver_factory, _) = Self::create_and_spawn_driver_internal(
             create_runtime,
@@ -75,7 +73,6 @@ impl DriverFactory {
             aptos_data_client,
             streaming_service_client,
             time_service,
-            internal_indexer_db,
         );
         driver_factory
     }
@@ -102,11 +99,10 @@ impl DriverFactory {
         aptos_data_client: AptosDataClient,
         streaming_service_client: StreamingServiceClient,
         time_service: TimeService,
-        internal_indexer_db: Option<Arc<DB>>,
     ) -> (Self, UnboundedSender<CommitNotification>) {
         // Notify subscribers of the initial on-chain config values
-        match storage.reader.get_latest_state_checkpoint_version() {
-            Ok(Some(synced_version)) => {
+        match (&*storage.reader).fetch_latest_state_checkpoint_version() {
+            Ok(synced_version) => {
                 if let Err(error) =
                     event_subscription_service.notify_initial_configs(synced_version)
                 {
@@ -115,9 +111,6 @@ impl DriverFactory {
                         error
                     )
                 }
-            },
-            Ok(None) => {
-                panic!("Latest state checkpoint version not found.")
             },
             Err(error) => panic!("Failed to fetch the initial synced version: {:?}", error),
         }
@@ -162,7 +155,6 @@ impl DriverFactory {
         // Create the driver configuration
         let driver_configuration = DriverConfiguration::new(
             node_config.state_sync.state_sync_driver,
-            node_config.consensus_observer,
             node_config.base.role,
             waypoint,
         );
@@ -183,7 +175,6 @@ impl DriverFactory {
             streaming_service_client,
             storage.reader,
             time_service,
-            internal_indexer_db,
         );
 
         // Spawn the driver

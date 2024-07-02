@@ -21,7 +21,6 @@ use aptos_data_streaming_service::{
     streaming_client::{DataStreamingClient, NotificationAndFeedback, NotificationFeedback},
 };
 use aptos_logger::{prelude::*, sample::SampleRate};
-use aptos_schemadb::DB;
 use aptos_storage_interface::DbReader;
 use aptos_types::{
     epoch_change::Verifier,
@@ -40,7 +39,6 @@ pub const GENESIS_TRANSACTION_VERSION: u64 = 0; // The expected version of the g
 
 /// A simple container for verified epoch states and epoch ending ledger infos
 /// that have been fetched from the network.
-#[derive(Clone)]
 pub(crate) struct VerifiedEpochStates {
     // If new epoch ending ledger infos have been fetched from the network
     fetched_epoch_ending_ledger_infos: bool,
@@ -144,10 +142,10 @@ impl VerifiedEpochStates {
 
             // Verify we haven't missed the waypoint
             if ledger_info_version > waypoint_version {
-                panic!(
-                    "Failed to verify the waypoint: ledger info version is too high! Waypoint version: {:?}, ledger info version: {:?}",
-                    waypoint_version, ledger_info_version
-                );
+                return Err(Error::VerificationError(
+                    format!("Failed to verify the waypoint: ledger info version is too high! Waypoint version: {:?}, ledger info version: {:?}",
+                            waypoint_version, ledger_info_version)
+                ));
             }
 
             // Check if we've found the ledger info corresponding to the waypoint version
@@ -155,10 +153,10 @@ impl VerifiedEpochStates {
                 match waypoint.verify(ledger_info) {
                     Ok(()) => self.set_verified_waypoint(waypoint_version),
                     Err(error) => {
-                        panic!(
-                            "Failed to verify the waypoint: {:?}! Waypoint: {:?}, given ledger info: {:?}",
-                            error, waypoint, ledger_info
-                        );
+                        return Err(Error::VerificationError(
+                            format!("Failed to verify the waypoint: {:?}! Waypoint: {:?}, given ledger info: {:?}",
+                                    error, waypoint, ledger_info)
+                        ));
                     },
                 }
             }
@@ -324,9 +322,6 @@ pub struct Bootstrapper<MetadataStorage, StorageSyncer, StreamingClient> {
 
     // The epoch states verified by this node (held in memory)
     verified_epoch_states: VerifiedEpochStates,
-
-    // The internal indexer db used to store state value index
-    internal_indexer_db: Option<Arc<DB>>,
 }
 
 impl<
@@ -342,7 +337,6 @@ impl<
         streaming_client: StreamingClient,
         storage: Arc<dyn DbReader>,
         storage_synchronizer: StorageSyncer,
-        internal_indexer_db: Option<Arc<DB>>,
     ) -> Self {
         // Load the latest epoch state from storage
         let latest_epoch_state = utils::fetch_latest_epoch_state(storage.clone())
@@ -362,7 +356,6 @@ impl<
             storage,
             storage_synchronizer,
             verified_epoch_states,
-            internal_indexer_db,
         }
     }
 
@@ -604,8 +597,11 @@ impl<
 
     /// Processes any notifications already pending on the active stream
     async fn process_active_stream_notifications(&mut self) -> Result<(), Error> {
-        let state_sync_driver_config = &self.driver_configuration.config;
-        for _ in 0..state_sync_driver_config.max_consecutive_stream_notifications {
+        for _ in 0..self
+            .driver_configuration
+            .config
+            .max_consecutive_stream_notifications
+        {
             // Fetch and process any data notifications
             let data_notification = self.fetch_next_data_notification().await?;
             match data_notification.data_payload {
@@ -869,11 +865,7 @@ impl<
             self.verified_epoch_states
                 .set_fetched_epoch_ending_ledger_infos();
         } else {
-            return Err(Error::AdvertisedDataError(format!(
-                "Our waypoint is unverified, but there's no higher epoch ending ledger infos \
-                advertised! Highest local epoch end: {:?}, highest advertised epoch end: {:?}",
-                highest_local_epoch_end, highest_advertised_epoch_end
-            )));
+            return Err(Error::AdvertisedDataError("Our waypoint is unverified, but there's no higher epoch ending ledger infos advertised!".into()));
         };
 
         Ok(())
@@ -1000,7 +992,6 @@ impl<
                 epoch_change_proofs,
                 ledger_info_to_sync,
                 transaction_output_to_sync.clone(),
-                self.internal_indexer_db.clone(),
             )?;
             self.state_value_syncer.initialized_state_snapshot_receiver = true;
         }
@@ -1039,7 +1030,6 @@ impl<
         if let Err(error) = self
             .storage_synchronizer
             .save_state_values(notification_id, state_value_chunk_with_proof)
-            .await
         {
             self.reset_active_stream(Some(NotificationAndFeedback::new(
                 notification_id,
@@ -1563,11 +1553,5 @@ impl<
     #[cfg(test)]
     pub(crate) fn get_state_value_syncer(&mut self) -> &mut StateValueSyncer {
         &mut self.state_value_syncer
-    }
-
-    /// Manually sets the waypoint for testing purposes
-    #[cfg(test)]
-    pub(crate) fn set_waypoint(&mut self, waypoint: Waypoint) {
-        self.driver_configuration.waypoint = waypoint;
     }
 }

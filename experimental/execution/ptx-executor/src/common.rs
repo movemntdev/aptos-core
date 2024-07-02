@@ -21,7 +21,6 @@ pub(crate) use hashbrown::{hash_map::Entry, HashMap, HashSet};
 pub(crate) trait VersionedKeyHelper {
     fn key(&self) -> &StateKey;
 
-    #[allow(unused)]
     fn txn_idx(&self) -> TxnIdx;
 
     fn txn_idx_shifted(&self) -> TxnIdx;

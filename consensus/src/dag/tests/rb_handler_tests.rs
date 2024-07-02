@@ -3,24 +3,22 @@
 
 use crate::dag::{
     dag_fetcher::TFetchRequester,
-    dag_store::DagStore,
+    dag_store::Dag,
     errors::NodeBroadcastHandleError,
-    health::{HealthBackoff, NoChainHealth, NoPipelineBackpressure},
     rb_handler::NodeBroadcastHandler,
     storage::DAGStorage,
     tests::{
         dag_test::MockStorage,
-        helpers::{new_node, MockOrderRule, MockPayloadManager, TEST_DAG_WINDOW},
+        helpers::{new_node, MockPayloadManager, TEST_DAG_WINDOW},
     },
     types::NodeCertificate,
     NodeId, RpcHandler, Vote,
 };
 use aptos_config::config::DagPayloadConfig;
+use aptos_infallible::RwLock;
 use aptos_types::{
-    aggregate_signature::PartialSignatures,
-    epoch_state::EpochState,
-    on_chain_config::{OnChainJWKConsensusConfig, OnChainRandomnessConfig, ValidatorTxnConfig},
-    validator_verifier::random_validator_verifier,
+    aggregate_signature::PartialSignatures, epoch_state::EpochState,
+    on_chain_config::ValidatorTxnConfig, validator_verifier::random_validator_verifier,
 };
 use claims::{assert_ok, assert_ok_eq};
 use futures::executor::block_on;
@@ -49,38 +47,27 @@ async fn test_node_broadcast_receiver_succeed() {
 
     // Scenario: Start DAG from beginning
     let storage = Arc::new(MockStorage::new());
-    let dag = Arc::new(DagStore::new(
+    let dag = Arc::new(RwLock::new(Dag::new(
         epoch_state.clone(),
         storage.clone(),
         Arc::new(MockPayloadManager {}),
         0,
         TEST_DAG_WINDOW,
-    ));
-    let order_rule = Arc::new(MockOrderRule {});
-
-    let health_backoff = HealthBackoff::new(
-        epoch_state.clone(),
-        NoChainHealth::new(),
-        NoPipelineBackpressure::new(),
-    );
+    )));
 
     let wellformed_node = new_node(1, 10, signers[0].author(), vec![]);
     let equivocating_node = new_node(1, 20, signers[0].author(), vec![]);
 
     assert_ne!(wellformed_node.digest(), equivocating_node.digest());
 
-    let rb_receiver = NodeBroadcastHandler::new(
+    let mut rb_receiver = NodeBroadcastHandler::new(
         dag,
-        order_rule,
         signers[3].clone(),
         epoch_state.clone(),
         storage.clone(),
         Arc::new(MockFetchRequester {}),
         DagPayloadConfig::default(),
         ValidatorTxnConfig::default_disabled(),
-        OnChainRandomnessConfig::default_disabled(),
-        OnChainJWKConsensusConfig::default_disabled(),
-        health_backoff,
     );
 
     let expected_result = Vote::new(
@@ -111,31 +98,22 @@ async fn test_node_broadcast_receiver_failure() {
         .iter()
         .map(|signer| {
             let storage = Arc::new(MockStorage::new());
-            let dag = Arc::new(DagStore::new(
+            let dag = Arc::new(RwLock::new(Dag::new(
                 epoch_state.clone(),
                 storage.clone(),
                 Arc::new(MockPayloadManager {}),
                 0,
                 TEST_DAG_WINDOW,
-            ));
-            let order_rule = Arc::new(MockOrderRule {});
+            )));
 
             NodeBroadcastHandler::new(
                 dag,
-                order_rule,
                 signer.clone(),
                 epoch_state.clone(),
                 storage,
                 Arc::new(MockFetchRequester {}),
                 DagPayloadConfig::default(),
                 ValidatorTxnConfig::default_disabled(),
-                OnChainRandomnessConfig::default_disabled(),
-                OnChainJWKConsensusConfig::default_disabled(),
-                HealthBackoff::new(
-                    epoch_state.clone(),
-                    NoChainHealth::new(),
-                    NoPipelineBackpressure::new(),
-                ),
             )
         })
         .collect();
@@ -201,57 +179,40 @@ async fn test_node_broadcast_receiver_storage() {
     });
 
     let storage = Arc::new(MockStorage::new());
-    let dag = Arc::new(DagStore::new(
+    let dag = Arc::new(RwLock::new(Dag::new(
         epoch_state.clone(),
         storage.clone(),
         Arc::new(MockPayloadManager {}),
         0,
         TEST_DAG_WINDOW,
-    ));
-    let order_rule = Arc::new(MockOrderRule {});
+    )));
 
     let node = new_node(1, 10, signers[0].author(), vec![]);
 
-    let rb_receiver = NodeBroadcastHandler::new(
+    let mut rb_receiver = NodeBroadcastHandler::new(
         dag.clone(),
-        order_rule.clone(),
         signers[3].clone(),
         epoch_state.clone(),
         storage.clone(),
         Arc::new(MockFetchRequester {}),
         DagPayloadConfig::default(),
         ValidatorTxnConfig::default_disabled(),
-        OnChainRandomnessConfig::default_disabled(),
-        OnChainJWKConsensusConfig::default_disabled(),
-        HealthBackoff::new(
-            epoch_state.clone(),
-            NoChainHealth::new(),
-            NoPipelineBackpressure::new(),
-        ),
     );
     let sig = rb_receiver.process(node).await.expect("must succeed");
 
     assert_ok_eq!(storage.get_votes(), vec![(
-        NodeId::new(1, 1, signers[0].author()),
+        NodeId::new(0, 1, signers[0].author()),
         sig
     )],);
 
-    let rb_receiver = NodeBroadcastHandler::new(
+    let mut rb_receiver = NodeBroadcastHandler::new(
         dag,
-        order_rule.clone(),
         signers[3].clone(),
-        epoch_state.clone(),
+        epoch_state,
         storage.clone(),
         Arc::new(MockFetchRequester {}),
         DagPayloadConfig::default(),
         ValidatorTxnConfig::default_disabled(),
-        OnChainRandomnessConfig::default_disabled(),
-        OnChainJWKConsensusConfig::default_disabled(),
-        HealthBackoff::new(
-            epoch_state,
-            NoChainHealth::new(),
-            NoPipelineBackpressure::new(),
-        ),
     );
     assert_ok!(rb_receiver.gc_before_round(2));
     assert_eq!(storage.get_votes().unwrap().len(), 0);

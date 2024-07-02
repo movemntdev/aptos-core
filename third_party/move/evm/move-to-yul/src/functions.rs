@@ -459,7 +459,7 @@ impl<'a> FunctionGenerator<'a> {
                     },
                     // FreezeRef transforms a mutable reference to an immutable one so just
                     // treat it as an assignment.
-                    FreezeRef(_) => {
+                    FreezeRef => {
                         print_loc();
                         self.assign(ctx, target, dest[0], local(&srcs[0]))
                     },
@@ -548,12 +548,6 @@ impl<'a> FunctionGenerator<'a> {
 
                     // Unimplemented
                     Vector => unimplemented!("vector"),
-                    TestVariant(..)
-                    | PackVariant(..)
-                    | UnpackVariant(..)
-                    | BorrowFieldVariant(..) => {
-                        unimplemented!("variants")
-                    },
 
                     // Specification or other operations which can be ignored here
                     Release
@@ -582,12 +576,7 @@ impl<'a> FunctionGenerator<'a> {
                 }
             },
 
-            SpecBlock(..)
-            | Label(_, _)
-            | Nop(_)
-            | SaveMem(_, _, _)
-            | SaveSpecVar(_, _, _)
-            | Prop(_, _, _) => {
+            Label(_, _) | Nop(_) | SaveMem(_, _, _) | SaveSpecVar(_, _, _) | Prop(_, _, _) => {
                 // These opcodes are not needed, ignore them
             },
         }

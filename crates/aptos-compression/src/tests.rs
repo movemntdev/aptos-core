@@ -11,8 +11,8 @@ use aptos_types::{
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
     transaction::{
         ExecutionStatus, RawTransaction, Script, SignedTransaction, Transaction,
-        TransactionAuxiliaryData, TransactionListWithProof, TransactionOutput,
-        TransactionOutputListWithProof, TransactionPayload, TransactionStatus,
+        TransactionListWithProof, TransactionOutput, TransactionOutputListWithProof,
+        TransactionPayload, TransactionStatus,
     },
     write_set::WriteSet,
 };
@@ -153,7 +153,6 @@ fn create_test_transaction_output() -> TransactionOutput {
         vec![],
         0,
         TransactionStatus::Keep(ExecutionStatus::MiscellaneousError(None)),
-        TransactionAuxiliaryData::default(),
     )
 }
 

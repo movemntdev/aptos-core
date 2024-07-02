@@ -25,15 +25,7 @@ data:
     rewards_apy_percentage: {{ .Values.chain.rewards_apy_percentage | int }}
     voting_duration_secs: {{ .Values.chain.voting_duration_secs | int }}
     voting_power_increase_limit: {{ .Values.chain.voting_power_increase_limit | int }}
-    {{- with .Values.chain.on_chain_consensus_config}}
-    on_chain_consensus_config: {{ . | toJson }}
-    {{- end}}
-    {{- with .Values.chain.on_chain_execution_config}}
-    on_chain_execution_config: {{ . | toJson }}
-    {{- end}}
-    {{- with .Values.chain.jwk_consensus_config_override }}
-    jwk_consensus_config_override: {{ . | toJson }}
-    {{- end}}
+
 ---
 
 apiVersion: v1
@@ -77,7 +69,6 @@ subjects:
 
 ---
 
-{{- if .Values.enabled  }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -91,6 +82,8 @@ spec:
       labels:
         {{- include "aptos-genesis.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/name: genesis
+      annotations:
+        seccomp.security.alpha.kubernetes.io/pod: runtime/default
     spec:
       restartPolicy: Never
       containers:
@@ -143,10 +136,6 @@ spec:
           value: {{ .Values.genesis.multicluster.enabled | quote }}
         - name: MULTICLUSTER_DOMAIN_SUFFIXES_STRING
           value: {{ .Values.genesis.multicluster.domain_suffixes | quote }}
-        - name: GENESIS_BLOB_UPLOAD_URL
-          value: {{ .Values.genesis.genesis_blob_upload_url | quote }}
-        - name: CLUSTER_NAME
-          value: {{ .Values.genesis.cluster_name | quote }}
         volumeMounts:
         - name: layout
           mountPath: /tmp/layout.yaml
@@ -180,8 +169,6 @@ spec:
         runAsUser: 6180
         runAsGroup: 6180
         fsGroup: 6180
-        seccompProfile:
-          type: RuntimeDefault
       {{- end }}
       volumes:
       - name: layout
@@ -197,4 +184,3 @@ spec:
       imagePullSecrets:
       - name: {{.Values.imagePullSecret}}
       {{- end }}
-{{- end }}

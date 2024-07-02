@@ -1,19 +1,17 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{create_emitter_and_request, LoadDestination, NetworkLoadTest};
-use anyhow::Context;
+use crate::NetworkLoadTest;
 use aptos_forge::{
     args::TransactionTypeArg,
     prometheus_metrics::{LatencyBreakdown, LatencyBreakdownSlice},
     success_criteria::{SuccessCriteria, SuccessCriteriaChecker},
-    EmitJobMode, EmitJobRequest, NetworkContext, NetworkContextSynchronizer, NetworkTest, Result,
-    Test, TxnStats, WorkflowProgress,
+    EmitJobMode, EmitJobRequest, NetworkContext, NetworkTest, Result, Test, TxnStats,
 };
 use aptos_logger::info;
-use async_trait::async_trait;
 use rand::SeedableRng;
-use std::{fmt::Debug, ops::DerefMut, time::Duration};
+use std::{fmt::Debug, time::Duration};
+use tokio::runtime::Runtime;
 
 // add larger warmup, as when we are exceeding the max load,
 // it takes more time to fill mempool.
@@ -113,18 +111,14 @@ impl TransactionWorkload {
 
     fn configure(&self, request: EmitJobRequest) -> EmitJobRequest {
         let account_creation_type =
-            TransactionTypeArg::AccountGenerationLargePool.materialize_default();
+            TransactionTypeArg::AccountGenerationLargePool.materialize(1, false);
 
         let request = request.mode(EmitJobMode::MaxLoad {
             mempool_backlog: self.mempool_backlog,
         });
 
         if self.is_phased() {
-            let write_type = self.transaction_type.materialize(
-                self.num_modules,
-                true,
-                WorkflowProgress::when_done_default(),
-            );
+            let write_type = self.transaction_type.materialize(self.num_modules, true);
             request.transaction_mix_per_phase(vec![
                 // warmup
                 vec![(account_creation_type, 1)],
@@ -134,11 +128,7 @@ impl TransactionWorkload {
                 vec![(write_type, 1)],
             ])
         } else {
-            request.transaction_type(self.transaction_type.materialize(
-                self.num_modules,
-                false,
-                WorkflowProgress::when_done_default(),
-            ))
+            request.transaction_type(self.transaction_type.materialize(self.num_modules, false))
         }
     }
 
@@ -161,17 +151,10 @@ impl TransactionWorkload {
     }
 }
 
-pub struct ContinuousTraffic {
-    pub traffic: EmitJobRequest,
-    pub criteria: Option<SuccessCriteria>,
-}
-
 pub struct LoadVsPerfBenchmark {
     pub test: Box<dyn NetworkLoadTest>,
     pub workloads: Workloads,
     pub criteria: Vec<SuccessCriteria>,
-
-    pub continuous_traffic: Option<ContinuousTraffic>,
 }
 
 impl Test for LoadVsPerfBenchmark {
@@ -181,7 +164,7 @@ impl Test for LoadVsPerfBenchmark {
 }
 
 impl LoadVsPerfBenchmark {
-    async fn evaluate_single(
+    fn evaluate_single(
         &self,
         ctx: &mut NetworkContext<'_>,
         workloads: &Workloads,
@@ -190,17 +173,14 @@ impl LoadVsPerfBenchmark {
     ) -> Result<Vec<SingleRunStats>> {
         let rng = SeedableRng::from_rng(ctx.core().rng())?;
         let emit_job_request = workloads.configure(index, ctx.emit_job.clone());
-        let stats_by_phase = self
-            .test
-            .network_load_test(
-                ctx,
-                emit_job_request,
-                duration,
-                PER_TEST_WARMUP_DURATION_FRACTION,
-                PER_TEST_COOLDOWN_DURATION_FRACTION,
-                rng,
-            )
-            .await?;
+        let stats_by_phase = self.test.network_load_test(
+            ctx,
+            emit_job_request,
+            duration,
+            PER_TEST_WARMUP_DURATION_FRACTION,
+            PER_TEST_COOLDOWN_DURATION_FRACTION,
+            rng,
+        )?;
 
         let mut result = vec![];
         for (phase, phase_stats) in stats_by_phase.into_iter().enumerate() {
@@ -217,9 +197,8 @@ impl LoadVsPerfBenchmark {
     }
 }
 
-#[async_trait]
 impl NetworkTest for LoadVsPerfBenchmark {
-    async fn run<'a>(&self, ctx: NetworkContextSynchronizer<'a>) -> Result<()> {
+    fn run(&self, ctx: &mut NetworkContext<'_>) -> Result<()> {
         assert!(
             self.criteria.is_empty() || self.criteria.len() == self.workloads.len(),
             "Invalid config, {} criteria and {} workloads given",
@@ -227,35 +206,7 @@ impl NetworkTest for LoadVsPerfBenchmark {
             self.workloads.len(),
         );
 
-        let mut ctx_locker = ctx.ctx.lock().await;
-        let ctx = ctx_locker.deref_mut();
-
-        let mut continous_job = if let Some(continuous_traffic) = &self.continuous_traffic {
-            let nodes_to_send_load_to = LoadDestination::FullnodesOtherwiseValidators
-                .get_destination_nodes(ctx.swarm.clone())
-                .await;
-            let rng = SeedableRng::from_rng(ctx.core().rng())?;
-            let (mut emitter, emit_job_request) = create_emitter_and_request(
-                ctx.swarm.clone(),
-                continuous_traffic.traffic.clone(),
-                &nodes_to_send_load_to,
-                rng,
-            )
-            .await
-            .context("create emitter")?;
-
-            let job = emitter
-                .start_job(
-                    ctx.swarm.read().await.chain_info().root_account,
-                    emit_job_request,
-                    1 + 2 * self.workloads.len(),
-                )
-                .await
-                .context("start emitter job")?;
-            Some(job)
-        } else {
-            None
-        };
+        let _runtime = Runtime::new().unwrap();
 
         let (phase_duration, buffer) = self.workloads.split_duration(ctx.global_duration);
 
@@ -264,10 +215,6 @@ impl NetworkTest for LoadVsPerfBenchmark {
             if index != 0 {
                 info!("Sleeping in between loadtests, for {}s", buffer.as_secs());
                 std::thread::sleep(buffer);
-            }
-
-            if let Some(job) = continous_job.as_mut() {
-                job.start_next_phase()
             }
 
             info!("Starting for {:?}", self.workloads);
@@ -279,13 +226,8 @@ impl NetworkTest for LoadVsPerfBenchmark {
                     phase_duration
                         .checked_mul(self.workloads.num_phases(index) as u32)
                         .unwrap(),
-                )
-                .await?,
+                )?,
             );
-
-            if let Some(job) = continous_job.as_mut() {
-                job.start_next_phase()
-            }
 
             // Note: uncomment below to perform reconfig during a test
             // let mut aptos_info = ctx.swarm().aptos_public_info();
@@ -301,31 +243,6 @@ impl NetworkTest for LoadVsPerfBenchmark {
         for line in table {
             ctx.report.report_text(line);
         }
-
-        let continuous_results = match continous_job {
-            Some(job) => {
-                let stats_by_phase = job.stop_job().await;
-
-                let mut result = vec![];
-                for (phase, phase_stats) in stats_by_phase.into_iter().enumerate() {
-                    if phase % 2 != 0 {
-                        result.push((
-                            format!("continuous with traffic {}", phase / 2),
-                            phase_stats,
-                        ));
-                    }
-                }
-
-                let table = to_table_continuous("continuous traffic".to_string(), &result);
-                for line in table {
-                    ctx.report.report_text(line);
-                }
-
-                Some(result)
-            },
-            None => None,
-        };
-
         for (index, result) in results.iter().enumerate() {
             // always take last phase for success criteria
             let target_result = &result[result.len() - 1];
@@ -340,22 +257,6 @@ impl NetworkTest for LoadVsPerfBenchmark {
                 )?;
             }
         }
-
-        if let Some(results) = continuous_results {
-            for (name, stats) in results {
-                let rate = stats.rate();
-                if let Some(criteria) = &self.continuous_traffic.as_ref().unwrap().criteria {
-                    SuccessCriteriaChecker::check_core_for_success(
-                        criteria,
-                        ctx.report,
-                        &rate,
-                        None,
-                        Some(name),
-                    )?;
-                }
-            }
-        }
-
         Ok(())
     }
 }
@@ -403,40 +304,6 @@ fn to_table(type_name: String, results: &[Vec<SingleRunStats>]) -> Vec<String> {
                 result.actual_duration.as_secs()
             ));
         }
-    }
-
-    table
-}
-
-fn to_table_continuous(type_name: String, results: &[(String, TxnStats)]) -> Vec<String> {
-    let mut table = Vec::new();
-    table.push(format!(
-        "{: <40} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12}",
-        type_name,
-        "submitted/s",
-        "committed/s",
-        "expired/s",
-        "rejected/s",
-        "latency",
-        "p50 lat",
-        "p90 lat",
-        "p99 lat",
-    ));
-
-    for (name, stats) in results {
-        let rate = stats.rate();
-        table.push(format!(
-            "{: <40} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12} | {: <12}",
-            name,
-            rate.submitted,
-            rate.committed,
-            rate.expired,
-            rate.failed_submission,
-            rate.latency,
-            rate.p50_latency,
-            rate.p90_latency,
-            rate.p99_latency,
-        ));
     }
 
     table

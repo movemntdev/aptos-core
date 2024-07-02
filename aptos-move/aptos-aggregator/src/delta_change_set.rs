@@ -220,10 +220,7 @@ mod test {
     };
     use aptos_types::{
         delayed_fields::PanicError,
-        state_store::{
-            state_key::StateKey,
-            state_value::{StateValue, StateValueMetadata},
-        },
+        state_store::{state_key::StateKey, state_value::StateValue},
         write_set::WriteOp,
     };
     use claims::{assert_err, assert_none, assert_ok, assert_ok_eq, assert_some_eq};
@@ -476,7 +473,7 @@ mod test {
         assert_eq!(b.update, Negative(1));
     }
 
-    static KEY: Lazy<StateKey> = Lazy::new(|| StateKey::raw(b"test-key"));
+    static KEY: Lazy<StateKey> = Lazy::new(|| StateKey::raw(String::from("test-key").into_bytes()));
 
     #[test]
     fn test_failed_write_op_conversion_because_of_empty_storage() {
@@ -512,6 +509,11 @@ mod test {
         type Identifier = ();
         type ResourceGroupTag = ();
         type ResourceKey = ();
+        type ResourceValue = ();
+
+        fn is_delayed_field_optimization_capable(&self) -> bool {
+            unimplemented!("Irrelevant for the test")
+        }
 
         fn get_delayed_field_value(
             &self,
@@ -534,7 +536,10 @@ mod test {
             unimplemented!("Irrelevant for the test")
         }
 
-        fn validate_delayed_field_id(&self, _id: &Self::Identifier) -> Result<(), PanicError> {
+        fn validate_and_convert_delayed_field_id(
+            &self,
+            _id: u64,
+        ) -> Result<Self::Identifier, PanicError> {
             unimplemented!("Irrelevant for the test")
         }
 
@@ -543,7 +548,7 @@ mod test {
             _delayed_write_set_keys: &HashSet<Self::Identifier>,
             _skip: &HashSet<Self::ResourceKey>,
         ) -> Result<
-            BTreeMap<Self::ResourceKey, (StateValueMetadata, u64, Arc<MoveTypeLayout>)>,
+            BTreeMap<Self::ResourceKey, (Self::ResourceValue, Arc<MoveTypeLayout>)>,
             PanicError,
         > {
             unimplemented!("Irrelevant for the test")
@@ -553,7 +558,7 @@ mod test {
             &self,
             _delayed_write_set_keys: &HashSet<Self::Identifier>,
             _skip: &HashSet<Self::ResourceKey>,
-        ) -> PartialVMResult<BTreeMap<Self::ResourceKey, (StateValueMetadata, u64)>> {
+        ) -> Result<BTreeMap<Self::ResourceKey, (Self::ResourceValue, u64)>, PanicError> {
             unimplemented!("Irrelevant for the test")
         }
     }

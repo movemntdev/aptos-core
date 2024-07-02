@@ -24,22 +24,22 @@ impl DKGTranscriptRequest {
 /// The DKG network message.
 #[derive(Clone, Serialize, Deserialize, Debug, EnumConversion, PartialEq)]
 pub enum DKGMessage {
-    TranscriptRequest(DKGTranscriptRequest),
-    TranscriptResponse(DKGTranscript),
+    NodeRequest(DKGTranscriptRequest),
+    NodeResponse(DKGTranscript),
 }
 
 impl DKGMessage {
     pub fn epoch(&self) -> u64 {
         match self {
-            DKGMessage::TranscriptRequest(request) => request.dealer_epoch,
-            DKGMessage::TranscriptResponse(response) => response.metadata.epoch,
+            DKGMessage::NodeRequest(request) => request.dealer_epoch,
+            DKGMessage::NodeResponse(response) => response.metadata.epoch,
         }
     }
 
     pub fn name(&self) -> &str {
         match self {
-            DKGMessage::TranscriptRequest(_) => "DKGTranscriptRequest",
-            DKGMessage::TranscriptResponse(_) => "DKGTranscriptResponse",
+            DKGMessage::NodeRequest(_) => "DKGTranscriptRequest",
+            DKGMessage::NodeResponse(_) => "DKGTranscriptResponse",
         }
     }
 }

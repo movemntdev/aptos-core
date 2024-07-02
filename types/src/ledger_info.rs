@@ -52,12 +52,7 @@ pub struct LedgerInfo {
 
 impl Display for LedgerInfo {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "LedgerInfo: [commit_info: {}] [Consensus data hash: {}]",
-            self.commit_info(),
-            self.consensus_data_hash()
-        )
+        write!(f, "LedgerInfo: [commit_info: {}]", self.commit_info())
     }
 }
 
@@ -67,10 +62,6 @@ impl LedgerInfo {
             commit_info: BlockInfo::empty(),
             consensus_data_hash: HashValue::zero(),
         }
-    }
-
-    pub fn is_dummy(&self) -> bool {
-        self.commit_info.is_empty() && self.consensus_data_hash == HashValue::zero()
     }
 
     /// Constructs a `LedgerInfo` object based on the given commit info and vote data hash.

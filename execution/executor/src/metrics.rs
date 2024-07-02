@@ -211,31 +211,11 @@ pub static APTOS_PROCESSED_USER_TRANSACTIONS_CORE_EVENTS: Lazy<IntCounterVec> = 
     .unwrap()
 });
 
-pub static APTOS_PROCESSED_TXNS_OUTPUT_SIZE: Lazy<HistogramVec> = Lazy::new(|| {
-    register_histogram_vec!(
+pub static APTOS_PROCESSED_TXNS_OUTPUT_SIZE: Lazy<Histogram> = Lazy::new(|| {
+    register_histogram!(
         "aptos_processed_txns_output_size",
-        "Histogram of transaction output sizes",
-        &["process"],
+        "Histogram of transaction outputs",
         exponential_buckets(/*start=*/ 1.0, /*factor=*/ 2.0, /*count=*/ 25).unwrap()
-    )
-    .unwrap()
-});
-
-pub static APTOS_PROCESSED_TXNS_NUM_AUTHENTICATORS: Lazy<HistogramVec> = Lazy::new(|| {
-    register_histogram_vec!(
-        "aptos_processed_txns_num_authenticators",
-        "Histogram of number of authenticators in a transaction",
-        &["process"],
-        exponential_buckets(/*start=*/ 1.0, /*factor=*/ 2.0, /*count=*/ 6).unwrap()
-    )
-    .unwrap()
-});
-
-pub static APTOS_PROCESSED_TXNS_AUTHENTICATOR: Lazy<IntCounterVec> = Lazy::new(|| {
-    register_int_counter_vec!(
-        "aptos_processed_txns_authenticator",
-        "Counter of authenticators by type, for processed transactions",
-        &["process", "auth_type"]
     )
     .unwrap()
 });

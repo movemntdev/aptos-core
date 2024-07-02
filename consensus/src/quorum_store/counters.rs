@@ -3,8 +3,8 @@
 
 use aptos_metrics_core::{
     exponential_buckets, op_counters::DurationHistogram, register_avg_counter, register_histogram,
-    register_histogram_vec, register_int_counter, register_int_counter_vec, register_int_gauge,
-    Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge,
+    register_histogram_vec, register_int_counter, register_int_counter_vec, Histogram,
+    HistogramVec, IntCounter, IntCounterVec,
 };
 use once_cell::sync::Lazy;
 use std::time::Duration;
@@ -28,22 +28,12 @@ static TRANSACTION_COUNT_BUCKETS: Lazy<Vec<f64>> = Lazy::new(|| {
     .unwrap()
 });
 
-static PROOF_COUNT_BUCKETS: Lazy<Vec<f64>> = Lazy::new(|| {
-    [
-        1.0, 3.0, 5.0, 7.0, 10.0, 12.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0, 60.0, 75.0, 100.0,
-        125.0, 150.0, 200.0, 250.0, 300.0, 500.0,
-    ]
-    .to_vec()
-});
-
 static BYTE_BUCKETS: Lazy<Vec<f64>> = Lazy::new(|| {
     exponential_buckets(
         /*start=*/ 500.0, /*factor=*/ 1.5, /*count=*/ 25,
     )
     .unwrap()
 });
-
-const INLINE_BATCH_COUNT_BUCKETS: &[f64] = &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
 
 // Histogram buckets that expand DEFAULT_BUCKETS with more granularity between 100-2000 ms
 const QUORUM_STORE_LATENCY_BUCKETS: &[f64] = &[
@@ -85,46 +75,6 @@ pub static PROOF_MANAGER_MAIN_LOOP: Lazy<DurationHistogram> = Lazy::new(|| {
         register_histogram!(
             "quorum_store_proof_manager_main_loop",
             "Duration of the each run of the proof manager event loop"
-        )
-        .unwrap(),
-    )
-});
-
-pub static PROOF_QUEUE_ADD_BATCH_SUMMARIES_DURATION: Lazy<DurationHistogram> = Lazy::new(|| {
-    DurationHistogram::new(
-        register_histogram!(
-            "quorum_store_proof_queue_add_batch_summaries_duration",
-            "Duration of adding batch summaries to proof queue"
-        )
-        .unwrap(),
-    )
-});
-
-pub static PROOF_QUEUE_COMMIT_DURATION: Lazy<DurationHistogram> = Lazy::new(|| {
-    DurationHistogram::new(
-        register_histogram!(
-            "quorum_store_proof_queue_commit_duration",
-            "Duration of committing proofs from proof queue"
-        )
-        .unwrap(),
-    )
-});
-
-pub static PROOF_QUEUE_UPDATE_TIMESTAMP_DURATION: Lazy<DurationHistogram> = Lazy::new(|| {
-    DurationHistogram::new(
-        register_histogram!(
-            "quorum_store_proof_queue_update_block_timestamp_duration",
-            "Duration of updating block timestamp in proof queue"
-        )
-        .unwrap(),
-    )
-});
-
-pub static PROOF_QUEUE_REMAINING_TXNS_DURATION: Lazy<DurationHistogram> = Lazy::new(|| {
-    DurationHistogram::new(
-        register_histogram!(
-            "quorum_store_proof_queue_remaining_txns_duration",
-            "Duration of calculating remaining txns in proof queue"
         )
         .unwrap(),
     )
@@ -184,60 +134,6 @@ pub static BLOCK_SIZE_WHEN_PULL: Lazy<Histogram> = Lazy::new(|| {
     .unwrap()
 });
 
-pub static TOTAL_BLOCK_SIZE_WHEN_PULL: Lazy<Histogram> = Lazy::new(|| {
-    register_histogram!(
-        "quorum_store_total_block_size_when_pull",
-        "Histogram for the total size of transactions per block when pulled for consensus.",
-        BYTE_BUCKETS.clone(),
-    )
-    .unwrap()
-});
-
-pub static KNOWN_DUPLICATE_TXNS_WHEN_PULL: Lazy<Histogram> = Lazy::new(|| {
-    register_histogram!(
-        "quorum_store_known_duplicate_txns_when_pull",
-        "Histogram for the number of known duplicate transactions in a block when pulled for consensus.",
-        TRANSACTION_COUNT_BUCKETS.clone(),
-    )
-    .unwrap()
-});
-
-pub static NUM_INLINE_BATCHES: Lazy<Histogram> = Lazy::new(|| {
-    register_histogram!(
-        "num_inline_batches_in_block_proposal",
-        "Histogram for the number of inline batches in a block proposed by proof manager",
-        INLINE_BATCH_COUNT_BUCKETS.to_vec(),
-    )
-    .unwrap()
-});
-
-pub static NUM_INLINE_TXNS: Lazy<Histogram> = Lazy::new(|| {
-    register_histogram!(
-        "num_inline_transactions_in_block_proposal",
-        "Histogram for the number of inline transactions in a block proposed by proof manager",
-        TRANSACTION_COUNT_BUCKETS.clone(),
-    )
-    .unwrap()
-});
-
-pub static NUM_BATCHES_WITHOUT_PROOF_OF_STORE: Lazy<Histogram> = Lazy::new(|| {
-    register_histogram!(
-        "num_batches_without_proof_of_store",
-        "Histogram for the number of batches without proof of store in proof manager",
-        TRANSACTION_COUNT_BUCKETS.clone(),
-    )
-    .unwrap()
-});
-
-pub static PROOF_QUEUE_FULLY_UTILIZED: Lazy<Histogram> = Lazy::new(|| {
-    register_histogram!(
-        "proof_queue_utilized_fully_in_proposal",
-        "Histogram for whether the proof queue is fully utilized when creating block proposal",
-        [0.0, 1.0].to_vec(),
-    )
-    .unwrap()
-});
-
 /// Histogram for the total size of transactions per block when pulled for consensus.
 pub static BLOCK_BYTES_WHEN_PULL: Lazy<Histogram> = Lazy::new(|| {
     register_histogram!(
@@ -271,14 +167,6 @@ pub static BATCH_IN_PROGRESS_COMMITTED: Lazy<IntCounter> = Lazy::new(|| {
     register_int_counter!(
         "quorum_store_batch_in_progress_committed",
         "Number of batches that are removed from in progress by a commit."
-    )
-    .unwrap()
-});
-
-pub static NUM_CORRUPT_BATCHES: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!(
-        "corrupt_batches_in_proof_manager",
-        "Number of batches in proof manager for which the digest does not match"
     )
     .unwrap()
 });
@@ -370,72 +258,12 @@ pub fn pos_to_commit(bucket: u64, secs: f64) {
         .observe(secs);
 }
 
-//////////////////////
-// Proof Queue
-//////////////////////
-
-pub static PROOFS_WITHOUT_BATCH_DATA: Lazy<IntGauge> = Lazy::new(|| {
-    register_int_gauge!(
-        "quorum_store_proofs_without_batch_data",
-        "Number of proofs received without batch data"
-    )
-    .unwrap()
-});
-
-pub static TXNS_WITH_DUPLICATE_BATCHES: Lazy<IntGauge> = Lazy::new(|| {
-    register_int_gauge!(
-        "quorum_store_txns_with_duplicate_batches",
-        "Number of transactions received with duplicate batches"
-    )
-    .unwrap()
-});
-
-pub static TXNS_IN_PROOF_QUEUE: Lazy<IntGauge> = Lazy::new(|| {
-    register_int_gauge!(
-        "quorum_store_txns_in_proof_queue",
-        "Number of transactions in the proof queue"
-    )
-    .unwrap()
-});
-
-pub static PROOFS_IN_PROOF_QUEUE: Lazy<IntGauge> = Lazy::new(|| {
-    register_int_gauge!(
-        "quorum_store_proofs_in_proof_queue",
-        "Number of proofs in the proof queue"
-    )
-    .unwrap()
-});
-
-pub static NUM_PROOFS_IN_PROOF_QUEUE_AFTER_PULL: Lazy<Histogram> = Lazy::new(|| {
-    register_histogram!(
-        "quorum_store_num_proofs_left_in_proof_queue_after_pull",
-        "Histogram for the number of proofs left in the proof queue after block proposal generation.",
-        PROOF_COUNT_BUCKETS.clone(),
-    ).unwrap()
-});
-
-pub static NUM_TXNS_IN_PROOF_QUEUE_AFTER_PULL: Lazy<Histogram> = Lazy::new(|| {
-    register_histogram!(
-        "quorum_store_num_txns_left_in_proof_queue_after_pull",
-        "Histogram for the number of transactions left in the proof queue after block proposal generation.",
-        TRANSACTION_COUNT_BUCKETS.clone(),
-    ).unwrap()
-});
-
 /// Histogram for the number of total txns left after adding or cleaning batches.
 pub static NUM_TOTAL_TXNS_LEFT_ON_UPDATE: Lazy<Histogram> = Lazy::new(|| {
     register_avg_counter(
         "quorum_store_num_total_txns_left_on_update",
         "Histogram for the number of total txns left after adding or cleaning batches.",
     )
-});
-
-pub static NUM_UNIQUE_TOTAL_TXNS_LEFT_ON_UPDATE: Lazy<Histogram> = Lazy::new(|| {
-    register_histogram!(
-        "quorum_store_num_unique_total_txns_left_on_update",
-        "Histogram for the number of total txns left after adding or cleaning batches, without duplicates.",
-        TRANSACTION_COUNT_BUCKETS.clone()
-    ).unwrap()
 });
 
 /// Histogram for the number of total batches/PoS left after adding or cleaning batches.
@@ -790,17 +618,6 @@ pub static BATCH_CREATION_COMPUTE_LATENCY: Lazy<DurationHistogram> = Lazy::new(|
     )
 });
 
-/// Histogram of the time it takes to persist batches generated locally to the DB.
-pub static BATCH_CREATION_PERSIST_LATENCY: Lazy<DurationHistogram> = Lazy::new(|| {
-    DurationHistogram::new(
-        register_histogram!(
-            "quorum_store_batch_creation_persist_latency",
-            "Histogram of the time it takes to persist batches generated locally to the DB.",
-        )
-        .unwrap(),
-    )
-});
-
 /// Histogram of the time durations from created batch to created PoS.
 pub static BATCH_TO_POS_DURATION: Lazy<DurationHistogram> = Lazy::new(|| {
     DurationHistogram::new(
@@ -836,14 +653,6 @@ pub static BATCH_RECEIVED_REPLIES_VOTING_POWER: Lazy<Histogram> = Lazy::new(|| {
         "quorum_store_batch_received_replies_voting_power",
         "Voting power of validators for which we received signed replies.",
         TRANSACTION_COUNT_BUCKETS.clone(),
-    )
-    .unwrap()
-});
-
-pub static BATCH_RECEIVED_LATE_REPLIES_COUNT: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!(
-        "quorum_store_batch_received_late_replies",
-        "Number of votes that came late."
     )
     .unwrap()
 });

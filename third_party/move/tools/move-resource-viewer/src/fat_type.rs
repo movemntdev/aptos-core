@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Loaded representation for runtime types.
 
-use crate::limit::Limiter;
 use move_binary_format::{
     errors::{PartialVMError, PartialVMResult},
     file_format::AbilitySet,
@@ -73,11 +72,7 @@ pub(crate) enum FatType {
 }
 
 impl FatStructType {
-    fn clone_with_limit(&self, limit: &mut Limiter) -> PartialVMResult<Self> {
-        limit.charge(std::mem::size_of::<AccountAddress>())?;
-        limit.charge(self.module.as_bytes().len())?;
-        limit.charge(self.name.as_bytes().len())?;
-
+    pub fn subst(&self, ty_args: &[FatType]) -> PartialVMResult<FatStructType> {
         Ok(Self {
             address: self.address,
             module: self.module.clone(),
@@ -86,89 +81,38 @@ impl FatStructType {
             ty_args: self
                 .ty_args
                 .iter()
-                .map(|ty| ty.clone_with_limit(limit))
+                .map(|ty| ty.subst(ty_args))
                 .collect::<PartialVMResult<_>>()?,
             layout: self
                 .layout
                 .iter()
-                .map(|ty| ty.clone_with_limit(limit))
+                .map(|ty| ty.subst(ty_args))
                 .collect::<PartialVMResult<_>>()?,
         })
     }
 
-    pub fn subst(
-        &self,
-        ty_args: &[FatType],
-        limiter: &mut Limiter,
-    ) -> PartialVMResult<FatStructType> {
-        limiter.charge(std::mem::size_of::<AccountAddress>())?;
-        limiter.charge(self.module.as_bytes().len())?;
-        limiter.charge(self.name.as_bytes().len())?;
-        Ok(Self {
-            address: self.address,
-            module: self.module.clone(),
-            name: self.name.clone(),
-            abilities: self.abilities,
-            ty_args: self
-                .ty_args
-                .iter()
-                .map(|ty| ty.subst(ty_args, limiter))
-                .collect::<PartialVMResult<_>>()?,
-            layout: self
-                .layout
-                .iter()
-                .map(|ty| ty.subst(ty_args, limiter))
-                .collect::<PartialVMResult<_>>()?,
-        })
-    }
-
-    pub fn struct_tag(&self, limiter: &mut Limiter) -> PartialVMResult<StructTag> {
+    pub fn struct_tag(&self) -> PartialVMResult<StructTag> {
         let ty_args = self
             .ty_args
             .iter()
-            .map(|ty| ty.type_tag(limiter))
+            .map(|ty| ty.type_tag())
             .collect::<PartialVMResult<Vec<_>>>()?;
-
-        limiter.charge(std::mem::size_of::<AccountAddress>())?;
-        limiter.charge(self.module.as_bytes().len())?;
-        limiter.charge(self.name.as_bytes().len())?;
-
         Ok(StructTag {
             address: self.address,
             module: self.module.clone(),
             name: self.name.clone(),
-            type_args: ty_args,
+            type_params: ty_args,
         })
     }
 }
 
 impl FatType {
-    fn clone_with_limit(&self, limit: &mut Limiter) -> PartialVMResult<Self> {
-        use FatType::*;
-        Ok(match self {
-            TyParam(idx) => TyParam(*idx),
-            Bool => Bool,
-            U8 => U8,
-            U16 => U16,
-            U32 => U32,
-            U64 => U64,
-            U128 => U128,
-            U256 => U256,
-            Address => Address,
-            Signer => Signer,
-            Vector(ty) => Vector(Box::new(ty.clone_with_limit(limit)?)),
-            Reference(ty) => Reference(Box::new(ty.clone_with_limit(limit)?)),
-            MutableReference(ty) => MutableReference(Box::new(ty.clone_with_limit(limit)?)),
-            Struct(struct_ty) => Struct(Box::new(struct_ty.clone_with_limit(limit)?)),
-        })
-    }
-
-    pub fn subst(&self, ty_args: &[FatType], limit: &mut Limiter) -> PartialVMResult<FatType> {
+    pub fn subst(&self, ty_args: &[FatType]) -> PartialVMResult<FatType> {
         use FatType::*;
 
         let res = match self {
             TyParam(idx) => match ty_args.get(*idx) {
-                Some(ty) => ty.clone_with_limit(limit)?,
+                Some(ty) => ty.clone(),
                 None => {
                     return Err(
                         PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
@@ -190,17 +134,17 @@ impl FatType {
             U256 => U256,
             Address => Address,
             Signer => Signer,
-            Vector(ty) => Vector(Box::new(ty.subst(ty_args, limit)?)),
-            Reference(ty) => Reference(Box::new(ty.subst(ty_args, limit)?)),
-            MutableReference(ty) => MutableReference(Box::new(ty.subst(ty_args, limit)?)),
+            Vector(ty) => Vector(Box::new(ty.subst(ty_args)?)),
+            Reference(ty) => Reference(Box::new(ty.subst(ty_args)?)),
+            MutableReference(ty) => MutableReference(Box::new(ty.subst(ty_args)?)),
 
-            Struct(struct_ty) => Struct(Box::new(struct_ty.subst(ty_args, limit)?)),
+            Struct(struct_ty) => Struct(Box::new(struct_ty.subst(ty_args)?)),
         };
 
         Ok(res)
     }
 
-    pub fn type_tag(&self, limit: &mut Limiter) -> PartialVMResult<TypeTag> {
+    pub fn type_tag(&self) -> PartialVMResult<TypeTag> {
         use FatType::*;
 
         let res = match self {
@@ -213,8 +157,8 @@ impl FatType {
             U256 => TypeTag::U256,
             Address => TypeTag::Address,
             Signer => TypeTag::Signer,
-            Vector(ty) => TypeTag::Vector(Box::new(ty.type_tag(limit)?)),
-            Struct(struct_ty) => TypeTag::Struct(Box::new(struct_ty.struct_tag(limit)?)),
+            Vector(ty) => TypeTag::Vector(Box::new(ty.type_tag()?)),
+            Struct(struct_ty) => TypeTag::Struct(Box::new(struct_ty.struct_tag()?)),
 
             Reference(_) | MutableReference(_) | TyParam(_) => {
                 return Err(
@@ -255,7 +199,7 @@ impl From<&StructTag> for FatStructType {
             name: struct_tag.name.clone(),
             abilities: WrappedAbilitySet(AbilitySet::EMPTY), // We can't get abilities from a struct tag
             ty_args: struct_tag
-                .type_args
+                .type_params
                 .iter()
                 .map(|inner| inner.into())
                 .collect(),

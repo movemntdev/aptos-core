@@ -20,10 +20,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     fmt::Debug,
     hash::Hash,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
+    sync::atomic::{AtomicUsize, Ordering},
 };
 
 const DEFAULT_TIMEOUT: u64 = 30;
@@ -85,6 +82,14 @@ impl<V: Into<Vec<u8>> + Clone + Debug> TransactionWrite for Value<V> {
 
     fn set_bytes(&mut self, bytes: Bytes) {
         self.maybe_bytes = Some(bytes);
+    }
+
+    fn convert_read_to_modification(&self) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        // If we have no bytes, no modification can be created.
+        self.maybe_bytes.as_ref().map(|_| self.clone())
     }
 }
 
@@ -244,7 +249,7 @@ where
                 .write(key.clone(), idx, 0, vec![(5, (value, None))]);
             map.group_data().mark_estimate(&key, idx);
         } else {
-            map.data().write(key.clone(), idx, 0, Arc::new(value), None);
+            map.data().write(key.clone(), idx, 0, (value, None));
             map.data().mark_estimate(&key, idx);
         }
     }
@@ -352,8 +357,7 @@ where
                             map.group_data()
                                 .write(key, idx as TxnIndex, 1, vec![(5, (value, None))]);
                         } else {
-                            map.data()
-                                .write(key, idx as TxnIndex, 1, Arc::new(value), None);
+                            map.data().write(key, idx as TxnIndex, 1, (value, None));
                         }
                     },
                     Operator::Insert(v) => {
@@ -363,8 +367,7 @@ where
                             map.group_data()
                                 .write(key, idx as TxnIndex, 1, vec![(5, (value, None))]);
                         } else {
-                            map.data()
-                                .write(key, idx as TxnIndex, 1, Arc::new(value), None);
+                            map.data().write(key, idx as TxnIndex, 1, (value, None));
                         }
                     },
                     Operator::Update(delta) => {

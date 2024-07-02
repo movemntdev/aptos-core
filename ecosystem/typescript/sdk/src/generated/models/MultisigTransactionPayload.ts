@@ -2,7 +2,7 @@
 /* tslint:disable */
 /* eslint-disable */
 
-import type { MultisigTransactionPayload_EntryFunctionPayload } from './MultisigTransactionPayload_EntryFunctionPayload';
+import type { EntryFunctionPayload } from './EntryFunctionPayload';
 
-export type MultisigTransactionPayload = MultisigTransactionPayload_EntryFunctionPayload;
+export type MultisigTransactionPayload = EntryFunctionPayload;
 

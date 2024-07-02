@@ -1,18 +1,18 @@
 // Tests compilation is stopped for unassigned addresses
 // Named addresses don't exist at the bytecode level
 
-address UNASSIGNED {
+address A {
 module Ex {}
 }
 
-module UNASSIGNED::M {
+module A::M {
     struct S {}
-    friend UNASSIGNED::N;
+    friend A::N;
     public(friend) fun foo(_: address): S { S{} }
 }
 
-module UNASSIGNED::N {
-    fun bar(): UNASSIGNED::M::S {
-        UNASSIGNED::M::foo(@UNASSIGNED)
+module A::N {
+    fun bar(): A::M::S {
+        A::M::foo(@A)
     }
 }

@@ -2,7 +2,6 @@
 // Copyright (c) The Move Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use clap::ValueEnum;
 use codespan::{ByteIndex, Span};
 use itertools::Itertools;
 #[allow(unused_imports)]
@@ -21,7 +20,7 @@ use move_model::{
     ty::TypeDisplayContext,
 };
 use once_cell::sync::Lazy;
-use regex::{Captures, Regex};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{
     cell::RefCell,
@@ -36,37 +35,6 @@ use std::{
 
 /// The maximum number of subheadings that are allowed
 const MAX_SUBSECTIONS: usize = 6;
-
-/// Regexp for generating code doc
-static REGEX_CODE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(
-        "(?P<ident>(\\b\\w+\\b\\s*::\\s*)*\\b\\w+\\b)(?P<call>\\s*[(<])?|(?P<lt><)|(?P<gt>>)|(?P<nl>\n)|(?P<lb>\\{)|(?P<rb>\\})|(?P<amper>\\&)|(?P<squote>')|(?P<dquote>\")|(?P<sharp>#)|(?P<mul>\\*)|(?P<plus>\\+)|(?P<minus>\\-)|(?P<eq>\\=)|(?P<bar>\\|)|(?P<tilde>\\~)",
-    )
-        .unwrap()
-});
-
-/// Regexp for replacing html entities
-static REGEX_HTML_ENTITY: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(
-        "(?P<lt><)|(?P<gt>>)|(?P<lb>\\{)|(?P<rb>\\})|(?P<amper>\\&)|(?P<squote>')|(?P<dquote>\")|(?P<mul>\\*)|(?P<plus>\\+)|(?P<minus>\\-)|(?P<eq>\\=)|(?P<bar>\\|)|(?P<tilde>\\~)",
-    )
-        .unwrap()
-});
-
-/// Regexp of html elements which are not encoded and left untouched
-static REGEX_HTML_ELEMENTS_TO_SKIP: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(
-        r"</?(h[1-6]|p|span|div|a|em|strong|br|hr|pre|blockquote|ul|ol|li|dl|dt|dd|table|tr|th|td|thead|tbody|tfoot|code)(\s*|(\s+\b\w+\b\s*=[^>]*))>"
-    ).unwrap()
-});
-
-/// The output format of the docgen
-/// If the format is MDX, generated doc is mdx-compatible
-#[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Serialize, Deserialize)]
-pub enum OutputFormat {
-    MD,
-    MDX,
-}
 
 /// Options passed into the documentation generator.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,7 +93,6 @@ pub struct DocgenOptions {
     pub include_call_diagrams: bool,
     /// If this is being compiled relative to a different place where it will be stored (output directory).
     pub compile_relative_to_output_dir: bool,
-    pub output_format: Option<OutputFormat>,
 }
 
 impl Default for DocgenOptions {
@@ -145,14 +112,7 @@ impl Default for DocgenOptions {
             references_file: None,
             include_dep_diagrams: false,
             include_call_diagrams: false,
-            output_format: None,
         }
-    }
-}
-
-impl DocgenOptions {
-    fn is_mdx_compatible(&self) -> bool {
-        self.output_format.is_some_and(|o| o == OutputFormat::MDX)
     }
 }
 
@@ -274,7 +234,7 @@ impl<'env> Docgen<'env> {
         // Generate documentation for standalone modules which are not included in the templates.
         for (id, info) in self.infos.clone() {
             let m = self.env.get_module(id);
-            if !info.is_included && m.is_primary_target() {
+            if !info.is_included && m.is_target() {
                 self.gen_module(&m, &info);
                 let path = self.make_file_in_out_dir(&info.target_file);
                 match self.output.get_mut(&path) {
@@ -442,7 +402,7 @@ impl<'env> Docgen<'env> {
                 m.get_name().display_full(m.env),
                 out_dir,
                 i.target_file,
-                if !m.is_primary_target() {
+                if !m.is_target() {
                     "exists"
                 } else {
                     "will be generated"
@@ -507,7 +467,7 @@ impl<'env> Docgen<'env> {
             .file_name()
             .expect("file name")
             .to_os_string();
-        if !module_env.is_primary_target() {
+        if !module_env.is_target() {
             // Try to locate the file in the provided search path.
             self.options.doc_path.iter().find_map(|dir| {
                 let mut path = PathBuf::from(dir);
@@ -737,19 +697,14 @@ impl<'env> Docgen<'env> {
         if !self.options.specs_inlined {
             self.gen_spec_section(module_env, &spec_block_map);
         } else {
-            match spec_block_map.get(&SpecBlockTarget::Module(module_env.get_id())) {
+            match spec_block_map.get(&SpecBlockTarget::Module) {
                 Some(blocks) if !blocks.is_empty() => {
                     self.section_header(
                         "Module Specification",
                         &self.label_for_section("Module Specification"),
                     );
                     self.increment_section_nest();
-                    self.gen_spec_blocks(
-                        module_env,
-                        "",
-                        &SpecBlockTarget::Module(module_env.get_id()),
-                        &spec_block_map,
-                    );
+                    self.gen_spec_blocks(module_env, "", &SpecBlockTarget::Module, &spec_block_map);
                     self.decrement_section_nest();
                 },
                 _ => {},
@@ -801,10 +756,8 @@ impl<'env> Docgen<'env> {
                     let value = self.convert_to_anchor(parts[1].trim());
                     row_data[index] = value;
                     current_key = Some(index);
-                    continue;
                 }
-            }
-            if let Some(key_index) = current_key {
+            } else if let Some(key_index) = current_key {
                 row_data[key_index].push(' ');
                 row_data[key_index].push_str(&self.convert_to_anchor(trimmed_line));
             }
@@ -832,10 +785,7 @@ impl<'env> Docgen<'env> {
                     .resolve_to_label(module_name, false)
                     .unwrap_or_default();
                 let module_link = label_link.split('#').next().unwrap_or("").to_string();
-                let suffix = format!(
-                    " of the <a href=\"{}\">{}</a> module",
-                    module_link, module_name
-                );
+                let suffix = format!(" of the <a href={}>{}</a> module", module_link, module_name);
                 (req_tag, module_link, suffix)
             } else {
                 (tag, String::new(), String::new())
@@ -1142,7 +1092,7 @@ impl<'env> Docgen<'env> {
         self.begin_items();
         for (id, _) in sorted_infos {
             let module_env = self.env.get_module(*id);
-            if !module_env.is_primary_target() {
+            if !module_env.is_target() {
                 // Do not include modules which are not target (outside of the package)
                 // into the index.
                 continue;
@@ -1495,12 +1445,12 @@ impl<'env> Docgen<'env> {
     /// are associated with the context they appear in.
     fn organize_spec_blocks(&self, module_env: &'env ModuleEnv<'env>) -> SpecBlockMap<'env> {
         let mut result = BTreeMap::new();
-        let mut current_target = SpecBlockTarget::Module(module_env.get_id());
+        let mut current_target = SpecBlockTarget::Module;
         let mut last_block_end: Option<ByteIndex> = None;
         for block in module_env.get_spec_block_infos() {
             let may_merge_with_current = match &block.target {
                 SpecBlockTarget::Schema(..) => true,
-                SpecBlockTarget::Module(_)
+                SpecBlockTarget::Module
                     if !block.member_locs.is_empty() || !self.is_single_liner(&block.loc) =>
                 {
                     // This is a bit of a hack: if spec module is on a single line,
@@ -1561,12 +1511,7 @@ impl<'env> Docgen<'env> {
         let section_label = self.label_for_section("Specification");
         self.section_header("Specification", &section_label);
         self.increment_section_nest();
-        self.gen_spec_blocks(
-            module_env,
-            "",
-            &SpecBlockTarget::Module(module_env.get_id()),
-            spec_block_map,
-        );
+        self.gen_spec_blocks(module_env, "", &SpecBlockTarget::Module, spec_block_map);
         for struct_env in module_env
             .get_structs()
             .filter(|s| !s.is_test_only())
@@ -1767,13 +1712,10 @@ impl<'env> Docgen<'env> {
 
     /// Decorates documentation text, identifying code fragments and decorating them
     /// as code. Code blocks in comments are untouched.
-    /// When generating mdx-compatible doc, need to encode html entities
     fn decorate_text(&self, text: &str) -> String {
         let mut decorated_text = String::new();
-        let mut chars = text.chars().peekable();
+        let mut chars = text.chars();
         let non_code_filter = |chr: &char| *chr != '`';
-        let non_code_or_rb_filter = |chr: &char| *chr != '`' && *chr != '>';
-        let non_code_or_lb_filter = |chr: &char| *chr != '`' && *chr != '<';
 
         while let Some(chr) = chars.next() {
             if chr == '`' {
@@ -1794,35 +1736,6 @@ impl<'env> Docgen<'env> {
                         self.decorate_code(&code)
                     )
                     .unwrap()
-                }
-            } else if self.options.is_mdx_compatible() {
-                if chr == '<' {
-                    let str = chars
-                        .take_while_ref(non_code_or_rb_filter)
-                        .collect::<String>();
-                    if chars.peek().is_some_and(|c| *c == '>') {
-                        let rb = chars.next().unwrap();
-                        let full_str = format!("{}{}{}", chr, str, rb);
-                        // skip encoding if `str` is a html element
-                        if REGEX_HTML_ELEMENTS_TO_SKIP.is_match(&full_str) {
-                            decorated_text.push_str(&full_str);
-                        } else {
-                            decorated_text.push_str(
-                                &self.encode_html_entities_in_text(&full_str.to_string()),
-                            );
-                        }
-                    } else {
-                        decorated_text
-                            .push_str(&self.encode_html_entities_in_text(&chr.to_string()));
-                        decorated_text
-                            .push_str(&self.encode_html_entities_in_text(&str.to_string()));
-                    }
-                } else {
-                    decorated_text.push_str(&self.encode_html_entities_in_text(&chr.to_string()));
-                    let str = chars
-                        .take_while_ref(non_code_or_lb_filter)
-                        .collect::<String>();
-                    decorated_text.push_str(&self.encode_html_entities_in_text(&str));
                 }
             } else {
                 decorated_text.push(chr);
@@ -1850,51 +1763,21 @@ impl<'env> Docgen<'env> {
 
     /// Outputs decorated code text in context of a module.
     fn code_text(&self, code: &str) {
-        if self.options.is_mdx_compatible() {
-            emit!(self.writer, "{}<br />", &self.decorate_code(code));
-        } else {
-            emitln!(self.writer, &self.decorate_code(code));
-        }
-    }
-
-    /// Replace html entities if the output format needs to be mdx compatible
-    fn replace_for_mdx(&self, cap: &Captures) -> String {
-        static MDX: Lazy<Vec<(&str, &str)>> = Lazy::new(|| {
-            vec![
-                ("lt", "&lt;"),
-                ("gt", "&gt;"),
-                ("lb", "&#123;"),
-                ("rb", "&#125;"),
-                ("amper", "&amp;"),
-                ("dquote", "&quot;"),
-                ("squote", "&apos;"),
-                ("sharp", "&#35;"),
-                ("mul", "&#42;"),
-                ("plus", "&#43;"),
-                ("minus", "&#45;"),
-                ("eq", "&#61;"),
-                ("bar", "&#124;"),
-                ("tilde", "&#126;"),
-                ("nl", "<br />"),
-            ]
-        });
-        let mut r = "".to_string();
-        for (group_name, replacement) in MDX.iter() {
-            if cap.name(group_name).is_some() {
-                r = replacement.to_string();
-                break;
-            }
-        }
-        r
+        emitln!(self.writer, &self.decorate_code(code));
     }
 
     /// Decorates a code fragment, for use in an html block. Replaces < and >, bolds keywords and
     /// tries to resolve and cross-link references.
-    /// If the output format is MDX, replace all html entities to make the doc mdx compatible
     fn decorate_code(&self, code: &str) -> String {
+        static REX: Lazy<Regex> = Lazy::new(|| {
+            Regex::new(
+                r"(?P<ident>(\b\w+\b\s*::\s*)*\b\w+\b)(?P<call>\s*[(<])?|(?P<lt><)|(?P<gt>>)",
+            )
+            .unwrap()
+        });
         let mut r = String::new();
         let mut at = 0;
-        while let Some(cap) = REGEX_CODE.captures(&code[at..]) {
+        while let Some(cap) = REX.captures(&code[at..]) {
             let replacement = {
                 if cap.name("lt").is_some() {
                     "&lt;".to_owned()
@@ -1913,8 +1796,6 @@ impl<'env> Docgen<'env> {
                     } else {
                         "".to_owned()
                     }
-                } else if self.options.is_mdx_compatible() {
-                    self.replace_for_mdx(&cap)
                 } else {
                     "".to_owned()
                 }
@@ -1930,25 +1811,6 @@ impl<'env> Docgen<'env> {
                     // replace the `<` as well.
                     r += &m.as_str().replace('<', "&lt;");
                 }
-            }
-            at += cap.get(0).unwrap().end();
-        }
-        r += &code[at..];
-        r
-    }
-
-    /// Encodes html entities during decoration of a text fragment
-    /// Only called when the output is mdx-compatible
-    fn encode_html_entities_in_text(&self, code: &str) -> String {
-        let mut r = String::new();
-        let mut at = 0;
-        while let Some(cap) = REGEX_HTML_ENTITY.captures(&code[at..]) {
-            let replacement = self.replace_for_mdx(&cap);
-            if replacement.is_empty() {
-                r += &code[at..at + cap.get(0).unwrap().end()];
-            } else {
-                r += &code[at..at + cap.get(0).unwrap().start()];
-                r += &replacement;
             }
             at += cap.get(0).unwrap().end();
         }

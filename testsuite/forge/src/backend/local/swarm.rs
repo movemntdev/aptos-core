@@ -96,7 +96,7 @@ pub struct LocalSwarm {
     fullnodes: HashMap<PeerId, LocalNode>,
     public_networks: HashMap<PeerId, NetworkConfig>,
     dir: SwarmDirectory,
-    root_account: Arc<LocalAccount>,
+    root_account: LocalAccount,
     chain_id: ChainId,
     root_key: ConfigKey<Ed25519PrivateKey>,
 
@@ -245,7 +245,6 @@ impl LocalSwarm {
             AccountKey::from_private_key(root_key.private_key()),
             0,
         );
-        let root_account = Arc::new(root_account);
 
         Ok(LocalSwarm {
             node_name_counter: validators.len(),
@@ -368,7 +367,7 @@ impl LocalSwarm {
         )?;
 
         let version = self.versions.get(version).unwrap();
-        let fullnode = LocalNode::new(
+        let mut fullnode = LocalNode::new(
             version.to_owned(),
             fullnode_config.name,
             index,
@@ -398,7 +397,7 @@ impl LocalSwarm {
         )?;
 
         let version = self.versions.get(version).unwrap();
-        let fullnode = LocalNode::new(
+        let mut fullnode = LocalNode::new(
             version.to_owned(),
             fullnode_config.name,
             index,
@@ -478,7 +477,7 @@ impl Drop for LocalSwarm {
 
 #[async_trait::async_trait]
 impl Swarm for LocalSwarm {
-    async fn health_check(&self) -> Result<()> {
+    async fn health_check(&mut self) -> Result<()> {
         Ok(())
     }
 
@@ -492,8 +491,24 @@ impl Swarm for LocalSwarm {
         Box::new(validators.into_iter())
     }
 
+    fn validators_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut dyn Validator> + 'a> {
+        let mut validators: Vec<_> = self
+            .validators
+            .values_mut()
+            .map(|v| v as &'a mut dyn Validator)
+            .collect();
+        validators.sort_by_key(|v| v.index());
+        Box::new(validators.into_iter())
+    }
+
     fn validator(&self, id: PeerId) -> Option<&dyn Validator> {
         self.validators.get(&id).map(|v| v as &dyn Validator)
+    }
+
+    fn validator_mut(&mut self, id: PeerId) -> Option<&mut dyn Validator> {
+        self.validators
+            .get_mut(&id)
+            .map(|v| v as &mut dyn Validator)
     }
 
     async fn upgrade_validator(&mut self, id: PeerId, version: &Version) -> Result<()> {
@@ -519,8 +534,22 @@ impl Swarm for LocalSwarm {
         Box::new(full_nodes.into_iter())
     }
 
+    fn full_nodes_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut dyn FullNode> + 'a> {
+        let mut full_nodes: Vec<_> = self
+            .fullnodes
+            .values_mut()
+            .map(|v| v as &'a mut dyn FullNode)
+            .collect();
+        full_nodes.sort_by_key(|n| n.index());
+        Box::new(full_nodes.into_iter())
+    }
+
     fn full_node(&self, id: PeerId) -> Option<&dyn FullNode> {
         self.fullnodes.get(&id).map(|v| v as &dyn FullNode)
+    }
+
+    fn full_node_mut(&mut self, id: PeerId) -> Option<&mut dyn FullNode> {
+        self.fullnodes.get_mut(&id).map(|v| v as &mut dyn FullNode)
     }
 
     fn add_validator(&mut self, _version: &Version, _template: NodeConfig) -> Result<PeerId> {
@@ -549,7 +578,7 @@ impl Swarm for LocalSwarm {
     }
 
     fn remove_full_node(&mut self, id: PeerId) -> Result<()> {
-        if let Some(fullnode) = self.fullnodes.remove(&id) {
+        if let Some(mut fullnode) = self.fullnodes.remove(&id) {
             fullnode.stop();
         }
 
@@ -560,7 +589,7 @@ impl Swarm for LocalSwarm {
         Box::new(self.versions.keys().cloned())
     }
 
-    fn chain_info(&self) -> ChainInfo {
+    fn chain_info(&mut self) -> ChainInfo<'_> {
         let rest_api_url = self
             .validators()
             .next()
@@ -575,7 +604,7 @@ impl Swarm for LocalSwarm {
             .to_string();
 
         ChainInfo::new(
-            self.root_account.clone(),
+            &mut self.root_account,
             rest_api_url,
             inspection_service_url,
             self.chain_id,
@@ -626,7 +655,7 @@ impl Swarm for LocalSwarm {
         todo!()
     }
 
-    fn chain_info_for_node(&mut self, idx: usize) -> ChainInfo {
+    fn chain_info_for_node(&mut self, idx: usize) -> ChainInfo<'_> {
         let rest_api_url = self
             .validators()
             .nth(idx)
@@ -640,7 +669,7 @@ impl Swarm for LocalSwarm {
             .inspection_service_endpoint()
             .to_string();
         ChainInfo::new(
-            self.root_account.clone(),
+            &mut self.root_account,
             rest_api_url,
             inspection_service_url,
             self.chain_id,

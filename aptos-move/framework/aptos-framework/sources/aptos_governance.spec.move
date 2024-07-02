@@ -139,13 +139,11 @@ spec aptos_framework::aptos_governance {
         use aptos_framework::coin::CoinInfo;
         use aptos_framework::aptos_coin::AptosCoin;
         use aptos_framework::transaction_fee;
-        pragma verify = false; // TODO: set because of timeout (property proved).
+
+        pragma verify_duration_estimate = 200;
         let addr = signer::address_of(aptos_framework);
         aborts_if addr != @aptos_framework;
-        include reconfiguration_with_dkg::FinishRequirement {
-            framework: aptos_framework
-        };
-        include stake::GetReconfigStartTimeRequirement;
+
         include transaction_fee::RequiresCollectedFeesPerValueLeqBlockAptosSupply;
         requires chain_status::is_operating();
         requires exists<stake::ValidatorFees>(@aptos_framework);
@@ -579,12 +577,9 @@ spec aptos_framework::aptos_governance {
         use aptos_framework::coin::CoinInfo;
         use aptos_framework::aptos_coin::AptosCoin;
         use aptos_framework::transaction_fee;
-        pragma verify = false; // TODO: set because of timeout (property proved).
+
+        pragma verify_duration_estimate = 120; // TODO: set because of timeout (property proved)
         aborts_if !system_addresses::is_aptos_framework_address(signer::address_of(aptos_framework));
-        include reconfiguration_with_dkg::FinishRequirement {
-            framework: aptos_framework
-        };
-        include stake::GetReconfigStartTimeRequirement;
 
         include transaction_fee::RequiresCollectedFeesPerValueLeqBlockAptosSupply;
         requires chain_status::is_operating();
@@ -834,42 +829,7 @@ spec aptos_framework::aptos_governance {
         include VotingInitializationAbortIfs;
     }
 
-    spec force_end_epoch(aptos_framework: &signer) {
-        use aptos_framework::reconfiguration_with_dkg;
-        use std::signer;
-        pragma verify = false; // TODO: set because of timeout (property proved).
-        let address = signer::address_of(aptos_framework);
-        include reconfiguration_with_dkg::FinishRequirement {
-            framework: aptos_framework
-        };
-    }
-
     spec schema VotingInitializationAbortIfs {
         aborts_if features::spec_partial_governance_voting_enabled() && !exists<VotingRecordsV2>(@aptos_framework);
-    }
-
-    spec force_end_epoch_test_only {
-        pragma verify = false;
-    }
-
-    spec batch_vote(
-        voter: &signer,
-        stake_pools: vector<address>,
-        proposal_id: u64,
-        should_pass: bool,
-    ) {
-        // TODO: Temporary mockup. Specify the `for_each` statement.
-        pragma verify = false;
-    }
-
-    spec batch_partial_vote(
-        voter: &signer,
-        stake_pools: vector<address>,
-        proposal_id: u64,
-        voting_power: u64,
-        should_pass: bool,
-    ) {
-        // TODO: Temporary mockup. Specify the `for_each` statement.
-        pragma verify = false;
     }
 }

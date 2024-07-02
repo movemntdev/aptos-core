@@ -183,7 +183,7 @@ impl CliCommand<()> for InitTool {
         };
 
         // Set the derivation_path to the one user chose
-        profile_config.derivation_path.clone_from(&derivation_path);
+        profile_config.derivation_path = derivation_path.clone();
 
         // Private key
         let private_key = if self.is_hardware_wallet() {

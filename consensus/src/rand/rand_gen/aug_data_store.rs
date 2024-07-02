@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::rand::rand_gen::{
-    storage::interface::RandStorage,
+    storage::interface::AugDataStorage,
     types::{
-        AugData, AugDataId, AugDataSignature, CertifiedAugData, CertifiedAugDataAck, RandConfig,
-        TAugmentedData,
+        AugData, AugDataId, AugDataSignature, AugmentedData, CertifiedAugData, CertifiedAugDataAck,
+        RandConfig,
     },
 };
 use anyhow::ensure;
@@ -14,17 +14,16 @@ use aptos_logger::error;
 use aptos_types::validator_signer::ValidatorSigner;
 use std::{collections::HashMap, sync::Arc};
 
-pub struct AugDataStore<D> {
+pub struct AugDataStore<D, Storage> {
     epoch: u64,
     signer: Arc<ValidatorSigner>,
     config: RandConfig,
-    fast_config: Option<RandConfig>,
     data: HashMap<Author, AugData<D>>,
     certified_data: HashMap<Author, CertifiedAugData<D>>,
-    db: Arc<dyn RandStorage<D>>,
+    db: Arc<Storage>,
 }
 
-impl<D: TAugmentedData> AugDataStore<D> {
+impl<D: AugmentedData, Storage: AugDataStorage<D>> AugDataStore<D, Storage> {
     fn filter_by_epoch<T>(
         epoch: u64,
         all_data: impl Iterator<Item = (AugDataId, T)>,
@@ -45,36 +44,28 @@ impl<D: TAugmentedData> AugDataStore<D> {
         epoch: u64,
         signer: Arc<ValidatorSigner>,
         config: RandConfig,
-        fast_config: Option<RandConfig>,
-        db: Arc<dyn RandStorage<D>>,
+        db: Arc<Storage>,
     ) -> Self {
         let all_data = db.get_all_aug_data().unwrap_or_default();
         let (to_remove, aug_data) = Self::filter_by_epoch(epoch, all_data.into_iter());
-        if let Err(e) = db.remove_aug_data(to_remove) {
+        if let Err(e) = db.remove_aug_data(to_remove.into_iter()) {
             error!("[AugDataStore] failed to remove aug data: {:?}", e);
         }
 
         let all_certified_data = db.get_all_certified_aug_data().unwrap_or_default();
         let (to_remove, certified_data) =
             Self::filter_by_epoch(epoch, all_certified_data.into_iter());
-        if let Err(e) = db.remove_certified_aug_data(to_remove) {
+        if let Err(e) = db.remove_certified_aug_data(to_remove.into_iter()) {
             error!(
                 "[AugDataStore] failed to remove certified aug data: {:?}",
                 e
             );
         }
 
-        for (_, certified_data) in &certified_data {
-            certified_data
-                .data()
-                .augment(&config, &fast_config, certified_data.author());
-        }
-
         Self {
             epoch,
             signer,
             config,
-            fast_config,
             data: aug_data
                 .into_iter()
                 .map(|(id, data)| (id.author(), data))
@@ -88,15 +79,11 @@ impl<D: TAugmentedData> AugDataStore<D> {
     }
 
     pub fn get_my_aug_data(&self) -> Option<AugData<D>> {
-        self.data.get(&self.config.author()).cloned()
+        self.data.get(self.config.author()).cloned()
     }
 
     pub fn get_my_certified_aug_data(&self) -> Option<CertifiedAugData<D>> {
-        self.certified_data.get(&self.config.author()).cloned()
-    }
-
-    pub fn my_certified_aug_data_exists(&self) -> bool {
-        self.certified_data.contains_key(&self.config.author())
+        self.certified_data.get(self.config.author()).cloned()
     }
 
     pub fn add_aug_data(&mut self, data: AugData<D>) -> anyhow::Result<AugDataSignature> {
@@ -124,7 +111,7 @@ impl<D: TAugmentedData> AugDataStore<D> {
         self.db.save_certified_aug_data(&certified_data)?;
         certified_data
             .data()
-            .augment(&self.config, &self.fast_config, certified_data.author());
+            .augment(&self.config, certified_data.author());
         self.certified_data
             .insert(*certified_data.author(), certified_data);
         Ok(CertifiedAugDataAck::new(self.epoch))

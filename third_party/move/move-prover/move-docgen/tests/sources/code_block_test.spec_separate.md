@@ -1,20 +1,26 @@
 
-<a id="main"></a>
+<a id="0x1_main"></a>
 
-# Script `main`
+# Module `0x1::main`
 
 
 
--  [Explanation of the algorithm](#@Explanation_of_the_algorithm_0)
+-  [Function `main`](#0x1_main_main)
+    -  [Explanation of the algorithm](#@Explanation_of_the_algorithm_0)
 
 
 <pre><code></code></pre>
 
 
 
+<a id="0x1_main_main"></a>
+
+## Function `main`
+
+
 <a id="@Explanation_of_the_algorithm_0"></a>
 
-## Explanation of the algorithm
+### Explanation of the algorithm
 
 ```
 code block
@@ -22,7 +28,7 @@ code block
 then <code>inline code</code>
 
 
-<pre><code><b>fun</b> <a href="code_block_test.md#main">main</a>()
+<pre><code><b>fun</b> <a href="code_block_test.md#0x1_main">main</a>()
 </code></pre>
 
 
@@ -31,7 +37,7 @@ then <code>inline code</code>
 <summary>Implementation</summary>
 
 
-<pre><code><b>fun</b> <a href="code_block_test.md#main">main</a>() { }
+<pre><code><b>fun</b> <a href="code_block_test.md#0x1_main">main</a>() { }
 </code></pre>
 
 

@@ -35,7 +35,7 @@ use std::{
     env,
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},
     path::PathBuf,
-    sync::{atomic::AtomicU32, Arc},
+    sync::Arc,
 };
 use tempfile::TempDir;
 
@@ -49,7 +49,6 @@ const FULLNODE_CONFIG_MAP_KEY: &str = "fullnode.yaml";
 // the path where the genesis is mounted in the validator
 const GENESIS_CONFIG_VOLUME_NAME: &str = "genesis-config";
 const GENESIS_CONFIG_VOLUME_PATH: &str = "/opt/aptos/genesis";
-const GENESIS_CONFIG_WRITABLE_VOLUME_NAME: &str = "writable-genesis";
 
 // the path where the config file is mounted in the fullnode
 const APTOS_CONFIG_VOLUME_NAME: &str = "aptos-config";
@@ -187,7 +186,7 @@ fn create_fullnode_container(
             },
             VolumeMount {
                 mount_path: GENESIS_CONFIG_VOLUME_PATH.to_string(),
-                name: GENESIS_CONFIG_WRITABLE_VOLUME_NAME.to_string(),
+                name: GENESIS_CONFIG_VOLUME_NAME.to_string(),
                 ..VolumeMount::default()
             },
         ]),
@@ -216,11 +215,6 @@ fn create_fullnode_volumes(
                 name: Some(fullnode_node_config_config_map_name),
                 ..ConfigMapVolumeSource::default()
             }),
-            ..Volume::default()
-        },
-        Volume {
-            name: GENESIS_CONFIG_WRITABLE_VOLUME_NAME.to_string(),
-            empty_dir: Some(Default::default()),
             ..Volume::default()
         },
     ]
@@ -504,7 +498,7 @@ pub async fn install_public_fullnode<'a>(
         haproxy_enabled: false,
 
         port_forward_enabled: use_port_forward,
-        rest_api_port: AtomicU32::new(REST_API_SERVICE_PORT), // in the case of port-forward, this port will be changed at runtime
+        rest_api_port: REST_API_SERVICE_PORT, // in the case of port-forward, this port will be changed at runtime
     };
 
     Ok((node_peer_id, ret_node))
@@ -603,7 +597,7 @@ mod tests {
                                 },
                                 VolumeMount {
                                     mount_path: GENESIS_CONFIG_VOLUME_PATH.to_string(),
-                                    name: GENESIS_CONFIG_WRITABLE_VOLUME_NAME.to_string(),
+                                    name: GENESIS_CONFIG_VOLUME_NAME.to_string(),
                                     ..VolumeMount::default()
                                 },
                             ]),

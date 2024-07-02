@@ -190,13 +190,9 @@ pub fn run_move_prover(
         options.set_quiet();
     }
     let now = Instant::now();
-    let compiler_version = config.compiler_config.compiler_version.unwrap_or_default();
-    let language_version = config.compiler_config.language_version.unwrap_or_default();
-    let mut model = config.move_model_for_package(path, ModelConfig {
+    let model = config.move_model_for_package(path, ModelConfig {
         all_files_as_targets: false,
         target_filter: target_filter.clone(),
-        compiler_version,
-        language_version,
     })?;
     let _temp_dir_holder = if for_test {
         // Need to ensure a distinct output.bpl file for concurrent execution. In non-test
@@ -212,7 +208,7 @@ pub fn run_move_prover(
     } else {
         None
     };
-    let res = run_move_prover_with_model(&mut model, &mut error_writer, options, Some(now));
+    let res = run_move_prover_with_model(&model, &mut error_writer, options, Some(now));
     if for_test {
         let basedir = path
             .file_name()

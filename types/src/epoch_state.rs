@@ -23,10 +23,6 @@ pub struct EpochState {
 }
 
 impl EpochState {
-    pub fn new(epoch: u64, verifier: ValidatorVerifier) -> Self {
-        Self { epoch, verifier }
-    }
-
     pub fn empty() -> Self {
         Self {
             epoch: 0,

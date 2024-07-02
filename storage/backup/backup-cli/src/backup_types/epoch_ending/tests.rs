@@ -68,7 +68,6 @@ fn end_to_end() {
                 },
                 GlobalBackupOpt {
                     max_chunk_size: 1024,
-                    concurrent_data_requests: 2,
                 },
                 client,
                 Arc::clone(&store),
@@ -199,7 +198,6 @@ async fn test_trusted_waypoints_impl(
             },
             GlobalBackupOpt {
                 max_chunk_size: 1024,
-                concurrent_data_requests: 2,
             },
             client.clone(),
             Arc::clone(&store),

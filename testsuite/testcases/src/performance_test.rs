@@ -3,8 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::NetworkLoadTest;
-use aptos_forge::{NetworkContextSynchronizer, NetworkTest, Result, Test};
-use async_trait::async_trait;
+use aptos_forge::{NetworkContext, NetworkTest, Result, Test};
 
 pub struct PerformanceBenchmark;
 
@@ -16,9 +15,8 @@ impl Test for PerformanceBenchmark {
 
 impl NetworkLoadTest for PerformanceBenchmark {}
 
-#[async_trait]
 impl NetworkTest for PerformanceBenchmark {
-    async fn run<'a>(&self, ctx: NetworkContextSynchronizer<'a>) -> Result<()> {
-        <dyn NetworkLoadTest>::run(self, ctx).await
+    fn run(&self, ctx: &mut NetworkContext<'_>) -> Result<()> {
+        <dyn NetworkLoadTest>::run(self, ctx)
     }
 }

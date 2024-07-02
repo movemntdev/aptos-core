@@ -31,8 +31,8 @@ use aptos_types::{
         state_value::{StateValue, StateValueChunkWithProof},
     },
     transaction::{
-        Transaction, TransactionAuxiliaryData, TransactionListWithProof, TransactionOutput,
-        TransactionOutputListWithProof, TransactionStatus,
+        Transaction, TransactionListWithProof, TransactionOutput, TransactionOutputListWithProof,
+        TransactionStatus,
     },
     write_set::WriteSet,
 };
@@ -171,7 +171,7 @@ fn create_missing_data_request_state_values() {
     // Create the partial response payload
     let last_response_index = end_index - 1;
     let raw_values = (start_index..last_response_index + 1)
-        .map(|_| (StateKey::raw(&[]), StateValue::new_legacy(vec![].into())))
+        .map(|_| (StateKey::raw(vec![]), StateValue::new_legacy(vec![].into())))
         .collect::<Vec<_>>();
     let response_payload = ResponsePayload::StateValuesWithProof(StateValueChunkWithProof {
         first_index: start_index,
@@ -197,7 +197,7 @@ fn create_missing_data_request_state_values() {
     // Create a complete response payload
     let last_response_index = end_index;
     let raw_values = (start_index..last_response_index + 1)
-        .map(|_| (StateKey::raw(&[]), StateValue::new_legacy(vec![].into())))
+        .map(|_| (StateKey::raw(vec![]), StateValue::new_legacy(vec![].into())))
         .collect::<Vec<_>>();
     let response_payload = ResponsePayload::StateValuesWithProof(StateValueChunkWithProof {
         first_index: start_index,
@@ -454,13 +454,7 @@ fn transform_epoch_ending_stream_notifications() {
     // Create a single data client request
     let notification_id_generator = create_notification_id_generator();
     let data_client_request = stream_engine
-        .create_data_client_requests(
-            1,
-            1,
-            0,
-            &global_data_summary,
-            notification_id_generator.clone(),
-        )
+        .create_data_client_requests(1, &global_data_summary, notification_id_generator.clone())
         .unwrap();
     assert_eq!(data_client_request.len(), 1);
 
@@ -568,13 +562,7 @@ fn transform_state_values_stream_notifications() {
     // Create a single data client request
     let notification_id_generator = create_notification_id_generator();
     let data_client_request = stream_engine
-        .create_data_client_requests(
-            1,
-            1,
-            0,
-            &global_data_summary,
-            notification_id_generator.clone(),
-        )
+        .create_data_client_requests(1, &global_data_summary, notification_id_generator.clone())
         .unwrap();
     assert_eq!(data_client_request.len(), 1);
 
@@ -687,13 +675,7 @@ fn transform_transactions_stream_notifications() {
     // Create a single data client request
     let notification_id_generator = create_notification_id_generator();
     let data_client_request = stream_engine
-        .create_data_client_requests(
-            1,
-            1,
-            0,
-            &global_data_summary,
-            notification_id_generator.clone(),
-        )
+        .create_data_client_requests(1, &global_data_summary, notification_id_generator.clone())
         .unwrap();
     assert_eq!(data_client_request.len(), 1);
 
@@ -794,13 +776,7 @@ fn transform_continuous_outputs_stream_notifications() {
     // Create a single data client request
     let notification_id_generator = create_notification_id_generator();
     let data_client_request = stream_engine
-        .create_data_client_requests(
-            1,
-            1,
-            0,
-            &global_data_summary,
-            notification_id_generator.clone(),
-        )
+        .create_data_client_requests(1, &global_data_summary, notification_id_generator.clone())
         .unwrap();
     assert_eq!(data_client_request.len(), 1);
 
@@ -869,7 +845,7 @@ fn create_state_value_chunk(
 ) -> StateValueChunkWithProof {
     // Create the raw values
     let raw_values = (0..num_values)
-        .map(|_| (StateKey::raw(&[]), StateValue::new_legacy(vec![].into())))
+        .map(|_| (StateKey::raw(vec![]), StateValue::new_legacy(vec![].into())))
         .collect::<Vec<_>>();
 
     // Create the chunk of state values
@@ -891,11 +867,5 @@ fn create_test_transaction() -> Transaction {
 
 /// Returns a dummy transaction output for testing purposes
 fn create_test_transaction_output() -> TransactionOutput {
-    TransactionOutput::new(
-        WriteSet::default(),
-        vec![],
-        0,
-        TransactionStatus::Retry,
-        TransactionAuxiliaryData::default(),
-    )
+    TransactionOutput::new(WriteSet::default(), vec![], 0, TransactionStatus::Retry)
 }

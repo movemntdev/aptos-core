@@ -8,7 +8,6 @@ use aptos_types::{
     aggregate_signature::AggregateSignature, validator_signer::ValidatorSigner,
     validator_verifier::ValidatorVerifier, PeerId,
 };
-use mini_moka::sync::Cache;
 use rand::{seq::SliceRandom, thread_rng};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -133,16 +132,6 @@ impl BatchInfo {
     pub fn gas_bucket_start(&self) -> u64 {
         self.gas_bucket_start
     }
-
-    pub fn is_expired(&self) -> bool {
-        self.expiration() < aptos_infallible::duration_since_epoch().as_micros() as u64
-    }
-}
-
-impl Display for BatchInfo {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "({}:{}:{})", self.author, self.batch_id, self.digest)
-    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -159,7 +148,6 @@ impl SignedBatchInfoMsg {
         &self,
         sender: PeerId,
         max_num_batches: usize,
-        max_batch_expiry_gap_usecs: u64,
         validator: &ValidatorVerifier,
     ) -> anyhow::Result<()> {
         ensure!(!self.signed_infos.is_empty(), "Empty message");
@@ -170,7 +158,7 @@ impl SignedBatchInfoMsg {
             max_num_batches
         );
         for signed_info in &self.signed_infos {
-            signed_info.verify(sender, max_batch_expiry_gap_usecs, validator)?
+            signed_info.verify(sender, validator)?
         }
         Ok(())
     }
@@ -219,33 +207,16 @@ impl SignedBatchInfo {
         self.signer
     }
 
-    pub fn verify(
-        &self,
-        sender: PeerId,
-        max_batch_expiry_gap_usecs: u64,
-        validator: &ValidatorVerifier,
-    ) -> anyhow::Result<()> {
-        if sender != self.signer {
+    pub fn verify(&self, sender: PeerId, validator: &ValidatorVerifier) -> anyhow::Result<()> {
+        if sender == self.signer {
+            Ok(validator.verify(self.signer, &self.info, &self.signature)?)
+        } else {
             bail!("Sender {} mismatch signer {}", sender, self.signer);
         }
-
-        if self.expiration()
-            > aptos_infallible::duration_since_epoch().as_micros() as u64
-                + max_batch_expiry_gap_usecs
-        {
-            bail!(
-                "Batch expiration too far in future: {} > {}",
-                self.expiration(),
-                aptos_infallible::duration_since_epoch().as_micros() as u64
-                    + max_batch_expiry_gap_usecs
-            );
-        }
-
-        Ok(validator.verify(self.signer, &self.info, &self.signature)?)
     }
 
-    pub fn signature(&self) -> &bls12381::Signature {
-        &self.signature
+    pub fn signature(self) -> bls12381::Signature {
+        self.signature
     }
 
     pub fn batch_info(&self) -> &BatchInfo {
@@ -267,8 +238,6 @@ pub enum SignedBatchInfoError {
     WrongInfo((u64, u64)),
     DuplicatedSignature,
     InvalidAuthor,
-    NotFound,
-    AlreadyCommitted,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
@@ -285,7 +254,6 @@ impl ProofOfStoreMsg {
         &self,
         max_num_proofs: usize,
         validator: &ValidatorVerifier,
-        cache: &ProofCache,
     ) -> anyhow::Result<()> {
         ensure!(!self.proofs.is_empty(), "Empty message");
         ensure!(
@@ -295,7 +263,7 @@ impl ProofOfStoreMsg {
             max_num_proofs
         );
         for proof in &self.proofs {
-            proof.verify(validator, cache)?
+            proof.verify(validator)?
         }
         Ok(())
     }
@@ -319,8 +287,6 @@ impl ProofOfStoreMsg {
     }
 }
 
-pub type ProofCache = Cache<BatchInfo, AggregateSignature>;
-
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
 pub struct ProofOfStore {
     info: BatchInfo,
@@ -335,19 +301,10 @@ impl ProofOfStore {
         }
     }
 
-    pub fn verify(&self, validator: &ValidatorVerifier, cache: &ProofCache) -> anyhow::Result<()> {
-        if let Some(signature) = cache.get(&self.info) {
-            if signature == self.multi_signature {
-                return Ok(());
-            }
-        }
-        let result = validator
+    pub fn verify(&self, validator: &ValidatorVerifier) -> anyhow::Result<()> {
+        validator
             .verify_multi_signatures(&self.info, &self.multi_signature)
-            .context("Failed to verify ProofOfStore");
-        if result.is_ok() {
-            cache.insert(self.info.clone(), self.multi_signature.clone());
-        }
-        result
+            .context("Failed to verify ProofOfStore")
     }
 
     pub fn shuffled_signers(&self, validator: &ValidatorVerifier) -> Vec<PeerId> {
@@ -360,10 +317,6 @@ impl ProofOfStore {
 
     pub fn info(&self) -> &BatchInfo {
         &self.info
-    }
-
-    pub fn multi_signature(&self) -> &AggregateSignature {
-        &self.multi_signature
     }
 }
 

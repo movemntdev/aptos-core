@@ -1,7 +1,11 @@
-// -- Model dump before bytecode pipeline
+// ---- Model Dump
 module 0x8675309::M {
     private fun foo() {
-        Tuple();
-        Tuple()
+        {
+          let () = Tuple();
+          Tuple();
+          Tuple()
+        }
     }
+    spec fun $foo();
 } // end 0x8675309::M

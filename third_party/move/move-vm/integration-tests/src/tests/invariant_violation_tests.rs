@@ -6,9 +6,8 @@ use move_binary_format::file_format::{
     SignatureToken::*,
 };
 use move_core_types::vm_status::StatusCode;
-use move_vm_runtime::{module_traversal::*, move_vm::MoveVM};
-use move_vm_test_utils::InMemoryStorage;
-use move_vm_types::gas::UnmeteredGasMeter;
+use move_vm_runtime::move_vm::MoveVM;
+use move_vm_test_utils::{gas_schedule::GasStatus, InMemoryStorage};
 
 #[test]
 fn merge_borrow_states_infinite_loop() {
@@ -71,21 +70,19 @@ fn merge_borrow_states_infinite_loop() {
     };
 
     move_bytecode_verifier::verify_script(&cs).expect("verify failed");
-    let vm = MoveVM::new(vec![]);
+    let vm = MoveVM::new(vec![]).unwrap();
 
     let storage: InMemoryStorage = InMemoryStorage::new();
     let mut session = vm.new_session(&storage);
     let mut script_bytes = vec![];
     cs.serialize(&mut script_bytes).unwrap();
-    let traversal_storage = TraversalStorage::new();
 
     let err = session
         .execute_script(
             script_bytes.as_slice(),
             vec![],
             Vec::<Vec<u8>>::new(),
-            &mut UnmeteredGasMeter,
-            &mut TraversalContext::new(&traversal_storage),
+            &mut GasStatus::new_unmetered(),
         )
         .unwrap_err();
 

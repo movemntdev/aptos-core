@@ -17,8 +17,7 @@ use serde::Serialize;
 use signature::Verifier;
 use std::{cmp::Ordering, fmt};
 
-/// A secp256r1 ECDSA signature.
-/// NOTE: The max size on this struct is enforced in its `TryFrom<u8>` trait implementation.
+/// A Secp256r1 ECDSA signature
 #[derive(DeserializeKey, Clone, SerializeKey)]
 #[key_name("Secp256r1EcdsaSignature")]
 pub struct Signature(pub(crate) p256::ecdsa::Signature);

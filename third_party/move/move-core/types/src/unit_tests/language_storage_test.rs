@@ -24,7 +24,7 @@ fn test_type_tag_deserialize_case_insensitive() {
         address: AccountAddress::ONE,
         module: Identifier::from(ident_str!("TestModule")),
         name: Identifier::from(ident_str!("TestStruct")),
-        type_args: vec![
+        type_params: vec![
             TypeTag::U8,
             TypeTag::U16,
             TypeTag::U32,

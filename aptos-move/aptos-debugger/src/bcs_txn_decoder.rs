@@ -5,6 +5,7 @@ use crate::aptos_debugger::AptosDebugger;
 use anyhow::Result;
 use aptos_rest_client::Client;
 use aptos_types::transaction::SignedTransaction;
+use aptos_vm::AptosVM;
 use clap::Parser;
 use regex::Regex;
 use std::io;
@@ -64,15 +65,14 @@ impl Command {
         );
 
         if self.execute {
+            AptosVM::set_concurrency_level_once(self.concurrency_level);
             println!();
             println!("===============================");
             println!("Transaction re-execution result");
             println!("===============================");
             println!(
                 "{:#?}",
-                debugger
-                    .execute_past_transactions(version, 1, false, 1, &[self.concurrency_level])
-                    .await?
+                debugger.execute_past_transactions(version, 1).await?
             );
         }
 

@@ -48,10 +48,6 @@ AggregateSignatureWithRounds:
         TYPENAME: AggregateSignature
     - rounds:
         SEQ: U64
-Any:
-  STRUCT:
-    - type_name: STR
-    - data: BYTES
 AnyPublicKey:
   ENUM:
     0:
@@ -70,10 +66,10 @@ AnyPublicKey:
           - public_key:
               TYPENAME: Secp256r1EcdsaPublicKey
     3:
-      Keyless:
+      ZkId:
         STRUCT:
           - public_key:
-              TYPENAME: KeylessPublicKey
+              TYPENAME: ZkIdPublicKey
 AnySignature:
   ENUM:
     0:
@@ -92,10 +88,10 @@ AnySignature:
           - signature:
               TYPENAME: PartialAuthenticatorAssertionResponse
     3:
-      Keyless:
+      ZkId:
         STRUCT:
           - signature:
-              TYPENAME: KeylessSignature
+              TYPENAME: ZkIdSignature
 AssertionSignature:
   ENUM:
     0:
@@ -174,24 +170,6 @@ BlockData:
         TYPENAME: QuorumCert
     - block_type:
         TYPENAME: BlockType
-BlockEndInfo:
-  ENUM:
-    0:
-      V0:
-        STRUCT:
-          - block_gas_limit_reached: BOOL
-          - block_output_limit_reached: BOOL
-          - block_effective_block_gas_units: U64
-          - block_approx_output_size: U64
-BlockEpiloguePayload:
-  ENUM:
-    0:
-      V0:
-        STRUCT:
-          - block_id:
-              TYPENAME: HashValue
-          - block_end_info:
-              TYPENAME: BlockEndInfo
 BlockInfo:
   STRUCT:
     - epoch: U64
@@ -405,10 +383,6 @@ ConsensusMsg:
       BatchResponseV2:
         NEWTYPE:
           TYPENAME: BatchResponse
-    18:
-      OrderVoteMsg:
-        NEWTYPE:
-          TYPENAME: OrderVoteMsg
 ContractEvent:
   ENUM:
     0:
@@ -446,9 +420,10 @@ DKGTranscriptMetadata:
     - epoch: U64
     - author:
         TYPENAME: AccountAddress
-DeprecatedPayload:
+DummyValidatorTransaction:
   STRUCT:
-    - dummy_value: U64
+    - valid: BOOL
+    - payload: BYTES
 Ed25519PublicKey:
   NEWTYPESTRUCT: BYTES
 Ed25519Signature:
@@ -464,16 +439,6 @@ EntryFunction:
           TYPENAME: TypeTag
     - args:
         SEQ: BYTES
-EphemeralCertificate:
-  ENUM:
-    0:
-      ZeroKnowledgeSig:
-        NEWTYPE:
-          TYPENAME: ZeroKnowledgeSig
-    1:
-      OpenIdSig:
-        NEWTYPE:
-          TYPENAME: OpenIdSig
 EphemeralPublicKey:
   ENUM:
     0:
@@ -481,11 +446,6 @@ EphemeralPublicKey:
         STRUCT:
           - public_key:
               TYPENAME: Ed25519PublicKey
-    1:
-      Secp256r1Ecdsa:
-        STRUCT:
-          - public_key:
-              TYPENAME: Secp256r1EcdsaPublicKey
 EphemeralSignature:
   ENUM:
     0:
@@ -493,11 +453,6 @@ EphemeralSignature:
         STRUCT:
           - signature:
               TYPENAME: Ed25519Signature
-    1:
-      WebAuthn:
-        STRUCT:
-          - signature:
-              TYPENAME: PartialAuthenticatorAssertionResponse
 EpochChangeProof:
   STRUCT:
     - ledger_info_with_sigs:
@@ -528,7 +483,7 @@ G2Bytes:
     TUPLEARRAY:
       CONTENT: U8
       SIZE: 64
-Groth16Proof:
+Groth16Zkp:
   STRUCT:
     - a:
         TYPENAME: G1Bytes
@@ -543,28 +498,12 @@ HashValue:
           CONTENT: U8
           SIZE: 32
 IdCommitment:
-  NEWTYPESTRUCT: BYTES
+  NEWTYPESTRUCT:
+    TUPLEARRAY:
+      CONTENT: U8
+      SIZE: 32
 Identifier:
   NEWTYPESTRUCT: STR
-JWKMoveStruct:
-  STRUCT:
-    - variant:
-        TYPENAME: Any
-KeylessPublicKey:
-  STRUCT:
-    - iss_val: STR
-    - idc:
-        TYPENAME: IdCommitment
-KeylessSignature:
-  STRUCT:
-    - cert:
-        TYPENAME: EphemeralCertificate
-    - jwt_header_json: STR
-    - exp_date_secs: U64
-    - ephemeral_pubkey:
-        TYPENAME: EphemeralPublicKey
-    - ephemeral_signature:
-        TYPENAME: EphemeralSignature
 LedgerInfo:
   STRUCT:
     - commit_info:
@@ -583,6 +522,14 @@ LedgerInfoWithV0:
         TYPENAME: LedgerInfo
     - signatures:
         TYPENAME: AggregateSignature
+Module:
+  STRUCT:
+    - code: BYTES
+ModuleBundle:
+  STRUCT:
+    - codes:
+        SEQ:
+          TYPENAME: Module
 ModuleId:
   STRUCT:
     - address:
@@ -623,28 +570,15 @@ MultisigTransactionPayload:
           TYPENAME: EntryFunction
 OpenIdSig:
   STRUCT:
-    - jwt_sig: BYTES
-    - jwt_payload_json: STR
+    - jwt_sig: STR
+    - jwt_payload: STR
     - uid_key: STR
-    - epk_blinder: BYTES
+    - epk_blinder:
+        TUPLEARRAY:
+          CONTENT: U8
+          SIZE: 31
     - pepper:
         TYPENAME: Pepper
-    - idc_aud_val:
-        OPTION: STR
-OrderVote:
-  STRUCT:
-    - author:
-        TYPENAME: AccountAddress
-    - ledger_info:
-        TYPENAME: LedgerInfo
-    - signature:
-        TYPENAME: Signature
-OrderVoteMsg:
-  STRUCT:
-    - order_vote:
-        TYPENAME: OrderVote
-    - quorum_cert:
-        TYPENAME: QuorumCert
 PartialAuthenticatorAssertionResponse:
   STRUCT:
     - signature:
@@ -662,20 +596,6 @@ Payload:
       InQuorumStore:
         NEWTYPE:
           TYPENAME: ProofWithData
-    2:
-      InQuorumStoreWithLimit:
-        NEWTYPE:
-          TYPENAME: ProofWithDataWithTxnLimit
-    3:
-      QuorumStoreInlineHybrid:
-        TUPLE:
-          - SEQ:
-              TUPLE:
-                - TYPENAME: BatchInfo
-                - SEQ:
-                    TYPENAME: SignedTransaction
-          - TYPENAME: ProofWithData
-          - OPTION: U64
 Pepper:
   NEWTYPESTRUCT:
     TUPLEARRAY:
@@ -697,12 +617,6 @@ ProofWithData:
     - proofs:
         SEQ:
           TYPENAME: ProofOfStore
-ProofWithDataWithTxnLimit:
-  STRUCT:
-    - proof_with_data:
-        TYPENAME: ProofWithData
-    - max_txns_to_execute:
-        OPTION: U64
 ProposalExt:
   ENUM:
     0:
@@ -726,13 +640,6 @@ ProposalMsg:
         TYPENAME: Block
     - sync_info:
         TYPENAME: SyncInfo
-ProviderJWKs:
-  STRUCT:
-    - issuer: BYTES
-    - version: U64
-    - jwks:
-        SEQ:
-          TYPENAME: JWKMoveStruct
 PublicKey:
   NEWTYPESTRUCT: BYTES
 QuorumCert:
@@ -741,17 +648,18 @@ QuorumCert:
         TYPENAME: VoteData
     - signed_ledger_info:
         TYPENAME: LedgerInfoWithSignatures
-QuorumCertifiedUpdate:
-  STRUCT:
-    - update:
-        TYPENAME: ProviderJWKs
-    - multi_sig:
-        TYPENAME: AggregateSignature
 RandGenMessage:
   STRUCT:
     - epoch: U64
     - data: BYTES
 RandMetadata:
+  STRUCT:
+    - metadata_to_sign:
+        TYPENAME: RandMetadataToSign
+    - block_id:
+        TYPENAME: HashValue
+    - timestamp: U64
+RandMetadataToSign:
   STRUCT:
     - epoch: U64
     - round: U64
@@ -808,6 +716,12 @@ SignedBatchInfoMsg:
     - signed_infos:
         SEQ:
           TYPENAME: SignedBatchInfo
+SignedGroth16Zkp:
+  STRUCT:
+    - proof:
+        TYPENAME: Groth16Zkp
+    - non_malleability_signature:
+        TYPENAME: EphemeralSignature
 SignedTransaction:
   STRUCT:
     - raw_txn:
@@ -865,9 +779,9 @@ SyncInfo:
         TYPENAME: QuorumCert
     - highest_ordered_cert:
         OPTION:
-          TYPENAME: WrappedLedgerInfo
+          TYPENAME: QuorumCert
     - highest_commit_cert:
-        TYPENAME: WrappedLedgerInfo
+        TYPENAME: QuorumCert
     - highest_2chain_timeout_cert:
         OPTION:
           TYPENAME: TwoChainTimeoutCertificate
@@ -900,10 +814,6 @@ Transaction:
       BlockMetadataExt:
         NEWTYPE:
           TYPENAME: BlockMetadataExt
-    6:
-      BlockEpilogue:
-        NEWTYPE:
-          TYPENAME: BlockEpiloguePayload
 TransactionArgument:
   ENUM:
     0:
@@ -993,7 +903,7 @@ TransactionPayload:
     1:
       ModuleBundle:
         NEWTYPE:
-          TYPENAME: DeprecatedPayload
+          TYPENAME: ModuleBundle
     2:
       EntryFunction:
         NEWTYPE:
@@ -1052,13 +962,17 @@ ValidatorConsensusInfo:
 ValidatorTransaction:
   ENUM:
     0:
+      DummyTopic1:
+        NEWTYPE:
+          TYPENAME: DummyValidatorTransaction
+    1:
       DKGResult:
         NEWTYPE:
           TYPENAME: DKGTranscript
-    1:
-      ObservedJWKUpdate:
+    2:
+      DummyTopic2:
         NEWTYPE:
-          TYPENAME: QuorumCertifiedUpdate
+          TYPENAME: DummyValidatorTransaction
 ValidatorVerifier:
   STRUCT:
     - validator_infos:
@@ -1091,12 +1005,6 @@ VoteMsg:
         TYPENAME: Vote
     - sync_info:
         TYPENAME: SyncInfo
-WrappedLedgerInfo:
-  STRUCT:
-    - vote_data:
-        TYPENAME: VoteData
-    - signed_ledger_info:
-        TYPENAME: LedgerInfoWithSignatures
 WriteOp:
   ENUM:
     0:
@@ -1154,21 +1062,28 @@ WriteSetPayload:
 WriteSetV0:
   NEWTYPESTRUCT:
     TYPENAME: WriteSetMut
-ZKP:
+ZkIdPublicKey:
+  STRUCT:
+    - iss: STR
+    - idc:
+        TYPENAME: IdCommitment
+ZkIdSignature:
+  STRUCT:
+    - sig:
+        TYPENAME: ZkpOrOpenIdSig
+    - jwt_header: STR
+    - exp_timestamp_secs: U64
+    - ephemeral_pubkey:
+        TYPENAME: EphemeralPublicKey
+    - ephemeral_signature:
+        TYPENAME: EphemeralSignature
+ZkpOrOpenIdSig:
   ENUM:
     0:
-      Groth16:
+      Groth16Zkp:
         NEWTYPE:
-          TYPENAME: Groth16Proof
-ZeroKnowledgeSig:
-  STRUCT:
-    - proof:
-        TYPENAME: ZKP
-    - exp_horizon_secs: U64
-    - extra_field:
-        OPTION: STR
-    - override_aud_val:
-        OPTION: STR
-    - training_wheels_signature:
-        OPTION:
-          TYPENAME: EphemeralSignature
+          TYPENAME: SignedGroth16Zkp
+    1:
+      OpenIdSig:
+        NEWTYPE:
+          TYPENAME: OpenIdSig

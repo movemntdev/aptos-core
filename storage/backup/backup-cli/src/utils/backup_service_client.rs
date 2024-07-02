@@ -2,14 +2,10 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{
-    metrics::backup::{BACKUP_TIMER, THROUGHPUT_COUNTER},
-    utils::error_notes::ErrorNotes,
-};
+use crate::utils::error_notes::ErrorNotes;
 use anyhow::Result;
 use aptos_crypto::HashValue;
 use aptos_db::backup::backup_handler::DbState;
-use aptos_metrics_core::{IntCounterHelper, TimerHelper};
 use aptos_types::transaction::Version;
 use clap::Parser;
 use futures::TryStreamExt;
@@ -53,14 +49,8 @@ impl BackupServiceClient {
         }
     }
 
-    async fn get(&self, endpoint: &'static str, params: &str) -> Result<impl AsyncRead> {
-        let _timer = BACKUP_TIMER.timer_with(&[&format!("backup_service_client_get_{endpoint}")]);
-
-        let url = if params.is_empty() {
-            format!("{}/{}", self.address, endpoint)
-        } else {
-            format!("{}/{}/{}", self.address, endpoint, params)
-        };
+    async fn get(&self, path: &str) -> Result<impl AsyncRead> {
+        let url = format!("{}/{}", self.address, path);
         let timeout = Duration::from_secs(Self::TIMEOUT_SECS);
         let reader = tokio::time::timeout(timeout, self.client.get(&url).send())
             .await?
@@ -68,10 +58,6 @@ impl BackupServiceClient {
             .error_for_status()
             .err_notes(&url)?
             .bytes_stream()
-            .map_ok(|bytes| {
-                THROUGHPUT_COUNTER.inc_with_by(&[endpoint], bytes.len() as u64);
-                bytes
-            })
             .map_err(|e| futures::io::Error::new(futures::io::ErrorKind::Other, e))
             .into_async_read()
             .compat();
@@ -86,10 +72,7 @@ impl BackupServiceClient {
 
     pub async fn get_db_state(&self) -> Result<Option<DbState>> {
         let mut buf = Vec::new();
-        self.get("db_state", "")
-            .await?
-            .read_to_end(&mut buf)
-            .await?;
+        self.get("db_state").await?.read_to_end(&mut buf).await?;
         Ok(bcs::from_bytes(&buf)?)
     }
 
@@ -98,35 +81,17 @@ impl BackupServiceClient {
         key: HashValue,
         version: Version,
     ) -> Result<impl AsyncRead> {
-        self.get("state_range_proof", &format!("{}/{:x}", version, key))
+        self.get(&format!("state_range_proof/{}/{:x}", version, key))
             .await
     }
 
-    pub async fn get_state_item_count(&self, version: Version) -> Result<usize> {
-        let mut buf = Vec::new();
-        self.get("state_item_count", &format!("{}", version))
-            .await?
-            .read_to_end(&mut buf)
-            .await?;
-        Ok(bcs::from_bytes::<u64>(&buf)? as usize)
-    }
-
-    pub async fn get_state_snapshot_chunk(
-        &self,
-        version: Version,
-        start_idx: usize,
-        limit: usize,
-    ) -> Result<impl AsyncRead> {
-        self.get(
-            "state_snapshot_chunk",
-            &format!("{}/{}/{}", version, start_idx, limit),
-        )
-        .await
+    pub async fn get_state_snapshot(&self, version: Version) -> Result<impl AsyncRead> {
+        self.get(&format!("state_snapshot/{}", version)).await
     }
 
     pub async fn get_state_root_proof(&self, version: Version) -> Result<Vec<u8>> {
         let mut buf = Vec::new();
-        self.get("state_root_proof", &format!("{}", version))
+        self.get(&format!("state_root_proof/{}", version))
             .await?
             .read_to_end(&mut buf)
             .await?;
@@ -138,10 +103,10 @@ impl BackupServiceClient {
         start_epoch: u64,
         end_epoch: u64,
     ) -> Result<impl AsyncRead> {
-        self.get(
-            "epoch_ending_ledger_infos",
-            &format!("{}/{}", start_epoch, end_epoch),
-        )
+        self.get(&format!(
+            "epoch_ending_ledger_infos/{}/{}",
+            start_epoch, end_epoch
+        ))
         .await
     }
 
@@ -150,10 +115,10 @@ impl BackupServiceClient {
         start_version: Version,
         num_transactions: usize,
     ) -> Result<impl AsyncRead> {
-        self.get(
-            "transactions",
-            &format!("{}/{}", start_version, num_transactions,),
-        )
+        self.get(&format!(
+            "transactions/{}/{}",
+            start_version, num_transactions
+        ))
         .await
     }
 
@@ -162,10 +127,10 @@ impl BackupServiceClient {
         first_version: Version,
         last_version: Version,
     ) -> Result<impl AsyncRead> {
-        self.get(
-            "transaction_range_proof",
-            &format!("{}/{}", first_version, last_version,),
-        )
+        self.get(&format!(
+            "transaction_range_proof/{}/{}",
+            first_version, last_version,
+        ))
         .await
     }
 }

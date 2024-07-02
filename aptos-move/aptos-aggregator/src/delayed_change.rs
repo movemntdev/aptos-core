@@ -251,9 +251,8 @@ impl<I: Copy + Clone> DelayedApplyEntry<I> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::bounded_math::SignedU128;
+    use crate::{bounded_math::SignedU128, types::DelayedFieldID};
     use claims::{assert_err, assert_ok};
-    use move_vm_types::delayed_values::delayed_field_id::DelayedFieldID;
     use DelayedApplyChange::*;
     use DelayedChange::*;
     use DelayedFieldValue::*;

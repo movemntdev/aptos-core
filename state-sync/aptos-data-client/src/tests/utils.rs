@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    client::AptosDataClient, error::Error, interface::AptosDataClientInterface,
-    priority::PeerPriority, tests::mock::MockNetwork,
+    client::AptosDataClient, error::Error, priority::PeerPriority, tests::mock::MockNetwork,
 };
 use aptos_config::{
     config::{AptosDataClientConfig, BaseConfig, RoleType},
@@ -39,7 +38,6 @@ use std::{
     collections::{BinaryHeap, HashMap, HashSet},
     time::Duration,
 };
-use tokio::time::timeout;
 
 // Useful test constants
 pub const NUM_SELECTION_ITERATIONS: u64 = 15_000;
@@ -103,7 +101,6 @@ pub async fn advance_polling_timer(
 ) {
     let poll_loop_interval_ms = data_client_config.data_poller_config.poll_loop_interval_ms;
     for _ in 0..10 {
-        tokio::task::yield_now().await;
         mock_time
             .advance_async(Duration::from_millis(poll_loop_interval_ms))
             .await;
@@ -263,11 +260,7 @@ pub async fn get_network_request(
     mock_network: &mut MockNetwork,
     network_id: NetworkId,
 ) -> NetworkRequest {
-    timeout(Duration::from_secs(10), async {
-        mock_network.next_request(network_id).await.unwrap()
-    })
-    .await
-    .expect("Failed to get network request! Timed out!")
+    mock_network.next_request(network_id).await.unwrap()
 }
 
 /// Returns the peer distance from validators for the given peer
@@ -298,7 +291,7 @@ pub fn get_peer_monitoring_metadata(
     let peer_metadata = peers_and_metadata.get_metadata_for_peer(peer).unwrap();
 
     // Return the peer monitoring metadata
-    peer_metadata.get_peer_monitoring_metadata().clone()
+    peer_metadata.get_peer_monitoring_metadata()
 }
 
 /// Returns the peer priority for polling based on if `poll_priority_peers` is true
@@ -572,30 +565,4 @@ pub fn verify_selected_peers_from_set(
     // Verify the selected peers
     assert_eq!(selected_peers.len(), num_expected_peers);
     assert!(peers.is_superset(&selected_peers));
-}
-
-/// Waits until the transaction range is advertised by the peers
-pub async fn wait_for_transaction_advertisement(
-    client: &AptosDataClient,
-    mock_time: &mut MockTimeService,
-    data_client_config: &AptosDataClientConfig,
-    transaction_range: CompleteDataRange<u64>,
-) {
-    timeout(Duration::from_secs(10), async {
-        loop {
-            // Check if the transaction range is serviceable
-            let advertised_data = client.get_global_data_summary().advertised_data;
-            if advertised_data.transactions.contains(&transaction_range) {
-                return; // The request range is serviceable
-            }
-
-            // Advance time so the poller sends a data summary request and gets the response
-            advance_polling_timer(mock_time, data_client_config).await;
-
-            // Sleep for a while before retrying
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
-    })
-    .await
-    .expect("The transaction range is not advertised! Timed out!");
 }

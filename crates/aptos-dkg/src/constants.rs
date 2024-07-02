@@ -1,5 +1,4 @@
 // Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
 
 use num_bigint::BigUint;
 use once_cell::sync::Lazy;

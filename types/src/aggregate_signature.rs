@@ -97,8 +97,4 @@ impl PartialSignatures {
     pub fn signatures(&self) -> &BTreeMap<AccountAddress, bls12381::Signature> {
         &self.signatures
     }
-
-    pub fn contains_voter(&self, voter: &AccountAddress) -> bool {
-        self.signatures.contains_key(voter)
-    }
 }

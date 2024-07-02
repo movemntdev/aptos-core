@@ -146,8 +146,8 @@ pub struct SparseMerkleProof {
     ///       empty.
     leaf: Option<SparseMerkleLeafNode>,
 
-    /// All siblings in this proof, including the default ones. Siblings are ordered from the root
-    /// level to the bottom level.
+    /// All siblings in this proof, including the default ones. Siblings are ordered from the bottom
+    /// level to the root level.
     siblings: Vec<HashValue>,
 }
 
@@ -183,33 +183,15 @@ impl NodeInProof {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct SparseMerkleProofExt {
     leaf: Option<SparseMerkleLeafNode>,
-    /// All siblings in this proof, including the default ones. Siblings are ordered from the root
-    /// level to the bottom level.
+    /// All siblings in this proof, including the default ones. Siblings are ordered from the bottom
+    /// level to the root level.
     siblings: Vec<NodeInProof>,
-    /// Depth of the subtree root. When this is non-zero, it's a partial proof
-    root_depth: usize,
 }
 
 impl SparseMerkleProofExt {
     /// Constructs a new `SparseMerkleProofExt` using leaf and a list of sibling nodes.
     pub fn new(leaf: Option<SparseMerkleLeafNode>, siblings: Vec<NodeInProof>) -> Self {
-        Self {
-            leaf,
-            siblings,
-            root_depth: 0,
-        }
-    }
-
-    pub fn new_partial(
-        leaf: Option<SparseMerkleLeafNode>,
-        siblings: Vec<NodeInProof>,
-        root_depth: usize,
-    ) -> Self {
-        Self {
-            leaf,
-            siblings,
-            root_depth,
-        }
+        Self { leaf, siblings }
     }
 
     /// Returns the leaf node in this proof.
@@ -217,26 +199,9 @@ impl SparseMerkleProofExt {
         self.leaf
     }
 
-    pub fn sibling_at_depth(&self, depth: usize) -> Result<&NodeInProof> {
-        ensure!(
-            depth > self.root_depth() && depth <= self.bottom_depth(),
-            "Proof between depth {} and {} does not cover depth {}",
-            self.root_depth(),
-            self.bottom_depth(),
-            depth,
-        );
-        Ok(&self.siblings[depth - self.root_depth() - 1])
-    }
-
-    /// Returns the depth of the leaf (or the None-leaf that proves there's no such leaf).
-    pub fn bottom_depth(&self) -> usize {
-        self.root_depth + self.siblings.len()
-    }
-
-    /// Assuming a possible partial proof, returns the depth of the root of the subtree this
-    /// proof proves, i.e. this holds: `self.root_depth() + self.siblings.len() == self.bottom_depth()`
-    pub fn root_depth(&self) -> usize {
-        self.root_depth
+    /// Returns the list of siblings in this proof.
+    pub fn siblings(&self) -> &[NodeInProof] {
+        &self.siblings
     }
 
     pub fn verify<V: CryptoHash>(
@@ -245,11 +210,7 @@ impl SparseMerkleProofExt {
         element_key: HashValue,
         element_value: Option<&V>,
     ) -> Result<()> {
-        self.verify_by_hash(
-            expected_root_hash,
-            element_key,
-            element_value.map(|v| v.hash()),
-        )
+        SparseMerkleProof::from(self.clone()).verify(expected_root_hash, element_key, element_value)
     }
 
     pub fn verify_by_hash(
@@ -258,11 +219,10 @@ impl SparseMerkleProofExt {
         element_key: HashValue,
         element_hash: Option<HashValue>,
     ) -> Result<()> {
-        SparseMerkleProof::from(self.clone()).verify_by_hash_partial(
+        SparseMerkleProof::from(self.clone()).verify_by_hash(
             expected_root_hash,
             element_key,
             element_hash,
-            self.root_depth(),
         )
     }
 }
@@ -319,21 +279,10 @@ impl SparseMerkleProof {
         element_key: HashValue,
         element_hash: Option<HashValue>,
     ) -> Result<()> {
-        self.verify_by_hash_partial(expected_root_hash, element_key, element_hash, 0)
-    }
-
-    pub fn verify_by_hash_partial(
-        &self,
-        expected_root_hash: HashValue,
-        element_key: HashValue,
-        element_hash: Option<HashValue>,
-        root_depth: usize,
-    ) -> Result<()> {
         ensure!(
-            self.siblings.len() + root_depth <= HashValue::LENGTH_IN_BITS,
-            "Sparse Merkle Tree proof has more than {} ({} + {}) siblings.",
+            self.siblings.len() <= HashValue::LENGTH_IN_BITS,
+            "Sparse Merkle Tree proof has more than {} ({}) siblings.",
             HashValue::LENGTH_IN_BITS,
-            root_depth,
             self.siblings.len(),
         );
 
@@ -379,8 +328,7 @@ impl SparseMerkleProof {
                     leaf.key,
                 );
                 ensure!(
-                    element_key.common_prefix_bits_len(leaf.key)
-                        >= root_depth + self.siblings.len(),
+                    element_key.common_prefix_bits_len(leaf.key) >= self.siblings.len(),
                     "Key would not have ended up in the subtree where the provided key in proof \
                      is the only existing key, if it existed. So this is not a valid \
                      non-inclusion proof. Key: {:x}. Key in proof: {:x}.",
@@ -401,12 +349,11 @@ impl SparseMerkleProof {
         let actual_root_hash = self
             .siblings
             .iter()
-            .rev()
             .zip(
                 element_key
                     .iter_bits()
                     .rev()
-                    .skip(HashValue::LENGTH_IN_BITS - self.siblings.len() - root_depth),
+                    .skip(HashValue::LENGTH_IN_BITS - self.siblings.len()),
             )
             .fold(current_hash, |hash, (sibling_hash, bit)| {
                 if bit {

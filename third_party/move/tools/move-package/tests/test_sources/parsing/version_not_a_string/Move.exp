@@ -1,6 +1,1 @@
-Unable to parse Move package manifest: TOML parse error at line 3, column 14
-  |
-3 | version = 0.1.2
-  |              ^
-expected newline, `#`
-
+Unable to parse Move package manifest: expected newline, found a period at line 3 column 14

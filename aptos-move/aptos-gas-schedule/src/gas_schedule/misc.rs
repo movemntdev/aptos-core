@@ -10,10 +10,7 @@ use crate::{
 };
 use aptos_gas_algebra::{AbstractValueSize, AbstractValueSizePerArg};
 use move_core_types::{account_address::AccountAddress, gas_algebra::NumArgs, u256::U256};
-use move_vm_types::{
-    delayed_values::delayed_field_id::DelayedFieldID,
-    views::{ValueView, ValueVisitor},
-};
+use move_vm_types::views::{ValueView, ValueVisitor};
 use std::collections::BTreeMap;
 
 crate::gas_schedule::macros::define_gas_parameters!(
@@ -93,7 +90,6 @@ where
     V: ValueVisitor,
 {
     deref_visitor_delegate_simple!(
-        [visit_delayed, DelayedFieldID],
         [visit_u8, u8],
         [visit_u16, u16],
         [visit_u32, u32],
@@ -148,12 +144,6 @@ impl<'a> AbstractValueSizeVisitor<'a> {
 }
 
 impl<'a> ValueVisitor for AbstractValueSizeVisitor<'a> {
-    #[inline]
-    fn visit_delayed(&mut self, _depth: usize, _id: DelayedFieldID) {
-        // TODO[agg_v2](cleanup): add a new abstract value size parameter?
-        self.size += self.params.u64;
-    }
-
     #[inline]
     fn visit_u8(&mut self, _depth: usize, _val: u8) {
         self.size += self.params.u8;
@@ -315,12 +305,6 @@ impl AbstractValueSizeGasParameters {
 
         impl<'a> ValueVisitor for Visitor<'a> {
             #[inline]
-            fn visit_delayed(&mut self, _depth: usize, _val: DelayedFieldID) {
-                // TODO[agg_v2](cleanup): add a new abstract value size parameter?
-                self.res = Some(self.params.u64);
-            }
-
-            #[inline]
             fn visit_u8(&mut self, _depth: usize, _val: u8) {
                 self.res = Some(self.params.u8);
             }
@@ -457,12 +441,6 @@ impl AbstractValueSizeGasParameters {
         }
 
         impl<'a> ValueVisitor for Visitor<'a> {
-            #[inline]
-            fn visit_delayed(&mut self, _depth: usize, _val: DelayedFieldID) {
-                // TODO[agg_v2](cleanup): add a new abstract value size parameter?
-                self.res = Some(self.params.per_u64_packed * NumArgs::from(1));
-            }
-
             #[inline]
             fn visit_u8(&mut self, _depth: usize, _val: u8) {
                 self.res = Some(self.params.per_u8_packed * NumArgs::from(1));

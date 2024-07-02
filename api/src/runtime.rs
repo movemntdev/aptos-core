@@ -13,7 +13,7 @@ use aptos_config::config::{ApiConfig, NodeConfig};
 use aptos_logger::info;
 use aptos_mempool::MempoolClientSender;
 use aptos_storage_interface::DbReader;
-use aptos_types::{chain_id::ChainId, indexer::indexer_db_reader::IndexerReader};
+use aptos_types::chain_id::ChainId;
 use poem::{
     handler,
     http::Method,
@@ -34,12 +34,11 @@ pub fn bootstrap(
     chain_id: ChainId,
     db: Arc<dyn DbReader>,
     mp_sender: MempoolClientSender,
-    indexer_reader: Option<Arc<dyn IndexerReader>>,
 ) -> anyhow::Result<Runtime> {
     let max_runtime_workers = get_max_runtime_workers(&config.api);
     let runtime = aptos_runtimes::spawn_named_runtime("api".into(), Some(max_runtime_workers));
 
-    let context = Context::new(chain_id, db, mp_sender, config.clone(), indexer_reader);
+    let context = Context::new(chain_id, db, mp_sender, config.clone());
 
     attach_poem_to_runtime(runtime.handle(), context.clone(), config, false)
         .context("Failed to attach poem to runtime")?;
@@ -216,13 +215,13 @@ pub fn attach_poem_to_runtime(
 
         // Build routes for the API
         let route = Route::new()
-            .at("/", poem::get(root_handler))
+            .at("/", root_handler)
             .nest(
                 "/v1",
                 Route::new()
                     .nest("/", api_service)
-                    .at("/spec.json", poem::get(spec_json))
-                    .at("/spec.yaml", poem::get(spec_yaml))
+                    .at("/spec.json", spec_json)
+                    .at("/spec.yaml", spec_yaml)
                     // TODO: We add this manually outside of the OpenAPI spec for now.
                     // https://github.com/poem-web/poem/issues/364
                     .at(
@@ -340,7 +339,6 @@ mod tests {
             ChainId::test(),
             context.db.clone(),
             context.mempool.ac_client.clone(),
-            None,
         );
         assert!(ret.is_ok());
 

@@ -6,7 +6,7 @@ use anyhow::Context;
 use codespan_reporting::{diagnostic::Severity, term::termcolor::Buffer};
 use evm::backend::MemoryVicinity;
 use evm_exec_utils::{compile, exec::Executor, tracing};
-use move_command_line_common::testing::get_compiler_exp_extension;
+use move_command_line_common::testing::EXP_EXT;
 use move_compiler::{
     attr_derivation,
     shared::{NumericalAddress, PackagePaths},
@@ -59,7 +59,6 @@ fn test_runner(path: &Path) -> datatest_stable::Result<()> {
             paths: sources,
             named_address_map: named_address_map.clone(),
         }],
-        vec![],
         vec![PackagePaths {
             name: None,
             paths: deps,
@@ -75,10 +74,10 @@ fn test_runner(path: &Path) -> datatest_stable::Result<()> {
             ..Options::default()
         };
         let ext = if exp.is_empty() {
-            get_compiler_exp_extension().to_string()
+            EXP_EXT.to_string()
         } else {
             options.experiments.push(exp.clone());
-            format!("{}.{}", get_compiler_exp_extension(), exp)
+            format!("{}.{}", EXP_EXT, exp)
         };
         let mut contracts = Generator::run(&options, &env);
         let mut out = "".to_string();

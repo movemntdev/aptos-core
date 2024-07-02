@@ -3,7 +3,7 @@
 
 //! Rosetta Account API
 //!
-//! See: [Account API Spec](https://docs.cloud.coinbase.com/rosetta/docs/models#accountbalanceresponse)
+//! See: [Account API Spec](https://www.rosetta-api.org/docs/AccountApi.html)
 //!
 
 use crate::{
@@ -158,7 +158,7 @@ async fn get_balances(
                     // Only show coins on the base account
                     if account.is_base_account() {
                         let coin_store: CoinStoreResource = bcs::from_bytes(&bytes)?;
-                        if let Some(coin_type) = struct_tag.type_args.first() {
+                        if let Some(coin_type) = struct_tag.type_params.first() {
                             // Only display supported coins
                             if coin_type == &native_coin_tag() {
                                 balances.push(Amount {

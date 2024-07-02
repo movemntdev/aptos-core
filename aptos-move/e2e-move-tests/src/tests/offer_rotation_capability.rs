@@ -59,7 +59,7 @@ pub fn offer_rotation_capability_v2(
         aptos_stdlib::account_offer_rotation_capability(
             rotation_proof_signed.to_bytes().to_vec(),
             0,
-            offerer_account.pubkey.to_bytes(),
+            offerer_account.pubkey.to_bytes().to_vec(),
             *delegate_account.address(),
         )
     ));

@@ -42,7 +42,6 @@ pub enum Tok {
     LessLess,
     Equal,
     EqualEqual,
-    EqualGreater,
     EqualEqualGreater,
     LessEqualEqualGreater,
     Greater,
@@ -118,7 +117,6 @@ impl fmt::Display for Tok {
             LessLess => "<<",
             Equal => "=",
             EqualEqual => "==",
-            EqualGreater => "=>",
             EqualEqualGreater => "==>",
             LessEqualEqualGreater => "<==>",
             Greater => ">",
@@ -358,7 +356,7 @@ impl<'input> Lexer<'input> {
             let offset = self.text.len() - text.len();
             let (found_token, length) = find_token(self.file_hash, text, offset)?;
             token = found_token;
-            current_offset = offset + length;
+            current_offset += length;
         }
         Ok(token)
     }
@@ -497,8 +495,6 @@ fn find_token(
         '=' => {
             if text.starts_with("==>") {
                 (Tok::EqualEqualGreater, 3)
-            } else if text.starts_with("=>") {
-                (Tok::EqualGreater, 2)
             } else if text.starts_with("==") {
                 (Tok::EqualEqual, 2)
             } else {

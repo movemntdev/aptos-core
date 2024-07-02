@@ -20,9 +20,7 @@ module TestAccount::TableTestData {
     }
 
     public entry fun make_test_tables(account: signer) {
-        let addr = std::signer::address_of(&account);
-        let id = guid::create_id(addr, 0);
-
+        let id = guid::id(&guid::create(&account));
         let str = string::utf8(b"abc");
         let vec_u8 = vector::empty<u8>();
         vector::push_back(&mut vec_u8, 1);

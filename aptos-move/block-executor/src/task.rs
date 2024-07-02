@@ -8,14 +8,11 @@ use aptos_aggregator::{
 };
 use aptos_mvhashmap::types::TxnIndex;
 use aptos_types::{
-    delayed_fields::PanicError,
-    fee_statement::FeeStatement,
-    state_store::{state_value::StateValueMetadata, TStateView},
-    transaction::BlockExecutableTransaction as Transaction,
+    fee_statement::FeeStatement, transaction::BlockExecutableTransaction as Transaction,
     write_set::WriteOp,
 };
 use aptos_vm_types::resolver::{TExecutorView, TResourceGroupView};
-use move_core_types::{value::MoveTypeLayout, vm_status::StatusCode};
+use move_core_types::value::MoveTypeLayout;
 use std::{
     collections::{BTreeMap, HashSet},
     fmt::Debug,
@@ -59,15 +56,12 @@ pub trait ExecutorTask: Sync {
     /// Type of error when the executor failed to process a transaction and needs to abort.
     type Error: Debug + Clone + Send + Sync + Eq + 'static;
 
-    /// Type to initialize the single thread transaction executor. Clone and Sync are required because
+    /// Type to initialize the single thread transaction executor. Copy and Sync are required because
     /// we will create an instance of executor on each individual thread.
-    type Environment: Sync + Clone;
+    type Argument: Sync + Copy;
 
     /// Create an instance of the transaction executor.
-    fn init(
-        env: Self::Environment,
-        state_view: &impl TStateView<Key = <Self::Txn as Transaction>::Key>,
-    ) -> Self;
+    fn init(args: Self::Argument) -> Self;
 
     /// Execute a single transaction given the view of the current state.
     fn execute_transaction(
@@ -101,8 +95,10 @@ pub trait TransactionOutput: Send + Sync + Debug {
         &self,
     ) -> Vec<(
         <Self::Txn as Transaction>::Key,
-        Arc<<Self::Txn as Transaction>::Value>,
-        Option<Arc<MoveTypeLayout>>,
+        (
+            <Self::Txn as Transaction>::Value,
+            Option<Arc<MoveTypeLayout>>,
+        ),
     )>;
 
     fn module_write_set(
@@ -114,7 +110,7 @@ pub trait TransactionOutput: Send + Sync + Debug {
     ) -> BTreeMap<<Self::Txn as Transaction>::Key, <Self::Txn as Transaction>::Value>;
 
     /// Get the aggregator V1 deltas of a transaction from its output.
-    fn aggregator_v1_delta_set(&self) -> Vec<(<Self::Txn as Transaction>::Key, DeltaOp)>;
+    fn aggregator_v1_delta_set(&self) -> BTreeMap<<Self::Txn as Transaction>::Key, DeltaOp>;
 
     /// Get the delayed field changes of a transaction from its output.
     fn delayed_field_change_set(
@@ -126,15 +122,14 @@ pub trait TransactionOutput: Send + Sync + Debug {
 
     fn reads_needing_delayed_field_exchange(
         &self,
-    ) -> Vec<(
-        <Self::Txn as Transaction>::Key,
-        StateValueMetadata,
-        Arc<MoveTypeLayout>,
-    )>;
+    ) -> Vec<(<Self::Txn as Transaction>::Key, Arc<MoveTypeLayout>)>;
 
     fn group_reads_needing_delayed_field_exchange(
         &self,
-    ) -> Vec<(<Self::Txn as Transaction>::Key, StateValueMetadata)>;
+    ) -> Vec<(
+        <Self::Txn as Transaction>::Key,
+        <Self::Txn as Transaction>::Value,
+    )>;
 
     /// Get the events of a transaction from its output.
     fn get_events(&self) -> Vec<(<Self::Txn as Transaction>::Event, Option<MoveTypeLayout>)>;
@@ -168,9 +163,6 @@ pub trait TransactionOutput: Send + Sync + Debug {
     /// Execution output for transactions that comes after SkipRest signal.
     fn skip_output() -> Self;
 
-    /// Execution output for transactions that should be discarded.
-    fn discard_output(discard_code: StatusCode) -> Self;
-
     fn materialize_agg_v1(
         &self,
         view: &impl TAggregatorV1View<Identifier = <Self::Txn as Transaction>::Key>,
@@ -187,7 +179,7 @@ pub trait TransactionOutput: Send + Sync + Debug {
             <Self::Txn as Transaction>::Value,
         )>,
         patched_events: Vec<<Self::Txn as Transaction>::Event>,
-    ) -> Result<(), PanicError>;
+    );
 
     fn set_txn_output_for_non_dynamic_change_set(&self);
 

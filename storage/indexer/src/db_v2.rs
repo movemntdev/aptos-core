@@ -5,37 +5,40 @@
 /// At the end of the migration to migrate table info mapping
 /// from storage critical path to indexer, the other file will be removed
 /// and this file will be moved to /ecosystem/indexer-grpc/indexer-grpc-table-info.
-use aptos_db_indexer_schemas::{
+use crate::{
     metadata::{MetadataKey, MetadataValue},
-    schema::{indexer_metadata::IndexerMetadataSchema, table_info::TableInfoSchema},
+    schema::{
+        column_families, indexer_metadata::IndexerMetadataSchema, table_info::TableInfoSchema,
+    },
 };
+use aptos_config::config::RocksdbConfig;
 use aptos_logger::info;
-use aptos_resource_viewer::{AnnotatedMoveValue, AptosValueAnnotator};
+use aptos_rocksdb_options::gen_rocksdb_options;
 use aptos_schemadb::{SchemaBatch, DB};
 use aptos_storage_interface::{
-    db_other_bail as bail, state_view::DbStateViewAtVersion, AptosDbError, DbReader, Result,
+    db_other_bail as bail, state_view::DbStateView, AptosDbError, DbReader, Result,
 };
 use aptos_types::{
     access_path::Path,
     account_address::AccountAddress,
     state_store::{
-        state_key::{inner::StateKeyInner, StateKey},
+        state_key::{StateKey, StateKeyInner},
         table::{TableHandle, TableInfo},
-        StateView,
     },
     transaction::Version,
     write_set::{WriteOp, WriteSet},
 };
+use aptos_vm::data_cache::AsMoveResolver;
 use bytes::Bytes;
 use dashmap::{DashMap, DashSet};
 use move_core_types::{
     ident_str,
     language_storage::{StructTag, TypeTag},
+    resolver::ModuleResolver,
 };
+use move_resource_viewer::{AnnotatedMoveValue, MoveValueAnnotator};
 use std::{
     collections::{BTreeMap, HashMap},
-    fs,
-    path::PathBuf,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -43,11 +46,12 @@ use std::{
     time::Duration,
 };
 
+pub const INDEX_ASYNC_V2_DB_NAME: &str = "index_indexer_async_v2_db";
 const TABLE_INFO_RETRY_TIME_MILLIS: u64 = 10;
 
 #[derive(Debug)]
 pub struct IndexerAsyncV2 {
-    pub db: DB,
+    db: DB,
     // Next version to be processed
     next_version: AtomicU64,
     // It is used in the context of processing write ops and extracting table information.
@@ -61,7 +65,21 @@ pub struct IndexerAsyncV2 {
 }
 
 impl IndexerAsyncV2 {
-    pub fn new(db: DB) -> Result<Self> {
+    /// Opens up this rocksdb to get ready for read and write when bootstraping the aptosdb
+    pub fn open(
+        db_root_path: impl AsRef<std::path::Path>,
+        rocksdb_config: RocksdbConfig,
+        pending_on: DashMap<TableHandle, DashSet<Bytes>>,
+    ) -> Result<Self> {
+        let db_path = db_root_path.as_ref().join(INDEX_ASYNC_V2_DB_NAME);
+
+        let db = DB::open(
+            db_path,
+            "index_asnync_v2_db",
+            column_families(),
+            &gen_rocksdb_options(&rocksdb_config, false),
+        )?;
+
         let next_version = db
             .get::<IndexerMetadataSchema>(&MetadataKey::LatestVersion)?
             .map_or(0, |v| v.expect_version());
@@ -69,7 +87,7 @@ impl IndexerAsyncV2 {
         Ok(Self {
             db,
             next_version: AtomicU64::new(next_version),
-            pending_on: DashMap::new(),
+            pending_on,
         })
     }
 
@@ -81,8 +99,12 @@ impl IndexerAsyncV2 {
         end_early_if_pending_on_empty: bool,
     ) -> Result<()> {
         let last_version = first_version + write_sets.len() as Version;
-        let state_view = db_reader.state_view_at_version(Some(last_version))?;
-        let annotator = AptosValueAnnotator::new(&state_view);
+        let state_view = DbStateView {
+            db: db_reader,
+            version: Some(last_version),
+        };
+        let resolver = state_view.as_move_resolver();
+        let annotator = MoveValueAnnotator::new(&resolver);
         self.index_with_annotator(
             &annotator,
             first_version,
@@ -93,9 +115,9 @@ impl IndexerAsyncV2 {
 
     /// Index write sets with the move annotator to parse obscure table handle and key value types
     /// After the current batch's parsed, write the mapping to the rocksdb, also update the next version to be processed
-    pub fn index_with_annotator<R: StateView>(
+    pub fn index_with_annotator<R: ModuleResolver>(
         &self,
-        annotator: &AptosValueAnnotator<R>,
+        annotator: &MoveValueAnnotator<R>,
         first_version: Version,
         write_sets: &[&WriteSet],
         end_early_if_pending_on_empty: bool,
@@ -129,10 +151,12 @@ impl IndexerAsyncV2 {
     }
 
     pub fn update_next_version(&self, end_version: u64) -> Result<()> {
-        self.db.put::<IndexerMetadataSchema>(
+        let batch = SchemaBatch::new();
+        batch.put::<IndexerMetadataSchema>(
             &MetadataKey::LatestVersion,
             &MetadataValue::Version(end_version - 1),
         )?;
+        self.db.write_schemas(batch)?;
         self.next_version.store(end_version, Ordering::Relaxed);
         Ok(())
     }
@@ -177,10 +201,7 @@ impl IndexerAsyncV2 {
     }
 
     pub fn next_version(&self) -> Version {
-        self.db
-            .get::<IndexerMetadataSchema>(&MetadataKey::LatestVersion)
-            .unwrap()
-            .map_or(0, |v| v.expect_version())
+        self.next_version.load(Ordering::Relaxed)
     }
 
     pub fn get_table_info(&self, handle: TableHandle) -> Result<Option<TableInfo>> {
@@ -206,24 +227,19 @@ impl IndexerAsyncV2 {
     pub fn is_indexer_async_v2_pending_on_empty(&self) -> bool {
         self.pending_on.is_empty()
     }
-
-    pub fn create_checkpoint(&self, path: &PathBuf) -> Result<()> {
-        fs::remove_dir_all(path).unwrap_or(());
-        self.db.create_checkpoint(path)
-    }
 }
 
 struct TableInfoParser<'a, R> {
     indexer_async_v2: &'a IndexerAsyncV2,
-    annotator: &'a AptosValueAnnotator<'a, R>,
+    annotator: &'a MoveValueAnnotator<'a, R>,
     result: HashMap<TableHandle, TableInfo>,
     pending_on: &'a DashMap<TableHandle, DashSet<Bytes>>,
 }
 
-impl<'a, R: StateView> TableInfoParser<'a, R> {
+impl<'a, R: ModuleResolver> TableInfoParser<'a, R> {
     pub fn new(
         indexer_async_v2: &'a IndexerAsyncV2,
-        annotator: &'a AptosValueAnnotator<R>,
+        annotator: &'a MoveValueAnnotator<R>,
         pending_on: &'a DashMap<TableHandle, DashSet<Bytes>>,
     ) -> Self {
         Self {
@@ -301,12 +317,12 @@ impl<'a, R: StateView> TableInfoParser<'a, R> {
                 }
             },
             AnnotatedMoveValue::Struct(struct_value) => {
-                let struct_tag = &struct_value.ty_tag;
+                let struct_tag = &struct_value.type_;
                 if Self::is_table(struct_tag) {
-                    assert_eq!(struct_tag.type_args.len(), 2);
+                    assert_eq!(struct_tag.type_params.len(), 2);
                     let table_info = TableInfo {
-                        key_type: struct_tag.type_args[0].clone(),
-                        value_type: struct_tag.type_args[1].clone(),
+                        key_type: struct_tag.type_params[0].clone(),
+                        value_type: struct_tag.type_params[1].clone(),
                     };
                     let table_handle = match &struct_value.value[0] {
                         (name, AnnotatedMoveValue::Address(handle)) => {

@@ -11,9 +11,7 @@ edition = "2021"
 
 [dependencies]
 move-binary-format = { path = "../../move-binary-format" }
-# Cannot use workspace version as aptos-core currently cannot be upgraded
-# to newer rand. See https://github.com/aptos-labs/aptos-core/issues/13031
-rand = { version = "0.8.5" }
+rand = "0.8.3"
 
 move-bytecode-verifier = { path = "../../move-bytecode-verifier" }
 move-core-types = { path = "../../move-core/types" }

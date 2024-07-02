@@ -16,6 +16,5 @@ pub fn get_fake_context() -> Context {
         Arc::new(MockDbReaderWriter),
         mempool.ac_client,
         NodeConfig::default(),
-        None, /* table info reader */
     )
 }

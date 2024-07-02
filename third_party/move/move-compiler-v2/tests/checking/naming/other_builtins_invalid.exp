@@ -1,12 +1,12 @@
 
 Diagnostics:
-error: expected 1 type argument but 2 were provided
+error: invalid call of `freeze`: generic count mismatch (expected 1 but found 2)
   ┌─ tests/checking/naming/other_builtins_invalid.move:3:9
   │
 3 │         freeze<u64, bool>(x);
   │         ^^^^^^^^^^^^^^^^^^^^
 
-error: expected 1 type argument but 0 were provided
+error: invalid call of `freeze`: generic count mismatch (expected 1 but found 0)
   ┌─ tests/checking/naming/other_builtins_invalid.move:4:9
   │
 4 │         freeze<>(x);

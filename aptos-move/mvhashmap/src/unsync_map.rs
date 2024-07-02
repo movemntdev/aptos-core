@@ -4,12 +4,10 @@
 use crate::{
     types::{GroupReadResult, MVModulesOutput, UnsyncGroupError, ValueWithLayout},
     utils::module_hash,
-    BlockStateStats,
 };
-use aptos_aggregator::types::{code_invariant_error, DelayedFieldValue};
+use aptos_aggregator::types::DelayedFieldValue;
 use aptos_crypto::hash::HashValue;
 use aptos_types::{
-    delayed_fields::PanicError,
     executable::{Executable, ExecutableDescriptor, ModulePath},
     write_set::TransactionWrite,
 };
@@ -17,16 +15,7 @@ use aptos_vm_types::resource_group_adapter::group_size_as_sum;
 use move_binary_format::errors::PartialVMResult;
 use move_core_types::value::MoveTypeLayout;
 use serde::Serialize;
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    fmt::Debug,
-    hash::Hash,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
-};
+use std::{cell::RefCell, collections::HashMap, fmt::Debug, hash::Hash, sync::Arc};
 
 /// UnsyncMap is designed to mimic the functionality of MVHashMap for sequential execution.
 /// In this case only the latest recorded version is relevant, simplifying the implementation.
@@ -48,9 +37,6 @@ pub struct UnsyncMap<
     executable_cache: RefCell<HashMap<HashValue, Arc<X>>>,
     executable_bytes: RefCell<usize>,
     delayed_field_map: RefCell<HashMap<I, DelayedFieldValue>>,
-
-    total_base_resource_size: AtomicU64,
-    total_base_delayed_field_size: AtomicU64,
 }
 
 impl<
@@ -69,8 +55,6 @@ impl<
             executable_cache: RefCell::new(HashMap::new()),
             executable_bytes: RefCell::new(0),
             delayed_field_map: RefCell::new(HashMap::new()),
-            total_base_resource_size: AtomicU64::new(0),
-            total_base_delayed_field_size: AtomicU64::new(0),
         }
     }
 }
@@ -85,17 +69,6 @@ impl<
 {
     pub fn new() -> Self {
         Self::default()
-    }
-
-    pub fn stats(&self) -> BlockStateStats {
-        BlockStateStats {
-            num_resources: self.resource_map.borrow().len(),
-            num_resource_groups: self.group_cache.borrow().len(),
-            num_delayed_fields: self.delayed_field_map.borrow().len(),
-            num_modules: self.module_map.borrow().len(),
-            base_resources_size: self.total_base_resource_size.load(Ordering::Relaxed),
-            base_delayed_fields_size: self.total_base_delayed_field_size.load(Ordering::Relaxed),
-        }
     }
 
     pub fn set_group_base_values(
@@ -161,7 +134,7 @@ impl<
     }
 
     /// Contains the latest group ops for the given group key.
-    pub fn finalize_group(&self, group_key: &K) -> impl Iterator<Item = (T, ValueWithLayout<V>)> {
+    pub fn finalize_group(&self, group_key: &K) -> Vec<(T, ValueWithLayout<V>)> {
         self.group_cache
             .borrow()
             .get(group_key)
@@ -169,6 +142,7 @@ impl<
             .borrow()
             .clone()
             .into_iter()
+            .collect()
     }
 
     pub fn insert_group_op(
@@ -177,7 +151,8 @@ impl<
         value_tag: T,
         v: V,
         maybe_layout: Option<Arc<MoveTypeLayout>>,
-    ) -> Result<(), PanicError> {
+    ) -> anyhow::Result<()> {
+        use anyhow::bail;
         use aptos_types::write_set::WriteOpKind::*;
         use std::collections::hash_map::Entry::*;
         match (
@@ -200,11 +175,11 @@ impl<
             },
             (l, r) => {
                 println!("WriteOp kind {:?} not consistent with previous value at tag {:?}. l: {:?}, r: {:?}", v.write_op_kind(), value_tag, l, r);
-                return Err(code_invariant_error(format!(
+                bail!(
                     "WriteOp kind {:?} not consistent with previous value at tag {:?}",
                     v.write_op_kind(),
                     value_tag
-                )));
+                );
             },
         }
 
@@ -213,14 +188,6 @@ impl<
 
     pub fn fetch_data(&self, key: &K) -> Option<ValueWithLayout<V>> {
         self.resource_map.borrow().get(key).cloned()
-    }
-
-    pub fn fetch_exchanged_data(&self, key: &K) -> Option<(Arc<V>, Arc<MoveTypeLayout>)> {
-        if let Some(ValueWithLayout::Exchanged(value, Some(layout))) = self.fetch_data(key) {
-            Some((value, layout))
-        } else {
-            None
-        }
     }
 
     pub fn fetch_group_data(&self, key: &K) -> Option<Vec<(Arc<T>, ValueWithLayout<V>)>> {
@@ -258,10 +225,10 @@ impl<
         self.delayed_field_map.borrow().get(id).cloned()
     }
 
-    pub fn write(&self, key: K, value: Arc<V>, layout: Option<Arc<MoveTypeLayout>>) {
+    pub fn write(&self, key: K, value: V, layout: Option<Arc<MoveTypeLayout>>) {
         self.resource_map
             .borrow_mut()
-            .insert(key, ValueWithLayout::Exchanged(value, layout));
+            .insert(key, ValueWithLayout::Exchanged(Arc::new(value), layout));
     }
 
     pub fn write_module(&self, key: K, value: V) {
@@ -271,13 +238,7 @@ impl<
     }
 
     pub fn set_base_value(&self, key: K, value: ValueWithLayout<V>) {
-        let cur_size = value.bytes_len();
-        if self.resource_map.borrow_mut().insert(key, value).is_none() {
-            if let Some(cur_size) = cur_size {
-                self.total_base_resource_size
-                    .fetch_add(cur_size as u64, Ordering::Relaxed);
-            }
-        }
+        self.resource_map.borrow_mut().insert(key, value);
     }
 
     /// We return false if the executable was already stored, as this isn't supposed to happen
@@ -306,14 +267,6 @@ impl<
     pub fn write_delayed_field(&self, id: I, value: DelayedFieldValue) {
         self.delayed_field_map.borrow_mut().insert(id, value);
     }
-
-    pub fn set_base_delayed_field(&self, id: I, value: DelayedFieldValue) {
-        self.total_base_delayed_field_size.fetch_add(
-            value.get_approximate_memory_size() as u64,
-            Ordering::Relaxed,
-        );
-        self.delayed_field_map.borrow_mut().insert(id, value);
-    }
 }
 
 #[cfg(test)]
@@ -327,7 +280,7 @@ mod test {
         map: &UnsyncMap<KeyType<Vec<u8>>, usize, TestValue, ExecutableTestType, ()>,
         key: &KeyType<Vec<u8>>,
     ) -> HashMap<usize, ValueWithLayout<TestValue>> {
-        map.finalize_group(key).collect()
+        map.finalize_group(key).into_iter().collect()
     }
 
     // TODO[agg_v2](test) Add tests with non trivial layout
@@ -449,7 +402,7 @@ mod test {
         let ap = KeyType(b"/foo/b".to_vec());
         let map = UnsyncMap::<KeyType<Vec<u8>>, usize, TestValue, ExecutableTestType, ()>::new();
 
-        let _ = map.finalize_group(&ap).collect::<Vec<_>>();
+        map.finalize_group(&ap);
     }
 
     #[test]

@@ -1,5 +1,4 @@
 // Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
 
 use crate::{
     get_uri_metadata,
@@ -32,13 +31,13 @@ impl ImageOptimizer {
     /// Resizes and optimizes image from input URI.
     /// Returns new image as a byte array and its format.
     pub async fn optimize(
-        uri: &str,
+        uri: String,
         max_file_size_bytes: u32,
         image_quality: u8,
         max_image_dimensions: u32,
     ) -> anyhow::Result<(Vec<u8>, ImageFormat)> {
         OPTIMIZE_IMAGE_INVOCATION_COUNT.inc();
-        let (_, size) = get_uri_metadata(uri).await?;
+        let (_, size) = get_uri_metadata(uri.clone()).await?;
         if size > max_file_size_bytes {
             FAILED_TO_OPTIMIZE_IMAGE_COUNT
                 .with_label_values(&["Image file too large"])

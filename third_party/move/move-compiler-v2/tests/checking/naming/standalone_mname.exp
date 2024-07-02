@@ -1,6 +1,6 @@
 
 Diagnostics:
-error: undeclared `M`
+error: undeclared `M::M`
   ┌─ tests/checking/naming/standalone_mname.move:3:17
   │
 3 │         let m = M;

@@ -1,5 +1,4 @@
 // Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
 
 use super::dag_test;
 use crate::{
@@ -8,8 +7,8 @@ use crate::{
     network_interface::{ConsensusMsg, ConsensusNetworkClient, DIRECT_SEND, RPC},
     network_tests::{NetworkPlayground, TwinId},
     payload_manager::PayloadManager,
-    pipeline::{buffer_manager::OrderedBlocks, execution_client::DummyExecutionClient},
-    test_utils::{consensus_runtime, MockPayloadManager, MockStorage},
+    pipeline::buffer_manager::OrderedBlocks,
+    test_utils::{consensus_runtime, EmptyStateComputer, MockPayloadManager, MockStorage},
 };
 use aptos_channels::{aptos_channel, message_queues::QueueStyle};
 use aptos_config::network_id::{NetworkId, PeerNetworkId};
@@ -17,7 +16,7 @@ use aptos_consensus_types::common::Author;
 use aptos_logger::debug;
 use aptos_network::{
     application::interface::NetworkClient,
-    peer_manager::{ConnectionRequestSender, PeerManagerRequestSender},
+    peer_manager::{conn_notifs_channel, ConnectionRequestSender, PeerManagerRequestSender},
     protocols::{
         network::{self, Event, NetworkEvents, NewNetworkEvents, NewNetworkSender},
         wire::handshake::v1::ProtocolIdSet,
@@ -46,9 +45,8 @@ struct DagBootstrapUnit {
     nh_task_handle: JoinHandle<SyncOutcome>,
     df_task_handle: JoinHandle<()>,
     dag_rpc_tx: aptos_channel::Sender<Author, IncomingDAGRequest>,
-    network_events: Box<
-        Select<NetworkEvents<ConsensusMsg>, aptos_channels::UnboundedReceiver<Event<ConsensusMsg>>>,
-    >,
+    network_events:
+        Box<Select<NetworkEvents<ConsensusMsg>, aptos_channels::Receiver<Event<ConsensusMsg>>>>,
 }
 
 impl DagBootstrapUnit {
@@ -60,33 +58,29 @@ impl DagBootstrapUnit {
         network: NetworkSender,
         time_service: TimeService,
         network_events: Box<
-            Select<
-                NetworkEvents<ConsensusMsg>,
-                aptos_channels::UnboundedReceiver<Event<ConsensusMsg>>,
-            >,
+            Select<NetworkEvents<ConsensusMsg>, aptos_channels::Receiver<Event<ConsensusMsg>>>,
         >,
         all_signers: Vec<ValidatorSigner>,
     ) -> (Self, UnboundedReceiver<OrderedBlocks>) {
-        let epoch_state = Arc::new(EpochState {
+        let epoch_state = EpochState {
             epoch,
             verifier: storage.get_validator_set().into(),
-        });
+        };
         let ledger_info = generate_ledger_info_with_sig(&all_signers, storage.get_ledger_info());
-        let dag_storage =
-            dag_test::MockStorage::new_with_ledger_info(ledger_info, epoch_state.clone());
+        let dag_storage = dag_test::MockStorage::new_with_ledger_info(ledger_info);
 
         let network = Arc::new(network);
 
         let payload_client = Arc::new(MockPayloadManager::new(None));
         let payload_manager = Arc::new(PayloadManager::DirectMempool);
 
-        let execution_client = Arc::new(DummyExecutionClient);
+        let state_computer = Arc::new(EmptyStateComputer {});
 
         let (nh_abort_handle, df_abort_handle, dag_rpc_tx, ordered_nodes_rx) =
             bootstrap_dag_for_test(
                 self_peer,
                 signer,
-                epoch_state,
+                Arc::new(epoch_state),
                 Arc::new(dag_storage),
                 network.clone(),
                 network.clone(),
@@ -94,7 +88,7 @@ impl DagBootstrapUnit {
                 time_service,
                 payload_manager,
                 payload_client,
-                execution_client,
+                state_computer,
             );
 
         (
@@ -139,14 +133,13 @@ fn create_network(
     validators: ValidatorVerifier,
 ) -> (
     NetworkSender,
-    Box<
-        Select<NetworkEvents<ConsensusMsg>, aptos_channels::UnboundedReceiver<Event<ConsensusMsg>>>,
-    >,
+    Box<Select<NetworkEvents<ConsensusMsg>, aptos_channels::Receiver<Event<ConsensusMsg>>>>,
 ) {
     let (network_reqs_tx, network_reqs_rx) = aptos_channel::new(QueueStyle::FIFO, 8, None);
     let (connection_reqs_tx, _) = aptos_channel::new(QueueStyle::FIFO, 8, None);
     let (consensus_tx, consensus_rx) = aptos_channel::new(QueueStyle::FIFO, 8, None);
     let (_conn_mgr_reqs_tx, conn_mgr_reqs_rx) = aptos_channels::new_test(8);
+    let (_, conn_status_rx) = conn_notifs_channel::new();
     let network_sender = network::NetworkSender::new(
         PeerManagerRequestSender::new(network_reqs_tx),
         ConnectionRequestSender::new(connection_reqs_tx),
@@ -158,9 +151,9 @@ fn create_network(
         playground.peer_protocols(),
     );
     let consensus_network_client = ConsensusNetworkClient::new(network_client);
-    let network_events = NetworkEvents::new(consensus_rx, None, true);
+    let network_events = NetworkEvents::new(consensus_rx, conn_status_rx, None);
 
-    let (self_sender, self_receiver) = aptos_channels::new_unbounded_test();
+    let (self_sender, self_receiver) = aptos_channels::new_test(1000);
     let network = NetworkSender::new(author, consensus_network_client, self_sender, validators);
 
     let twin_id = TwinId { id, author };
@@ -220,11 +213,12 @@ async fn test_dag_e2e() {
     let runtime = consensus_runtime();
     let mut playground = NetworkPlayground::new(runtime.handle().clone());
     let (signers, validators) = random_validator_verifier(num_nodes, None, false);
+
     let (nodes, mut ordered_node_receivers) = bootstrap_nodes(&mut playground, signers, validators);
-    let tasks: Vec<_> = nodes
-        .into_iter()
-        .map(|node| runtime.spawn(node.start()))
-        .collect();
+    for node in nodes {
+        runtime.spawn(node.start());
+    }
+
     runtime.spawn(playground.start());
 
     for _ in 1..10 {
@@ -235,14 +229,11 @@ async fn test_dag_e2e() {
         }
         let first = all_ordered.first().unwrap();
         assert_gt!(first.len(), 0, "must order nodes");
+        debug!("Nodes: {:?}", first);
         for a in all_ordered.iter() {
             assert_eq!(a.len(), first.len(), "length should match");
             assert_eq!(a, first);
         }
-    }
-    for task in tasks {
-        task.abort();
-        let _ = task.await;
     }
     runtime.shutdown_background();
 }

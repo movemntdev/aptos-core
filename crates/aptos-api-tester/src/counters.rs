@@ -1,5 +1,4 @@
 // Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
 
 use once_cell::sync::Lazy;
 use prometheus::{register_histogram_vec, Histogram, HistogramVec};

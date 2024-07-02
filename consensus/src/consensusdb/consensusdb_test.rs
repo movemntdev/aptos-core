@@ -2,7 +2,6 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use self::schema::dag::NodeSchema;
 use super::*;
 use crate::dag::{CertifiedNode, Extensions, Node, Vote};
 use aptos_consensus_types::{
@@ -100,7 +99,7 @@ fn test_dag() {
         Author::random(),
         123,
         vec![],
-        Payload::empty(false, true),
+        Payload::empty(false),
         vec![],
         Extensions::empty(),
     );

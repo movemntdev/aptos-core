@@ -2,13 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{LoadDestination, NetworkLoadTest};
-use aptos_forge::{
-    NetworkContext, NetworkContextSynchronizer, NetworkTest, SwarmChaos, SwarmNetworkPartition,
-    Test,
-};
-use async_trait::async_trait;
+use aptos_forge::{NetworkContext, NetworkTest, SwarmChaos, SwarmNetworkPartition, Test};
 
-/// This is deprecated. Use [crate::multi_region_network_test::MultiRegionNetworkEmulationTest] instead
 pub struct NetworkPartitionTest;
 
 // Partition
@@ -20,16 +15,15 @@ impl Test for NetworkPartitionTest {
     }
 }
 
-#[async_trait]
 impl NetworkLoadTest for NetworkPartitionTest {
-    async fn setup<'a>(&self, ctx: &mut NetworkContext<'a>) -> anyhow::Result<LoadDestination> {
-        ctx.swarm
-            .write()
-            .await
-            .inject_chaos(SwarmChaos::Partition(SwarmNetworkPartition {
-                partition_percentage: PARTITION_PERCENTAGE,
-            }))
-            .await?;
+    fn setup(&self, ctx: &mut NetworkContext) -> anyhow::Result<LoadDestination> {
+        ctx.runtime
+            .block_on(
+                ctx.swarm
+                    .inject_chaos(SwarmChaos::Partition(SwarmNetworkPartition {
+                        partition_percentage: PARTITION_PERCENTAGE,
+                    })),
+            )?;
 
         let msg = format!(
             "Partitioned {}% validators in namespace",
@@ -40,29 +34,26 @@ impl NetworkLoadTest for NetworkPartitionTest {
         // Just send the load to last validator which is not included in the partition
         Ok(LoadDestination::Peers(vec![ctx
             .swarm
-            .read()
-            .await
             .validators()
             .last()
             .map(|v| v.peer_id())
             .unwrap()]))
     }
 
-    async fn finish<'a>(&self, ctx: &mut NetworkContext<'a>) -> anyhow::Result<()> {
-        ctx.swarm
-            .write()
-            .await
-            .remove_chaos(SwarmChaos::Partition(SwarmNetworkPartition {
-                partition_percentage: PARTITION_PERCENTAGE,
-            }))
-            .await?;
+    fn finish(&self, ctx: &mut NetworkContext) -> anyhow::Result<()> {
+        ctx.runtime
+            .block_on(
+                ctx.swarm
+                    .remove_chaos(SwarmChaos::Partition(SwarmNetworkPartition {
+                        partition_percentage: PARTITION_PERCENTAGE,
+                    })),
+            )?;
         Ok(())
     }
 }
 
-#[async_trait]
 impl NetworkTest for NetworkPartitionTest {
-    async fn run<'a>(&self, ctx: NetworkContextSynchronizer<'a>) -> anyhow::Result<()> {
-        <dyn NetworkLoadTest>::run(self, ctx).await
+    fn run(&self, ctx: &mut NetworkContext<'_>) -> anyhow::Result<()> {
+        <dyn NetworkLoadTest>::run(self, ctx)
     }
 }

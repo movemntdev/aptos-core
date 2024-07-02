@@ -1,5 +1,4 @@
-// Copyright (c) Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
+// Copyright © Aptos Foundation
 
 // @generated
 /// Transaction is a simplified representation for the transaction

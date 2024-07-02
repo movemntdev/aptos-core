@@ -13,18 +13,21 @@ use crate::{
     utils::{get_progress, iterators::EpochEndingLedgerInfoIter},
 };
 use anyhow::anyhow;
-use aptos_schemadb::{SchemaBatch, DB};
-use aptos_storage_interface::{block_info::BlockInfo, db_ensure as ensure, AptosDbError, Result};
+use aptos_schemadb::{ReadOptions, SchemaBatch, DB};
+use aptos_storage_interface::{
+    block_info::{BlockInfo, BlockInfoV0},
+    db_ensure as ensure, AptosDbError, Result,
+};
 use aptos_types::{
-    account_config::NewBlockEvent, block_info::BlockHeight, contract_event::ContractEvent,
-    epoch_state::EpochState, ledger_info::LedgerInfoWithSignatures,
-    state_store::state_storage_usage::StateStorageUsage, transaction::Version,
+    account_config::NewBlockEvent, contract_event::ContractEvent, epoch_state::EpochState,
+    ledger_info::LedgerInfoWithSignatures, state_store::state_storage_usage::StateStorageUsage,
+    transaction::Version,
 };
 use arc_swap::ArcSwap;
 use std::{ops::Deref, path::Path, sync::Arc};
 
 fn get_latest_ledger_info_in_db_impl(db: &DB) -> Result<Option<LedgerInfoWithSignatures>> {
-    let mut iter = db.iter::<LedgerInfoSchema>()?;
+    let mut iter = db.iter::<LedgerInfoSchema>(ReadOptions::default())?;
     iter.seek_to_last();
     Ok(iter.next().transpose()?.map(|(_, v)| v))
 }
@@ -73,7 +76,7 @@ impl LedgerMetadataDb {
         self.db.write_schemas(batch)
     }
 
-    pub(crate) fn get_synced_version(&self) -> Result<Version> {
+    pub(crate) fn get_latest_version(&self) -> Result<Version> {
         get_progress(&self.db, &DbMetadataKey::OverallCommitProgress)?.ok_or(
             AptosDbError::NotFound("No OverallCommitProgress in db.".to_string()),
         )
@@ -126,7 +129,7 @@ impl LedgerMetadataDb {
         start_epoch: u64,
         end_epoch: u64,
     ) -> Result<EpochEndingLedgerInfoIter> {
-        let mut iter = self.db.iter::<LedgerInfoSchema>()?;
+        let mut iter = self.db.iter::<LedgerInfoSchema>(ReadOptions::default())?;
         iter.seek(&start_epoch)?;
         Ok(EpochEndingLedgerInfoIter::new(iter, start_epoch, end_epoch))
     }
@@ -202,7 +205,9 @@ impl LedgerMetadataDb {
 impl LedgerMetadataDb {
     /// Returns the epoch at the given version.
     pub(crate) fn get_epoch(&self, version: Version) -> Result<u64> {
-        let mut iter = self.db.iter::<EpochByVersionSchema>()?;
+        let mut iter = self
+            .db
+            .iter::<EpochByVersionSchema>(ReadOptions::default())?;
         // Search for the end of the previous epoch.
         iter.seek_for_prev(&version)?;
         let (epoch_end_version, epoch) = match iter.next().transpose()? {
@@ -252,7 +257,9 @@ impl LedgerMetadataDb {
         }
         let prev_version = version - 1;
 
-        let mut iter = self.db.iter::<EpochByVersionSchema>()?;
+        let mut iter = self
+            .db
+            .iter::<EpochByVersionSchema>(ReadOptions::default())?;
         // Search for the end of the previous epoch.
         iter.seek_for_prev(&prev_version)?;
         iter.next().transpose()
@@ -268,7 +275,9 @@ impl LedgerMetadataDb {
 
     /// Returns the corresponding block height for a given version.
     pub(crate) fn get_block_height_by_version(&self, version: Version) -> Result<u64> {
-        let mut iter = self.db.iter::<BlockByVersionSchema>()?;
+        let mut iter = self
+            .db
+            .iter::<BlockByVersionSchema>(ReadOptions::default())?;
 
         iter.seek_for_prev(&version)?;
         let (_, block_height) = iter.next().transpose()?.ok_or(anyhow!(
@@ -278,20 +287,6 @@ impl LedgerMetadataDb {
         Ok(block_height)
     }
 
-    pub(crate) fn get_block_height_at_or_after_version(
-        &self,
-        version: Version,
-    ) -> Result<(Version, BlockHeight)> {
-        let mut iter = self.db.iter::<BlockByVersionSchema>()?;
-        iter.seek(&version)?;
-        let (block_version, block_height) = iter
-            .next()
-            .transpose()?
-            .ok_or(anyhow!("Block is not found at or after version {version}"))?;
-
-        Ok((block_version, block_height))
-    }
-
     pub(crate) fn put_block_info(
         version: Version,
         event: &ContractEvent,
@@ -299,7 +294,19 @@ impl LedgerMetadataDb {
     ) -> Result<()> {
         let new_block_event = NewBlockEvent::try_from_bytes(event.event_data())?;
         let block_height = new_block_event.height();
-        let block_info = BlockInfo::from_new_block_event(version, &new_block_event);
+        let id = new_block_event.hash()?;
+        let epoch = new_block_event.epoch();
+        let round = new_block_event.round();
+        let proposer = new_block_event.proposer();
+        let block_timestamp_usecs = new_block_event.proposed_time();
+        let block_info = BlockInfo::V0(BlockInfoV0::new(
+            id,
+            epoch,
+            round,
+            proposer,
+            block_timestamp_usecs,
+            version,
+        ));
         batch.put::<BlockInfoSchema>(&block_height, &block_info)?;
         batch.put::<BlockByVersionSchema>(&version, &block_height)?;
 
@@ -327,7 +334,7 @@ impl LedgerMetadataDb {
         &self,
         version: Version,
     ) -> Result<(Version, StateStorageUsage)> {
-        let mut iter = self.db.iter::<VersionDataSchema>()?;
+        let mut iter = self.db.iter::<VersionDataSchema>(ReadOptions::default())?;
         iter.seek_for_prev(&version)?;
         match iter.next().transpose()? {
             Some((previous_version, data)) => {

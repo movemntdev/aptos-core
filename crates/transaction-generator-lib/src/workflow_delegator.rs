@@ -5,8 +5,7 @@ use crate::{
     account_generator::AccountGeneratorCreator, accounts_pool_wrapper::AccountsPoolWrapperCreator,
     call_custom_modules::CustomModulesDelegationGeneratorCreator,
     entry_points::EntryPointTransactionGenerator, EntryPoints, ObjectPool,
-    ReliableTransactionSubmitter, RootAccountHandle, TransactionGenerator,
-    TransactionGeneratorCreator, WorkflowKind, WorkflowProgress,
+    ReliableTransactionSubmitter, TransactionGenerator, TransactionGeneratorCreator, WorkflowKind,
 };
 use aptos_logger::{info, sample, sample::SampleRate};
 use aptos_sdk::{
@@ -16,10 +15,10 @@ use aptos_sdk::{
 use std::{
     cmp,
     sync::{
-        atomic::{AtomicU64, AtomicUsize, Ordering},
+        atomic::{AtomicUsize, Ordering},
         Arc,
     },
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
 #[derive(Clone)]
@@ -27,36 +26,14 @@ enum StageTracking {
     // stage is externally modified
     ExternallySet(Arc<AtomicUsize>),
     // we move to a next stage when all accounts have finished with the current stage
-    WhenDone {
-        stage_counter: Arc<AtomicUsize>,
-        stage_start_time: Arc<AtomicU64>,
-        delay_between_stages: Duration,
-    },
+    WhenDone(Arc<AtomicUsize>),
 }
 
 impl StageTracking {
-    fn current_timestamp() -> u64 {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-    }
-
-    fn load_current_stage(&self) -> Option<usize> {
+    fn load_current_stage(&self) -> usize {
         match self {
-            StageTracking::ExternallySet(stage_counter) => {
-                Some(stage_counter.load(Ordering::Relaxed))
-            },
-            StageTracking::WhenDone {
-                stage_counter,
-                stage_start_time,
-                ..
-            } => {
-                if stage_start_time.load(Ordering::Relaxed) > Self::current_timestamp() {
-                    None
-                } else {
-                    Some(stage_counter.load(Ordering::Relaxed))
-                }
+            StageTracking::ExternallySet(stage) | StageTracking::WhenDone(stage) => {
+                stage.load(Ordering::Relaxed)
             },
         }
     }
@@ -117,16 +94,7 @@ impl TransactionGenerator for WorkflowTxnGenerator {
         mut num_to_create: usize,
     ) -> Vec<SignedTransaction> {
         assert_ne!(num_to_create, 0);
-        let stage = match self.stage.load_current_stage() {
-            Some(stage) => stage,
-            None => {
-                sample!(
-                    SampleRate::Duration(Duration::from_secs(2)),
-                    info!("Waiting for delay before next stage");
-                );
-                return Vec::new();
-            },
-        };
+        let mut stage = self.stage.load_current_stage();
 
         if stage == 0 {
             // We can treat completed_for_first_stage as a stream of indices [0, +inf),
@@ -142,41 +110,29 @@ impl TransactionGenerator for WorkflowTxnGenerator {
         // acts as coordinator, as it will generate as many transactions as number of accounts it could grab from the pool.
 
         match &self.stage {
-            StageTracking::WhenDone {
-                stage_counter,
-                stage_start_time,
-                delay_between_stages,
-            } => {
+            StageTracking::WhenDone(stage_counter) => {
                 if stage == 0 {
                     if num_to_create == 0 {
                         info!("TransactionGenerator Workflow: Stage 0 is full with {} accounts, moving to stage 1", self.pool_per_stage.first().unwrap().len());
-                        stage_start_time.store(
-                            StageTracking::current_timestamp() + delay_between_stages.as_secs(),
-                            Ordering::Relaxed,
-                        );
                         let _ = stage_counter.compare_exchange(
                             0,
                             1,
                             Ordering::Relaxed,
                             Ordering::Relaxed,
                         );
-                        return Vec::new();
+                        stage = 1;
                     }
                 } else if stage < self.pool_per_stage.len()
                     && self.pool_per_stage.get(stage - 1).unwrap().len() == 0
                 {
                     info!("TransactionGenerator Workflow: Stage {} has consumed all accounts, moving to stage {}", stage, stage + 1);
-                    stage_start_time.store(
-                        StageTracking::current_timestamp() + delay_between_stages.as_secs(),
-                        Ordering::Relaxed,
-                    );
                     let _ = stage_counter.compare_exchange(
                         stage,
                         stage + 1,
                         Ordering::Relaxed,
                         Ordering::Relaxed,
                     );
-                    return Vec::new();
+                    stage += 1;
                 }
             },
             StageTracking::ExternallySet(_) => {
@@ -229,76 +185,31 @@ impl WorkflowTxnGeneratorCreator {
         workflow_kind: WorkflowKind,
         txn_factory: TransactionFactory,
         init_txn_factory: TransactionFactory,
-        root_account: &dyn RootAccountHandle,
+        root_account: &mut LocalAccount,
         txn_executor: &dyn ReliableTransactionSubmitter,
         num_modules: usize,
         _initial_account_pool: Option<Arc<ObjectPool<LocalAccount>>>,
-        cur_phase: Arc<AtomicUsize>,
-        progress_type: WorkflowProgress,
+        cur_phase: Option<Arc<AtomicUsize>>,
     ) -> Self {
-        assert_eq!(num_modules, 1, "Only one module is supported for now");
-
-        let stage_tracking = match progress_type {
-            WorkflowProgress::MoveByPhases => StageTracking::ExternallySet(cur_phase),
-            WorkflowProgress::WhenDone {
-                delay_between_stages_s,
-            } => StageTracking::WhenDone {
-                stage_counter: Arc::new(AtomicUsize::new(0)),
-                stage_start_time: Arc::new(AtomicU64::new(0)),
-                delay_between_stages: Duration::from_secs(delay_between_stages_s),
-            },
-        };
+        let stage_tracking = cur_phase.map_or_else(
+            || StageTracking::WhenDone(Arc::new(AtomicUsize::new(0))),
+            StageTracking::ExternallySet,
+        );
         println!(
             "Creating workload with stage tracking: {:?}",
             match &stage_tracking {
                 StageTracking::ExternallySet(_) => "ExternallySet",
-                StageTracking::WhenDone { .. } => "WhenDone",
+                StageTracking::WhenDone(_) => "WhenDone",
             }
         );
         match workflow_kind {
-            WorkflowKind::CreateMintBurn {
+            WorkflowKind::CreateThenMint {
                 count,
                 creation_balance,
             } => {
                 let created_pool = Arc::new(ObjectPool::new());
                 let minted_pool = Arc::new(ObjectPool::new());
-                let burnt_pool = Arc::new(ObjectPool::new());
-
-                let mint_entry_point = EntryPoints::TokenV2AmbassadorMint { numbered: false };
-                let burn_entry_point = EntryPoints::TokenV2AmbassadorBurn;
-
-                let mut packages = CustomModulesDelegationGeneratorCreator::publish_package(
-                    init_txn_factory.clone(),
-                    root_account,
-                    txn_executor,
-                    num_modules,
-                    mint_entry_point.package_name(),
-                    Some(20_00000000),
-                )
-                .await;
-
-                let mint_worker = CustomModulesDelegationGeneratorCreator::create_worker(
-                    init_txn_factory.clone(),
-                    root_account,
-                    txn_executor,
-                    &mut packages,
-                    &mut EntryPointTransactionGenerator {
-                        entry_point: mint_entry_point,
-                    },
-                )
-                .await;
-                let burn_worker = CustomModulesDelegationGeneratorCreator::create_worker(
-                    init_txn_factory.clone(),
-                    root_account,
-                    txn_executor,
-                    &mut packages,
-                    &mut EntryPointTransactionGenerator {
-                        entry_point: burn_entry_point,
-                    },
-                )
-                .await;
-
-                let packages = Arc::new(packages);
+                let entry_point = EntryPoints::TokenV2AmbassadorMint;
 
                 let creators: Vec<Box<dyn TransactionGeneratorCreator>> = vec![
                     Box::new(AccountGeneratorCreator::new(
@@ -309,28 +220,26 @@ impl WorkflowTxnGeneratorCreator {
                         creation_balance,
                     )),
                     Box::new(AccountsPoolWrapperCreator::new(
-                        Box::new(CustomModulesDelegationGeneratorCreator::new_raw(
-                            txn_factory.clone(),
-                            packages.clone(),
-                            mint_worker,
-                        )),
+                        Box::new(
+                            CustomModulesDelegationGeneratorCreator::new(
+                                txn_factory.clone(),
+                                init_txn_factory.clone(),
+                                root_account,
+                                txn_executor,
+                                num_modules,
+                                entry_point.package_name(),
+                                &mut EntryPointTransactionGenerator { entry_point },
+                            )
+                            .await,
+                        ),
                         created_pool.clone(),
                         Some(minted_pool.clone()),
-                    )),
-                    Box::new(AccountsPoolWrapperCreator::new(
-                        Box::new(CustomModulesDelegationGeneratorCreator::new_raw(
-                            txn_factory.clone(),
-                            packages.clone(),
-                            burn_worker,
-                        )),
-                        minted_pool.clone(),
-                        Some(burnt_pool.clone()),
                     )),
                 ];
                 Self::new(
                     stage_tracking,
                     creators,
-                    vec![created_pool, minted_pool, burnt_pool],
+                    vec![created_pool, minted_pool],
                     count,
                 )
             },

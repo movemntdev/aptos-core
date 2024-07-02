@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::NetworkLoadTest;
-use aptos_forge::{NetworkContextSynchronizer, NetworkTest, Result, Swarm, Test, TestReport};
-use async_trait::async_trait;
+use aptos_forge::{NetworkContext, NetworkTest, Result, Swarm, Test, TestReport};
 use rand::{seq::SliceRandom, thread_rng};
-use std::{sync::Arc, time::Duration};
-use tokio::time::Instant;
+use std::time::Duration;
+use tokio::{runtime::Runtime, time::Instant};
 
 pub struct ValidatorRebootStressTest {
     pub num_simultaneously: usize,
@@ -20,50 +19,40 @@ impl Test for ValidatorRebootStressTest {
     }
 }
 
-#[async_trait]
 impl NetworkLoadTest for ValidatorRebootStressTest {
-    async fn test(
+    fn test(
         &self,
-        swarm: Arc<tokio::sync::RwLock<Box<dyn Swarm>>>,
+        swarm: &mut dyn Swarm,
         _report: &mut TestReport,
         duration: Duration,
     ) -> Result<()> {
         let start = Instant::now();
+        let runtime = Runtime::new().unwrap();
 
-        let all_validators = {
-            swarm
-                .read()
-                .await
-                .validators()
-                .map(|v| v.peer_id())
-                .collect::<Vec<_>>()
-        };
+        let all_validators = swarm.validators().map(|v| v.peer_id()).collect::<Vec<_>>();
+
+        let mut rng = thread_rng();
 
         while start.elapsed() < duration {
-            let addresses: Vec<_> = {
-                let mut rng = thread_rng();
-                all_validators
-                    .choose_multiple(&mut rng, self.num_simultaneously)
-                    .cloned()
-                    .collect()
-            };
+            let addresses: Vec<_> = all_validators
+                .choose_multiple(&mut rng, self.num_simultaneously)
+                .cloned()
+                .collect();
             for adr in &addresses {
-                let swarm = swarm.read().await;
-                let validator_to_reboot = swarm.validator(*adr).unwrap();
-                validator_to_reboot.stop().await?;
+                let validator_to_reboot = swarm.validator_mut(*adr).unwrap();
+                runtime.block_on(async { validator_to_reboot.stop().await })?;
             }
             if self.down_time_secs > 0.0 {
-                tokio::time::sleep(Duration::from_secs_f32(self.down_time_secs)).await;
+                std::thread::sleep(Duration::from_secs_f32(self.down_time_secs));
             }
 
             for adr in &addresses {
-                let swarm = swarm.read().await;
-                let validator_to_reboot = swarm.validator(*adr).unwrap();
-                validator_to_reboot.start().await?;
+                let validator_to_reboot = swarm.validator_mut(*adr).unwrap();
+                runtime.block_on(async { validator_to_reboot.start().await })?;
             }
 
             if self.pause_secs > 0.0 {
-                tokio::time::sleep(Duration::from_secs_f32(self.pause_secs)).await;
+                std::thread::sleep(Duration::from_secs_f32(self.pause_secs));
             }
         }
 
@@ -71,9 +60,8 @@ impl NetworkLoadTest for ValidatorRebootStressTest {
     }
 }
 
-#[async_trait]
 impl NetworkTest for ValidatorRebootStressTest {
-    async fn run<'a>(&self, ctx: NetworkContextSynchronizer<'a>) -> Result<()> {
-        <dyn NetworkLoadTest>::run(self, ctx).await
+    fn run(&self, ctx: &mut NetworkContext<'_>) -> Result<()> {
+        <dyn NetworkLoadTest>::run(self, ctx)
     }
 }

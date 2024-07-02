@@ -24,7 +24,6 @@ use move_core_types::language_storage::ModuleId as CompiledModuleId;
 use move_symbol_pool::Symbol;
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fmt::Debug,
     fs,
     fs::File,
     io::{Read, Write},
@@ -95,7 +94,7 @@ pub struct FullyCompiledProgram {
 //**************************************************************************************************
 
 impl<'a> Compiler<'a> {
-    pub fn from_package_paths<Paths: Into<Symbol> + Debug, NamedAddress: Into<Symbol> + Debug>(
+    pub fn from_package_paths<Paths: Into<Symbol>, NamedAddress: Into<Symbol>>(
         targets: Vec<PackagePaths<Paths, NamedAddress>>,
         deps: Vec<PackagePaths<Paths, NamedAddress>>,
         flags: Flags,
@@ -103,7 +102,7 @@ impl<'a> Compiler<'a> {
     ) -> Self {
         fn indexed_scopes(
             maps: &mut NamedAddressMaps,
-            all_pkgs: Vec<PackagePaths<impl Into<Symbol> + Debug, impl Into<Symbol> + Debug>>,
+            all_pkgs: Vec<PackagePaths<impl Into<Symbol>, impl Into<Symbol>>>,
         ) -> Vec<IndexedPackagePath> {
             let mut idx_paths = vec![];
             for PackagePaths {
@@ -142,7 +141,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    pub fn from_files<Paths: Into<Symbol> + Debug, NamedAddress: Into<Symbol> + Clone + Debug>(
+    pub fn from_files<Paths: Into<Symbol>, NamedAddress: Into<Symbol> + Clone>(
         targets: Vec<Paths>,
         deps: Vec<Paths>,
         named_address_map: BTreeMap<NamedAddress, NumericalAddress>,
@@ -428,10 +427,7 @@ impl<'a> SteppedCompiler<'a, PASS_COMPILATION> {
 
 /// Given a set of dependencies, precompile them and save the ASTs so that they can be used again
 /// to compile against without having to recompile these dependencies
-pub fn construct_pre_compiled_lib<
-    Paths: Into<Symbol> + Debug,
-    NamedAddress: Into<Symbol> + Debug,
->(
+pub fn construct_pre_compiled_lib<Paths: Into<Symbol>, NamedAddress: Into<Symbol>>(
     targets: Vec<PackagePaths<Paths, NamedAddress>>,
     interface_files_dir_opt: Option<String>,
     flags: Flags,

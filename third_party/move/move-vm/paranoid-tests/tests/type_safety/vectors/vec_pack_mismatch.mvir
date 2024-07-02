@@ -24,7 +24,7 @@ module 0x2.Math {
   }
 }
 
-//# run --signers 0x1
+//# run --signers 0x1 --check-runtime-types
 import 0x2.Math;
 import 0x2.A;
 main(account: signer) {

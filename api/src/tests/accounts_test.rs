@@ -3,9 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::new_test_context;
-use crate::tests::new_test_context_with_db_sharding_and_internal_indexer;
-use aptos_api_test_context::{current_function_name, find_value, TestContext};
-use aptos_api_types::{MoveModuleBytecode, MoveResource, MoveStructTag, StateKeyWrapper};
+use aptos_api_test_context::{current_function_name, find_value};
+use aptos_api_types::{MoveModuleBytecode, MoveResource, StateKeyWrapper};
 use aptos_cached_packages::aptos_stdlib;
 use serde_json::json;
 use std::str::FromStr;
@@ -37,21 +36,9 @@ async fn test_get_account_resources_by_address_0x0() {
 async fn test_get_account_resources_by_valid_account_address() {
     let context = new_test_context(current_function_name!());
     let addresses = vec!["0x1", "0x00000000000000000000000000000001"];
-    let mut res = vec![];
     for address in &addresses {
-        let resp = context.get(&account_resources(address)).await;
-        res.push(resp);
+        context.get(&account_resources(address)).await;
     }
-
-    let shard_context =
-        new_test_context_with_db_sharding_and_internal_indexer(current_function_name!());
-    let mut shard_res = vec![];
-    for address in &addresses {
-        let resp = shard_context.get(&account_resources(address)).await;
-        shard_res.push(resp);
-    }
-
-    assert_eq!(res, shard_res);
 }
 
 // Unstable due to framework changes
@@ -109,7 +96,9 @@ async fn test_account_modules_structs() {
     context.check_golden_output(resp);
 }
 
-async fn test_account_resources_by_ledger_version_with_context(mut context: TestContext) {
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_get_account_resources_by_ledger_version() {
+    let mut context = new_test_context(current_function_name!());
     let account = context.gen_account();
     let txn = context.create_user_account(&account).await;
     context.commit_block(&vec![txn.clone()]).await;
@@ -134,15 +123,6 @@ async fn test_account_resources_by_ledger_version_with_context(mut context: Test
         f["type"] == "0x1::account::Account"
     });
     assert_eq!(root_account["data"]["sequence_number"], "0");
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_get_account_resources_by_ledger_version() {
-    let context = new_test_context(current_function_name!());
-    test_account_resources_by_ledger_version_with_context(context).await;
-    let shard_context =
-        new_test_context_with_db_sharding_and_internal_indexer(current_function_name!());
-    test_account_resources_by_ledger_version_with_context(shard_context).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -171,7 +151,9 @@ async fn test_get_account_resources_by_invalid_ledger_version() {
     context.check_golden_output(resp);
 }
 
-async fn test_get_account_modules_by_ledger_version_with_context(mut context: TestContext) {
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_get_account_modules_by_ledger_version() {
+    let mut context = new_test_context(current_function_name!());
     let payload =
         aptos_stdlib::publish_module_source("test_module", "module 0xa550c18::test_module {}");
 
@@ -194,15 +176,6 @@ async fn test_get_account_modules_by_ledger_version_with_context(mut context: Te
         ))
         .await;
     assert_eq!(modules, json!([]));
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_get_account_modules_by_ledger_version() {
-    let context = new_test_context(current_function_name!());
-    test_get_account_modules_by_ledger_version_with_context(context).await;
-    let shard_context =
-        new_test_context_with_db_sharding_and_internal_indexer(current_function_name!());
-    test_get_account_modules_by_ledger_version_with_context(shard_context).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -244,10 +217,9 @@ async fn test_get_account_resources_with_pagination() {
     // Make a request, assert we get a cursor back in the header for the next
     // page of results. Assert we can deserialize the string representation
     // of the cursor returned in the header.
-    // FIXME: Pagination seems to be off by one (change 4 to 5 below and see what happens).
     let req = warp::test::request()
         .method("GET")
-        .path(&format!("/v1{}?limit=4", account_resources(address)));
+        .path(&format!("/v1{}?limit=5", account_resources(address)));
     let resp = context.reply(req).await;
     assert_eq!(resp.status(), 200);
     let cursor_header = resp
@@ -256,16 +228,8 @@ async fn test_get_account_resources_with_pagination() {
         .expect("Cursor header was missing");
     let cursor_header = StateKeyWrapper::from_str(cursor_header.to_str().unwrap()).unwrap();
     let resources: Vec<MoveResource> = serde_json::from_slice(resp.body()).unwrap();
-    println!("Returned {} resources:", resources.len());
-    for r in resources
-        .iter()
-        .map(|mvr| &mvr.typ)
-        .collect::<Vec<&MoveStructTag>>()
-    {
-        println!("0x1::{}::{}", r.module, r.name);
-    }
-    assert_eq!(resources.len(), 4);
-    assert_eq!(resources, all_resources[0..4].to_vec());
+    assert_eq!(resources.len(), 5);
+    assert_eq!(resources, all_resources[0..5].to_vec());
 
     // Make a request using the cursor. Assert the 5 results we get back are the next 5.
     let req = warp::test::request().method("GET").path(&format!(
@@ -282,7 +246,7 @@ async fn test_get_account_resources_with_pagination() {
     let cursor_header = StateKeyWrapper::from_str(cursor_header.to_str().unwrap()).unwrap();
     let resources: Vec<MoveResource> = serde_json::from_slice(resp.body()).unwrap();
     assert_eq!(resources.len(), 5);
-    assert_eq!(resources, all_resources[4..9].to_vec());
+    assert_eq!(resources, all_resources[5..10].to_vec());
 
     // Get the rest of the resources, assert there is no cursor now.
     let req = warp::test::request().method("GET").path(&format!(
@@ -294,8 +258,8 @@ async fn test_get_account_resources_with_pagination() {
     assert_eq!(resp.status(), 200);
     assert!(!resp.headers().contains_key("X-Aptos-Cursor"));
     let resources: Vec<MoveResource> = serde_json::from_slice(resp.body()).unwrap();
-    assert_eq!(resources.len(), all_resources.len() - 9);
-    assert_eq!(resources, all_resources[9..].to_vec());
+    assert_eq!(resources.len(), all_resources.len() - 10);
+    assert_eq!(resources, all_resources[10..].to_vec());
 }
 
 // Same as the above test but for modules.

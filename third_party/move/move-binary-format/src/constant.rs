@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::file_format::{Constant, SignatureToken};
-use move_core_types::value::{MoveTypeLayout, MoveValue};
+use move_core_types::value::{LayoutTag, MoveTypeLayout, MoveValue};
 
 fn sig_to_ty(sig: &SignatureToken) -> Option<MoveTypeLayout> {
     match sig {
@@ -25,8 +25,8 @@ fn sig_to_ty(sig: &SignatureToken) -> Option<MoveTypeLayout> {
     }
 }
 
-fn construct_ty_for_constant(layout: &MoveTypeLayout) -> Option<SignatureToken> {
-    match layout {
+fn ty_to_sig(ty: &MoveTypeLayout) -> Option<SignatureToken> {
+    match ty {
         MoveTypeLayout::Address => Some(SignatureToken::Address),
         MoveTypeLayout::Signer => Some(SignatureToken::Signer),
         MoveTypeLayout::U8 => Some(SignatureToken::U8),
@@ -35,21 +35,20 @@ fn construct_ty_for_constant(layout: &MoveTypeLayout) -> Option<SignatureToken> 
         MoveTypeLayout::U64 => Some(SignatureToken::U64),
         MoveTypeLayout::U128 => Some(SignatureToken::U128),
         MoveTypeLayout::U256 => Some(SignatureToken::U256),
-        MoveTypeLayout::Vector(l) => Some(SignatureToken::Vector(Box::new(
-            construct_ty_for_constant(l.as_ref())?,
-        ))),
+        MoveTypeLayout::Vector(v) => Some(SignatureToken::Vector(Box::new(ty_to_sig(v.as_ref())?))),
         MoveTypeLayout::Struct(_) => None,
         MoveTypeLayout::Bool => Some(SignatureToken::Bool),
-
-        // It is not possible to have native layout for constant values.
-        MoveTypeLayout::Native(_, _layout) => None,
+        MoveTypeLayout::Tagged(tag, layout) => match tag {
+            // Ignore aggregator / snapshot mappings.
+            LayoutTag::IdentifierMapping(_) => ty_to_sig(layout.as_ref()),
+        },
     }
 }
 
 impl Constant {
-    pub fn serialize_constant(layout: &MoveTypeLayout, v: &MoveValue) -> Option<Self> {
+    pub fn serialize_constant(ty: &MoveTypeLayout, v: &MoveValue) -> Option<Self> {
         Some(Self {
-            type_: construct_ty_for_constant(layout)?,
+            type_: ty_to_sig(ty)?,
             data: v.simple_serialize()?,
         })
     }

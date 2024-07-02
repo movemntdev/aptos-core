@@ -14,6 +14,7 @@ rust-version = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
+aptos-block-partitioner = { workspace = true }
 aptos-crypto = { workspace = true }
 aptos-drop-helper = { workspace = true }
 aptos-scratchpad = { workspace = true }
@@ -21,7 +22,7 @@ aptos-secure-net = { workspace = true }
 aptos-storage-interface = { workspace = true }
 aptos-types = { workspace = true }
 bcs = { workspace = true }
-criterion = { workspace = true }
+dashmap = { workspace = true }
 itertools = { workspace = true }
 once_cell = { workspace = true }
 serde = { workspace = true }
@@ -33,8 +34,3 @@ aptos-types = { workspace = true, features = ["fuzzing"] }
 [features]
 default = []
 fuzzing = ["aptos-crypto/fuzzing", "aptos-types/fuzzing"]
-bench = []
-
-[[bench]]
-name = "default"
-harness = false

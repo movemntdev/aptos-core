@@ -9,8 +9,7 @@ module 0x42::DuplicateFunction {
     }
 
     fun double(x: u8): u8 {
-        x
+        x * 2
     }
-
     spec double (x: u8) : u8 {}
 }

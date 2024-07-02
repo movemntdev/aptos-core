@@ -18,7 +18,7 @@ use aptos_types::{
     transaction::Version,
 };
 use proptest::prelude::*;
-use std::{collections::BTreeMap, io::Cursor, panic, rc::Rc};
+use std::{io::Cursor, panic, rc::Rc};
 
 type Node = super::Node<crate::test_helper::ValueBlob>;
 
@@ -86,7 +86,7 @@ fn test_encode_decode() {
         (ValueBlob::from(vec![0x01]), 0),
     );
 
-    let mut children = BTreeMap::new();
+    let mut children = Children::default();
     children.insert(
         Nibble::from(1),
         Child::new(leaf1_node.hash(), 0 /* version */, NodeType::Leaf),
@@ -98,7 +98,7 @@ fn test_encode_decode() {
 
     let account_key = HashValue::random();
     let nodes = vec![
-        Node::new_internal(Children::from_sorted(children)),
+        Node::new_internal(children),
         Node::new_leaf(
             account_key,
             HashValue::random(),
@@ -143,16 +143,19 @@ proptest! {
 
 #[test]
 fn test_internal_validity() {
-    let result = panic::catch_unwind(|| InternalNode::new(Children::from_sorted(BTreeMap::new())));
+    let result = panic::catch_unwind(|| {
+        let children = Children::default();
+        InternalNode::new(children)
+    });
     assert!(result.is_err());
 
     let result = panic::catch_unwind(|| {
-        let mut children = BTreeMap::new();
+        let mut children = Children::default();
         children.insert(
             Nibble::from(1),
             Child::new(HashValue::random(), 0 /* version */, NodeType::Leaf),
         );
-        InternalNode::new(Children::from_sorted(children));
+        InternalNode::new(children);
     });
     assert!(result.is_ok());
 }
@@ -173,7 +176,7 @@ proptest! {
     #[test]
     fn two_leaves_test1(index1 in (0..8u8).prop_map(Nibble::from), index2 in (8..16u8).prop_map(Nibble::from)) {
         let internal_node_key = random_63nibbles_node_key();
-        let mut children = BTreeMap::new();
+        let mut children = Children::default();
 
         let leaf1_node_key = gen_leaf_keys(0 /* version */, internal_node_key.nibble_path(), index1).0;
         let leaf2_node_key = gen_leaf_keys(1 /* version */, internal_node_key.nibble_path(), index2).0;
@@ -182,7 +185,7 @@ proptest! {
 
         children.insert(index1, Child::new(hash1, 0 /* version */, NodeType::Leaf));
         children.insert(index2, Child::new(hash2, 1 /* version */, NodeType::Leaf));
-        let internal_node = InternalNode::new(Children::from_sorted(children));
+        let internal_node = InternalNode::new(children);
 
         // Internal node will have a structure below
         //
@@ -196,13 +199,13 @@ proptest! {
 
         for i in 0..8 {
             prop_assert_eq!(
-                internal_node.get_child_with_siblings_for_test::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
+                internal_node.get_child_with_siblings::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
                 (Some(leaf1_node_key.clone()), vec![hash2.into()])
             );
         }
         for i in 8..16 {
             prop_assert_eq!(
-                internal_node.get_child_with_siblings_for_test::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
+                internal_node.get_child_with_siblings::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
                 (Some(leaf2_node_key.clone()), vec![hash1.into()])
             );
         }
@@ -212,7 +215,7 @@ proptest! {
     #[test]
     fn two_leaves_test2(index1 in (4..6u8).prop_map(Nibble::from), index2 in (6..8u8).prop_map(Nibble::from)) {
         let internal_node_key = random_63nibbles_node_key();
-        let mut children = BTreeMap::new();
+        let mut children = Children::default();
 
         let leaf1_node_key = gen_leaf_keys(0 /* version */, internal_node_key.nibble_path(), index1).0;
         let leaf2_node_key = gen_leaf_keys(1 /* version */, internal_node_key.nibble_path(), index2).0;
@@ -221,7 +224,7 @@ proptest! {
 
         children.insert(index1, Child::new(hash1, 0 /* version */, NodeType::Leaf));
         children.insert(index2, Child::new(hash2, 1 /* version */, NodeType::Leaf));
-        let internal_node = InternalNode::new(Children::from_sorted(children));
+        let internal_node = InternalNode::new(children);
 
         // Internal node will have a structure below
         //
@@ -243,14 +246,14 @@ proptest! {
 
         for i in 0..4 {
             prop_assert_eq!(
-                internal_node.get_child_with_siblings_for_test::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
+                internal_node.get_child_with_siblings::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
                 (None, vec![(*SPARSE_MERKLE_PLACEHOLDER_HASH).into(), hash_x1.into()])
             );
         }
 
         for i in 4..6 {
             prop_assert_eq!(
-                internal_node.get_child_with_siblings_for_test::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
+                internal_node.get_child_with_siblings::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
                 (
                     Some(leaf1_node_key.clone()),
                     vec![
@@ -264,7 +267,7 @@ proptest! {
 
         for i in 6..8 {
             prop_assert_eq!(
-                internal_node.get_child_with_siblings_for_test::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
+                internal_node.get_child_with_siblings::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
                 (
                     Some(leaf2_node_key.clone()),
                     vec![
@@ -278,7 +281,7 @@ proptest! {
 
         for i in 8..16 {
             prop_assert_eq!(
-                internal_node.get_child_with_siblings_for_test::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
+                internal_node.get_child_with_siblings::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
                 (None, vec![hash_x2.into()])
             );
         }
@@ -288,7 +291,7 @@ proptest! {
     #[test]
     fn three_leaves_test1(index1 in (0..4u8).prop_map(Nibble::from), index2 in (4..8u8).prop_map(Nibble::from), index3 in (8..16u8).prop_map(Nibble::from)) {
         let internal_node_key = random_63nibbles_node_key();
-        let mut children = BTreeMap::new();
+        let mut children = Children::default();
 
         let leaf1_node_key = gen_leaf_keys(0 /* version */, internal_node_key.nibble_path(), index1).0;
         let leaf2_node_key = gen_leaf_keys(1 /* version */, internal_node_key.nibble_path(), index2).0;
@@ -301,7 +304,7 @@ proptest! {
         children.insert(index1, Child::new(hash1, 0 /* version */, NodeType::Leaf));
         children.insert(index2, Child::new(hash2, 1 /* version */, NodeType::Leaf));
         children.insert(index3, Child::new(hash3, 2 /* version */, NodeType::Leaf));
-        let internal_node = InternalNode::new(Children::from_sorted(children));
+        let internal_node = InternalNode::new(children);
         // Internal node will have a structure below
         //
         //               root
@@ -317,21 +320,21 @@ proptest! {
 
         for i in 0..4 {
             prop_assert_eq!(
-                internal_node.get_child_with_siblings_for_test::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
+                internal_node.get_child_with_siblings::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
                 (Some(leaf1_node_key.clone()),vec![hash3.into(), hash2.into()])
             );
         }
 
         for i in 4..8 {
             prop_assert_eq!(
-                internal_node.get_child_with_siblings_for_test::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
+                internal_node.get_child_with_siblings::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
                 (Some(leaf2_node_key.clone()),vec![hash3.into(), hash1.into()])
             );
         }
 
         for i in 8..16 {
             prop_assert_eq!(
-                internal_node.get_child_with_siblings_for_test::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
+                internal_node.get_child_with_siblings::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
                 (Some(leaf3_node_key.clone()),vec![hash_x.into()])
             );
         }
@@ -340,7 +343,7 @@ proptest! {
     #[test]
     fn mixed_nodes_test(index1 in (0..2u8).prop_map(Nibble::from), index2 in (8..16u8).prop_map(Nibble::from)) {
         let internal_node_key = random_63nibbles_node_key();
-        let mut children = BTreeMap::new();
+        let mut children = Children::default();
 
         let leaf1_node_key = gen_leaf_keys(0 /* version */, internal_node_key.nibble_path(), index1).0;
         let internal2_node_key = gen_leaf_keys(1 /* version */, internal_node_key.nibble_path(), 2.into()).0;
@@ -355,7 +358,7 @@ proptest! {
         children.insert(2.into(), Child::new(hash2, 1, NodeType::Internal {leaf_count: 2}));
         children.insert(7.into(), Child::new(hash3, 2, NodeType::Internal {leaf_count: 3}));
         children.insert(index2, Child::new(hash4, 3, NodeType::Leaf));
-        let internal_node = InternalNode::new(Children::from_sorted(children));
+        let internal_node = InternalNode::new(children);
         // Internal node (B) will have a structure below
         //
         //                   B (root hash)
@@ -382,7 +385,7 @@ proptest! {
 
         for i in 0..2 {
             prop_assert_eq!(
-                internal_node.get_child_with_siblings_for_test::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
+                internal_node.get_child_with_siblings::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
                 (
                     Some(leaf1_node_key.clone()),
                     vec![hash4.into(), hash_x4.into(), hash_x1.into()]
@@ -391,7 +394,7 @@ proptest! {
         }
 
         prop_assert_eq!(
-                internal_node.get_child_with_siblings_for_test::<StateKey, DummyReader>(&internal_node_key, 2.into(), None).unwrap(),
+                internal_node.get_child_with_siblings::<StateKey, DummyReader>(&internal_node_key, 2.into(), None).unwrap(),
             (
                 Some(internal2_node_key),
                 vec![
@@ -404,7 +407,7 @@ proptest! {
         );
 
         prop_assert_eq!(
-                internal_node.get_child_with_siblings_for_test::<StateKey, DummyReader>(&internal_node_key, 3.into(), None).unwrap(),
+                internal_node.get_child_with_siblings::<StateKey, DummyReader>(&internal_node_key, 3.into(), None).unwrap(),
 
             (
                 None,
@@ -414,7 +417,7 @@ proptest! {
 
         for i in 4..6 {
             prop_assert_eq!(
-                internal_node.get_child_with_siblings_for_test::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
+                internal_node.get_child_with_siblings::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
                 (
                     None,
                     vec![hash4.into(), hash_x2.into(), hash_x3.into()]
@@ -423,7 +426,7 @@ proptest! {
         }
 
         prop_assert_eq!(
-                internal_node.get_child_with_siblings_for_test::<StateKey, DummyReader>(&internal_node_key, 6.into(), None).unwrap(),
+                internal_node.get_child_with_siblings::<StateKey, DummyReader>(&internal_node_key, 6.into(), None).unwrap(),
             (
                 None,
                 vec![
@@ -436,7 +439,7 @@ proptest! {
         );
 
         prop_assert_eq!(
-                internal_node.get_child_with_siblings_for_test::<StateKey, DummyReader>(&internal_node_key, 7.into(), None).unwrap(),
+                internal_node.get_child_with_siblings::<StateKey, DummyReader>(&internal_node_key, 7.into(), None).unwrap(),
             (
                 Some(internal3_node_key),
                 vec![
@@ -450,7 +453,7 @@ proptest! {
 
         for i in 8..16 {
             prop_assert_eq!(
-                internal_node.get_child_with_siblings_for_test::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
+                internal_node.get_child_with_siblings::<StateKey, DummyReader>(&internal_node_key, i.into(), None).unwrap(),
                 (Some(leaf4_node_key.clone()), vec![hash_x5.into()])
             );
         }
@@ -462,7 +465,7 @@ fn test_internal_hash_and_proof() {
     // non-leaf case 1
     {
         let internal_node_key = random_63nibbles_node_key();
-        let mut children = BTreeMap::new();
+        let mut children = Children::default();
 
         let index1 = Nibble::from(4);
         let index2 = Nibble::from(15);
@@ -496,7 +499,7 @@ fn test_internal_hash_and_proof() {
                 NodeType::Internal { leaf_count: 1 },
             ),
         );
-        let internal_node = InternalNode::new(Children::from_sorted(children));
+        let internal_node = InternalNode::new(children);
         // Internal node (B) will have a structure below
         //
         //              root
@@ -525,7 +528,7 @@ fn test_internal_hash_and_proof() {
         for i in 0..4 {
             assert_eq!(
                 internal_node
-                    .get_child_with_siblings_for_test::<StateKey, DummyReader>(
+                    .get_child_with_siblings::<StateKey, DummyReader>(
                         &internal_node_key,
                         i.into(),
                         None
@@ -537,11 +540,7 @@ fn test_internal_hash_and_proof() {
 
         assert_eq!(
             internal_node
-                .get_child_with_siblings_for_test::<StateKey, DummyReader>(
-                    &internal_node_key,
-                    index1,
-                    None
-                )
+                .get_child_with_siblings::<StateKey, DummyReader>(&internal_node_key, index1, None)
                 .unwrap(),
             (Some(child1_node_key), vec![
                 hash_x6.into(),
@@ -553,7 +552,7 @@ fn test_internal_hash_and_proof() {
 
         assert_eq!(
             internal_node
-                .get_child_with_siblings_for_test::<StateKey, DummyReader>(
+                .get_child_with_siblings::<StateKey, DummyReader>(
                     &internal_node_key,
                     5.into(),
                     None
@@ -569,7 +568,7 @@ fn test_internal_hash_and_proof() {
         for i in 6..8 {
             assert_eq!(
                 internal_node
-                    .get_child_with_siblings_for_test::<StateKey, DummyReader>(
+                    .get_child_with_siblings::<StateKey, DummyReader>(
                         &internal_node_key,
                         i.into(),
                         None
@@ -586,7 +585,7 @@ fn test_internal_hash_and_proof() {
         for i in 8..12 {
             assert_eq!(
                 internal_node
-                    .get_child_with_siblings_for_test::<StateKey, DummyReader>(
+                    .get_child_with_siblings::<StateKey, DummyReader>(
                         &internal_node_key,
                         i.into(),
                         None
@@ -599,7 +598,7 @@ fn test_internal_hash_and_proof() {
         for i in 12..14 {
             assert_eq!(
                 internal_node
-                    .get_child_with_siblings_for_test::<StateKey, DummyReader>(
+                    .get_child_with_siblings::<StateKey, DummyReader>(
                         &internal_node_key,
                         i.into(),
                         None
@@ -614,7 +613,7 @@ fn test_internal_hash_and_proof() {
         }
         assert_eq!(
             internal_node
-                .get_child_with_siblings_for_test::<StateKey, DummyReader>(
+                .get_child_with_siblings::<StateKey, DummyReader>(
                     &internal_node_key,
                     14.into(),
                     None
@@ -629,11 +628,7 @@ fn test_internal_hash_and_proof() {
         );
         assert_eq!(
             internal_node
-                .get_child_with_siblings_for_test::<StateKey, DummyReader>(
-                    &internal_node_key,
-                    index2,
-                    None
-                )
+                .get_child_with_siblings::<StateKey, DummyReader>(&internal_node_key, index2, None)
                 .unwrap(),
             (Some(child2_node_key), vec![
                 hash_x3.into(),
@@ -647,7 +642,7 @@ fn test_internal_hash_and_proof() {
     // non-leaf case 2
     {
         let internal_node_key = random_63nibbles_node_key();
-        let mut children = BTreeMap::new();
+        let mut children = Children::default();
 
         let index1 = Nibble::from(0);
         let index2 = Nibble::from(7);
@@ -682,7 +677,7 @@ fn test_internal_hash_and_proof() {
                 NodeType::Internal { leaf_count: 1 },
             ),
         );
-        let internal_node = InternalNode::new(Children::from_sorted(children));
+        let internal_node = InternalNode::new(children);
         // Internal node will have a structure below
         //
         //                     root
@@ -709,7 +704,7 @@ fn test_internal_hash_and_proof() {
 
         assert_eq!(
             internal_node
-                .get_child_with_siblings_for_test::<StateKey, DummyReader>(
+                .get_child_with_siblings::<StateKey, DummyReader>(
                     &internal_node_key,
                     0.into(),
                     None
@@ -725,7 +720,7 @@ fn test_internal_hash_and_proof() {
 
         assert_eq!(
             internal_node
-                .get_child_with_siblings_for_test::<StateKey, DummyReader>(
+                .get_child_with_siblings::<StateKey, DummyReader>(
                     &internal_node_key,
                     1.into(),
                     None
@@ -742,7 +737,7 @@ fn test_internal_hash_and_proof() {
         for i in 2..4 {
             assert_eq!(
                 internal_node
-                    .get_child_with_siblings_for_test::<StateKey, DummyReader>(
+                    .get_child_with_siblings::<StateKey, DummyReader>(
                         &internal_node_key,
                         i.into(),
                         None
@@ -759,7 +754,7 @@ fn test_internal_hash_and_proof() {
         for i in 4..6 {
             assert_eq!(
                 internal_node
-                    .get_child_with_siblings_for_test::<StateKey, DummyReader>(
+                    .get_child_with_siblings::<StateKey, DummyReader>(
                         &internal_node_key,
                         i.into(),
                         None
@@ -775,7 +770,7 @@ fn test_internal_hash_and_proof() {
 
         assert_eq!(
             internal_node
-                .get_child_with_siblings_for_test::<StateKey, DummyReader>(
+                .get_child_with_siblings::<StateKey, DummyReader>(
                     &internal_node_key,
                     6.into(),
                     None
@@ -791,7 +786,7 @@ fn test_internal_hash_and_proof() {
 
         assert_eq!(
             internal_node
-                .get_child_with_siblings_for_test::<StateKey, DummyReader>(
+                .get_child_with_siblings::<StateKey, DummyReader>(
                     &internal_node_key,
                     7.into(),
                     None
@@ -808,7 +803,7 @@ fn test_internal_hash_and_proof() {
         for i in 8..16 {
             assert_eq!(
                 internal_node
-                    .get_child_with_siblings_for_test::<StateKey, DummyReader>(
+                    .get_child_with_siblings::<StateKey, DummyReader>(
                         &internal_node_key,
                         i.into(),
                         None
@@ -992,7 +987,7 @@ proptest! {
     ) {
         for n in 0..16u8 {
             prop_assert_eq!(
-                node.get_child_with_siblings_for_test::<StateKey, DummyReader>(&node_key, n.into(), None).unwrap(),
+                node.get_child_with_siblings::<StateKey, DummyReader>(&node_key, n.into(), None).unwrap(),
                 NaiveInternalNode::from_clever_node(&node).get_child_with_siblings(&node_key, n)
             )
         }

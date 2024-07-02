@@ -10,7 +10,7 @@ info:
     name: Apache 2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
 servers:
-- url: /
+- url: /v1
 tags:
 - name: Captcha
   description: Captcha API

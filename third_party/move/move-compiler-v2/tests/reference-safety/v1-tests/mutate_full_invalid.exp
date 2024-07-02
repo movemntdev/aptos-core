@@ -1,30 +1,12 @@
 
 Diagnostics:
-error: mutable reference in local `x` requires exclusive access but is borrowed
-   ┌─ tests/reference-safety/v1-tests/mutate_full_invalid.move:13:9
-   │
-13 │         *x = 0;
-   │         ^^^^^^ requirement enforced here
-14 │         *f;
-   │         -- conflicting reference `f` used here
-
 error: cannot write to reference in local `x` which is still borrowed
    ┌─ tests/reference-safety/v1-tests/mutate_full_invalid.move:18:9
    │
 17 │         let f = freeze(x);
-   │                 --------- previous freeze
+   │                 --------- previous call result
 18 │         *x = 0;
    │         ^^^^^^ written here
-
-error: mutable reference in local `x` requires exclusive access but is borrowed
-   ┌─ tests/reference-safety/v1-tests/mutate_full_invalid.move:18:9
-   │
-17 │         let f = freeze(x);
-   │                 --------- previous freeze
-18 │         *x = 0;
-   │         ^^^^^^ requirement enforced here
-19 │         *f;
-   │         -- conflicting reference `f` used here
 
 error: cannot write to reference in local `x` which is still borrowed
    ┌─ tests/reference-safety/v1-tests/mutate_full_invalid.move:23:9
@@ -32,23 +14,10 @@ error: cannot write to reference in local `x` which is still borrowed
 22 │         let f = id(x);
    │                 -----
    │                 │  │
-   │                 │  previous freeze
+   │                 │  previous call result
    │                 used by call result
 23 │         *x = 0;
    │         ^^^^^^ written here
-
-error: mutable reference in local `x` requires exclusive access but is borrowed
-   ┌─ tests/reference-safety/v1-tests/mutate_full_invalid.move:23:9
-   │
-22 │         let f = id(x);
-   │                 -----
-   │                 │  │
-   │                 │  previous freeze
-   │                 used by call result
-23 │         *x = 0;
-   │         ^^^^^^ requirement enforced here
-24 │         *f;
-   │         -- conflicting reference `f` used here
 
 error: cannot write to reference in local `x` which is still borrowed
    ┌─ tests/reference-safety/v1-tests/mutate_full_invalid.move:28:9
@@ -57,13 +26,3 @@ error: cannot write to reference in local `x` which is still borrowed
    │                 --------- previous mutable call result
 28 │         *x = 0;
    │         ^^^^^^ written here
-
-error: mutable reference in local `x` requires exclusive access but is borrowed
-   ┌─ tests/reference-safety/v1-tests/mutate_full_invalid.move:28:9
-   │
-27 │         let f = id_mut(x);
-   │                 --------- previous mutable call result
-28 │         *x = 0;
-   │         ^^^^^^ requirement enforced here
-29 │         *f;
-   │         -- conflicting reference `f` used here

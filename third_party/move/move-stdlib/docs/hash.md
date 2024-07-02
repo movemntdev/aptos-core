@@ -61,18 +61,5 @@ as in the Move prover's prelude.
 
 </details>
 
-<details>
-<summary>Specification</summary>
-
-
-
-<pre><code><b>aborts_if</b> [abstract] <b>false</b>;
-<b>ensures</b> [abstract] len(result) == 32;
-</code></pre>
-
-
-
-</details>
-
 
 [//]: # ("File containing references which can be used from documentation")

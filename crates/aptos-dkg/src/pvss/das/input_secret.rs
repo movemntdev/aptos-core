@@ -1,5 +1,4 @@
 // Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
 
 use crate::pvss::{
     das, dealt_pub_key::g2::DealtPubKey, dealt_secret_key::g1::DealtSecretKey,

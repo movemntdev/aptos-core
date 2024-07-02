@@ -1,5 +1,4 @@
 // Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
 
 use crate::{
     sharded_block_partitioner::ShardedBlockPartitioner, BlockPartitioner, PartitionerConfig,

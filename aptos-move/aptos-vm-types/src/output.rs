@@ -3,12 +3,12 @@
 
 use crate::change_set::VMChangeSet;
 use aptos_aggregator::{resolver::AggregatorV1Resolver, types::code_invariant_error};
-use aptos_types::fee_statement::FeeStatement;
 use aptos_types::{
     contract_event::ContractEvent, //contract_event::ContractEvent,
     delayed_fields::PanicError,
+    fee_statement::FeeStatement,
     state_store::state_key::StateKey,
-    transaction::{TransactionAuxiliaryData, TransactionOutput, TransactionStatus},
+    transaction::{TransactionOutput, TransactionStatus},
     write_set::WriteOp,
 };
 use move_core_types::vm_status::{StatusCode, VMStatus};
@@ -22,7 +22,6 @@ pub struct VMOutput {
     change_set: VMChangeSet,
     fee_statement: FeeStatement,
     status: TransactionStatus,
-    auxiliary_data: TransactionAuxiliaryData,
 }
 
 impl VMOutput {
@@ -30,13 +29,11 @@ impl VMOutput {
         change_set: VMChangeSet,
         fee_statement: FeeStatement,
         status: TransactionStatus,
-        auxiliary_data: TransactionAuxiliaryData,
     ) -> Self {
         Self {
             change_set,
             fee_statement,
             status,
-            auxiliary_data,
         }
     }
 
@@ -45,40 +42,15 @@ impl VMOutput {
             change_set: VMChangeSet::empty(),
             fee_statement: FeeStatement::zero(),
             status,
-            auxiliary_data: TransactionAuxiliaryData::default(),
         }
     }
 
-    pub fn unpack(
-        self,
-    ) -> (
-        VMChangeSet,
-        u64,
-        TransactionStatus,
-        TransactionAuxiliaryData,
-    ) {
-        (
-            self.change_set,
-            self.fee_statement.gas_used(),
-            self.status,
-            self.auxiliary_data,
-        )
+    pub fn unpack(self) -> (VMChangeSet, u64, TransactionStatus) {
+        (self.change_set, self.fee_statement.gas_used(), self.status)
     }
 
-    pub fn unpack_with_fee_statement(
-        self,
-    ) -> (
-        VMChangeSet,
-        FeeStatement,
-        TransactionStatus,
-        TransactionAuxiliaryData,
-    ) {
-        (
-            self.change_set,
-            self.fee_statement,
-            self.status,
-            self.auxiliary_data,
-        )
+    pub fn unpack_with_fee_statement(self) -> (VMChangeSet, FeeStatement, TransactionStatus) {
+        (self.change_set, self.fee_statement, self.status)
     }
 
     pub fn change_set(&self) -> &VMChangeSet {
@@ -101,14 +73,10 @@ impl VMOutput {
         &self.status
     }
 
-    pub fn auxiliary_data(&self) -> &TransactionAuxiliaryData {
-        &self.auxiliary_data
-    }
-
     /// Materializes delta sets.
     /// Guarantees that if deltas are materialized successfully, the output
     /// has an empty delta set.
-    /// TODO `[agg_v2](cleanup)` Consolidate materialization paths. See either:
+    /// TODO[agg_v2](cleanup) Consolidate materialization paths. See either:
     /// - if we can/should move try_materialize_aggregator_v1_delta_set into
     ///   executor.rs
     /// - move all materialization (including delayed fields) into change_set
@@ -140,7 +108,7 @@ impl VMOutput {
         self.try_materialize(resolver)?;
         Self::convert_to_transaction_output(self).map_err(|e| {
             VMStatus::error(
-                StatusCode::DELAYED_MATERIALIZATION_CODE_INVARIANT_ERROR,
+                StatusCode::DELAYED_FIELDS_CODE_INVARIANT_ERROR,
                 Some(e.to_string()),
             )
         })
@@ -148,11 +116,11 @@ impl VMOutput {
 
     /// Constructs `TransactionOutput`, without doing `try_materialize`
     pub fn into_transaction_output(self) -> anyhow::Result<TransactionOutput, VMStatus> {
-        let (change_set, fee_statement, status, auxiliary_data) = self.unpack_with_fee_statement();
-        let output = VMOutput::new(change_set, fee_statement, status, auxiliary_data);
+        let (change_set, fee_statement, status) = self.unpack_with_fee_statement();
+        let output = VMOutput::new(change_set, fee_statement, status);
         Self::convert_to_transaction_output(output).map_err(|e| {
             VMStatus::error(
-                StatusCode::DELAYED_MATERIALIZATION_CODE_INVARIANT_ERROR,
+                StatusCode::DELAYED_FIELDS_CODE_INVARIANT_ERROR,
                 Some(e.to_string()),
             )
         })
@@ -161,15 +129,9 @@ impl VMOutput {
     fn convert_to_transaction_output(
         materialized_output: VMOutput,
     ) -> Result<TransactionOutput, PanicError> {
-        let (vm_change_set, gas_used, status, auxiliary_data) = materialized_output.unpack();
+        let (vm_change_set, gas_used, status) = materialized_output.unpack();
         let (write_set, events) = vm_change_set.try_into_storage_change_set()?.into_inner();
-        Ok(TransactionOutput::new(
-            write_set,
-            events,
-            gas_used,
-            status,
-            auxiliary_data,
-        ))
+        Ok(TransactionOutput::new(write_set, events, gas_used, status))
     }
 
     /// Updates the VMChangeSet based on the input aggregator v1 deltas, patched resource write set,

@@ -6,12 +6,11 @@ use crate::{
     index, CustomEventConfig, LogIngestConfig, MetricsEndpointsConfig, TelemetryServiceConfig,
 };
 use aptos_crypto::{x25519, Uniform};
-use aptos_infallible::RwLock;
 use aptos_rest_client::aptos_api_types::mime_types;
 use rand::SeedableRng;
 use reqwest::header::AUTHORIZATION;
 use serde_json::Value;
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 use warp::{
     http::{header::CONTENT_TYPE, Response},
     hyper::body::Bytes,
@@ -51,7 +50,6 @@ pub async fn new_test_context() -> TestContext {
             jwt_service,
             HashMap::new(),
             HashMap::new(),
-            Arc::new(RwLock::new(HashMap::new())),
         ),
     )
 }

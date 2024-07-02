@@ -1,79 +1,55 @@
 
 Diagnostics:
-error: cannot use `u128` with an operator which expects a value of type `u8`
+error: invalid call of `==`: expected `u8` but found `u128` for argument 2
    ┌─ tests/checking/typing/eq_invalid.move:13:21
    │
 13 │         (0: u8) == (1: u128);
    │                     ^
 
-error: cannot use `bool` with an operator which expects a value of type `integer`
+error: invalid call of `==`: expected `integer` but found `bool` for argument 2
    ┌─ tests/checking/typing/eq_invalid.move:14:14
    │
 14 │         0 == false;
    │              ^^^^^
 
-error: reference type `&integer` is not allowed as a type argument (type was inferred)
-   ┌─ tests/checking/typing/eq_invalid.move:15:12
+error: invalid call of `==`: expected `&integer` but found `integer` for argument 2
+   ┌─ tests/checking/typing/eq_invalid.move:15:15
    │
 15 │         &0 == 1;
-   │            ^^
-   │
-   = required by instantiating type parameter `T` of function `==`
+   │               ^
 
-error: cannot use `&integer` with an operator which expects a value of type `integer`
+error: invalid call of `==`: expected `integer` but found `&integer` for argument 2
    ┌─ tests/checking/typing/eq_invalid.move:16:14
    │
 16 │         1 == &0;
    │              ^^
 
-error: cannot use `&S` with an operator which expects a value of type `S`
+error: invalid call of `==`: expected `M::S` but found `&M::S` for argument 2
    ┌─ tests/checking/typing/eq_invalid.move:17:14
    │
 17 │         s == s_ref;
    │              ^^^^^
 
-error: reference type `&mut S` is not allowed as a type argument (type was inferred)
-   ┌─ tests/checking/typing/eq_invalid.move:18:15
+error: invalid call of `==`: expected `&mut M::S` but found `M::S` for argument 2
+   ┌─ tests/checking/typing/eq_invalid.move:18:18
    │
 18 │         s_mut == s;
-   │               ^^
-   │
-   = required by instantiating type parameter `T` of function `==`
+   │                  ^
 
-error: unable to infer instantiation of type `G2<_>` (consider providing type arguments or annotating the type)
+error: unable to infer type: `M::G2<?8>`
    ┌─ tests/checking/typing/eq_invalid.move:28:9
    │
 28 │         G2{} == G2{};
    │         ^^^^
 
-error: tuple type `()` is not allowed as a type argument (type was inferred)
-   ┌─ tests/checking/typing/eq_invalid.move:33:12
-   │
-33 │         () == ();
-   │            ^^
-   │
-   = required by instantiating type parameter `T` of function `==`
-
-error: tuple type `(integer, integer)` is not allowed as a type argument (type was inferred)
-   ┌─ tests/checking/typing/eq_invalid.move:34:16
-   │
-34 │         (0, 1) == (0, 1);
-   │                ^^
-   │
-   = required by instantiating type parameter `T` of function `==`
-
-error: tuple type `(integer, integer, integer)` is not allowed as a type argument (type was inferred)
-   ┌─ tests/checking/typing/eq_invalid.move:35:19
+error: invalid call of `==`: tuples have different arity (3 != 2) for argument 2
+   ┌─ tests/checking/typing/eq_invalid.move:35:22
    │
 35 │         (1, 2, 3) == (0, 1);
-   │                   ^^
-   │
-   = required by instantiating type parameter `T` of function `==`
+   │                      ^^^^^^
 
-error: tuple type `(integer, integer)` is not allowed as a type argument (type was inferred)
-   ┌─ tests/checking/typing/eq_invalid.move:36:16
+error: invalid call of `==`: tuples have different arity (2 != 3) for argument 2
+   ┌─ tests/checking/typing/eq_invalid.move:36:19
    │
 36 │         (0, 1) == (1, 2, 3);
-   │                ^^
-   │
-   = required by instantiating type parameter `T` of function `==`
+   │                   ^^^^^^^^^

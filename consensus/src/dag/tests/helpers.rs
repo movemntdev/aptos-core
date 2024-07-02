@@ -1,11 +1,7 @@
 // Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    dag::{
-        order_rule::TOrderRule,
-        types::{CertifiedNode, Extensions, Node, NodeCertificate, NodeMetadata},
-    },
+    dag::types::{CertifiedNode, Extensions, Node, NodeCertificate},
     payload_manager::TPayloadManager,
 };
 use aptos_consensus_types::common::{Author, Payload, Round};
@@ -19,14 +15,6 @@ impl TPayloadManager for MockPayloadManager {
     fn prefetch_payload_data(&self, _payload: &Payload, _timestamp: u64) {}
 }
 
-pub(super) struct MockOrderRule {}
-
-impl TOrderRule for MockOrderRule {
-    fn process_new_node(&self, _node_metadata: &NodeMetadata) {}
-
-    fn process_all(&self) {}
-}
-
 pub(crate) fn new_certified_node(
     round: Round,
     author: Author,
@@ -38,7 +26,7 @@ pub(crate) fn new_certified_node(
         author,
         0,
         vec![],
-        Payload::empty(false, true),
+        Payload::empty(false),
         parents,
         Extensions::empty(),
     );
@@ -52,12 +40,12 @@ pub(crate) fn new_node(
     parents: Vec<NodeCertificate>,
 ) -> Node {
     Node::new(
-        1,
+        0,
         round,
         author,
         timestamp,
         vec![],
-        Payload::empty(false, true),
+        Payload::empty(false),
         parents,
         Extensions::empty(),
     )
@@ -97,7 +85,7 @@ pub(crate) fn generate_dag_nodes(
                 nodes_at_round.push(None);
             }
         }
-        previous_round.clone_from(&nodes_at_round);
+        previous_round = nodes_at_round.clone();
         nodes.push(nodes_at_round);
     }
     nodes

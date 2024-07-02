@@ -115,14 +115,14 @@ impl MetadataView {
             .sorted()
             .rev()
             .find(|m| m.version <= target_version)
-            .cloned())
+            .map(Clone::clone))
     }
 
     pub fn expect_state_snapshot(&self, version: Version) -> Result<StateSnapshotBackupMeta> {
         self.state_snapshot_backups
             .iter()
             .find(|m| m.version == version)
-            .cloned()
+            .map(Clone::clone)
             .ok_or_else(|| anyhow!("State snapshot not found at version {}", version))
     }
 

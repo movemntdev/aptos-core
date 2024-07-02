@@ -9,7 +9,6 @@ fn can_generate_and_build_update_proposal() {
     let output_dir = tempfile::tempdir().unwrap();
 
     generate_update_proposal(&GenArgs {
-        gas_feature_version: None,
         output: Some(output_dir.path().to_string_lossy().to_string()),
     })
     .unwrap();

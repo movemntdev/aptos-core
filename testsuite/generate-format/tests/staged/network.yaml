@@ -180,10 +180,6 @@ ProtocolId:
       JWKConsensusRpcBcs: UNIT
     26:
       JWKConsensusRpcJson: UNIT
-    27:
-      ConsensusObserver: UNIT
-    28:
-      ConsensusObserverRpc: UNIT
 ProtocolIdSet:
   NEWTYPESTRUCT:
     TYPENAME: BitVec

@@ -10,8 +10,8 @@ use crate::{
 };
 use anyhow::bail;
 use aptos_consensus_types::{
-    pipelined_block::PipelinedBlock, quorum_cert::QuorumCert,
-    timeout_2chain::TwoChainTimeoutCertificate, wrapped_ledger_info::WrappedLedgerInfo,
+    executed_block::ExecutedBlock, quorum_cert::QuorumCert,
+    timeout_2chain::TwoChainTimeoutCertificate,
 };
 use aptos_crypto::HashValue;
 use aptos_logger::prelude::*;
@@ -22,24 +22,24 @@ use std::{
     sync::Arc,
 };
 
-/// This structure is a wrapper of [`ExecutedBlock`](aptos_consensus_types::pipelined_block::PipelinedBlock)
+/// This structure is a wrapper of [`ExecutedBlock`](aptos_consensus_types::executed_block::ExecutedBlock)
 /// that adds `children` field to know the parent-child relationship between blocks.
 struct LinkableBlock {
     /// Executed block that has raw block data and execution output.
-    executed_block: Arc<PipelinedBlock>,
+    executed_block: Arc<ExecutedBlock>,
     /// The set of children for cascading pruning. Note: a block may have multiple children.
     children: HashSet<HashValue>,
 }
 
 impl LinkableBlock {
-    pub fn new(block: PipelinedBlock) -> Self {
+    pub fn new(block: ExecutedBlock) -> Self {
         Self {
             executed_block: Arc::new(block),
             children: HashSet::new(),
         }
     }
 
-    pub fn executed_block(&self) -> &Arc<PipelinedBlock> {
+    pub fn executed_block(&self) -> &Arc<ExecutedBlock> {
         &self.executed_block
     }
 
@@ -80,9 +80,9 @@ pub struct BlockTree {
     /// The highest 2-chain timeout certificate (if any).
     highest_2chain_timeout_cert: Option<Arc<TwoChainTimeoutCertificate>>,
     /// The quorum certificate that has highest commit info.
-    highest_ordered_cert: Arc<WrappedLedgerInfo>,
+    highest_ordered_cert: Arc<QuorumCert>,
     /// The quorum certificate that has highest commit decision info.
-    highest_commit_cert: Arc<WrappedLedgerInfo>,
+    highest_commit_cert: Arc<QuorumCert>,
     /// Map of block id to its completed quorum certificate (2f + 1 votes)
     id_to_quorum_cert: HashMap<HashValue, Arc<QuorumCert>>,
     /// To keep the IDs of the elements that have been pruned from the tree but not cleaned up yet.
@@ -93,10 +93,10 @@ pub struct BlockTree {
 
 impl BlockTree {
     pub(super) fn new(
-        root: PipelinedBlock,
+        root: ExecutedBlock,
         root_quorum_cert: QuorumCert,
-        root_ordered_cert: WrappedLedgerInfo,
-        root_commit_cert: WrappedLedgerInfo,
+        root_ordered_cert: QuorumCert,
+        root_commit_cert: QuorumCert,
         max_pruned_blocks_in_mem: usize,
         highest_2chain_timeout_cert: Option<Arc<TwoChainTimeoutCertificate>>,
     ) -> Self {
@@ -173,22 +173,22 @@ impl BlockTree {
         self.id_to_block.contains_key(block_id)
     }
 
-    pub(super) fn get_block(&self, block_id: &HashValue) -> Option<Arc<PipelinedBlock>> {
+    pub(super) fn get_block(&self, block_id: &HashValue) -> Option<Arc<ExecutedBlock>> {
         self.get_linkable_block(block_id)
-            .map(|lb| lb.executed_block().clone())
+            .map(|lb| Arc::clone(lb.executed_block()))
     }
 
-    pub(super) fn ordered_root(&self) -> Arc<PipelinedBlock> {
+    pub(super) fn ordered_root(&self) -> Arc<ExecutedBlock> {
         self.get_block(&self.ordered_root_id)
             .expect("Root must exist")
     }
 
-    pub(super) fn commit_root(&self) -> Arc<PipelinedBlock> {
+    pub(super) fn commit_root(&self) -> Arc<ExecutedBlock> {
         self.get_block(&self.commit_root_id)
             .expect("Commit root must exist")
     }
 
-    pub(super) fn highest_certified_block(&self) -> Arc<PipelinedBlock> {
+    pub(super) fn highest_certified_block(&self) -> Arc<ExecutedBlock> {
         self.get_block(&self.highest_certified_block_id)
             .expect("Highest cerfified block must exist")
     }
@@ -206,11 +206,11 @@ impl BlockTree {
         self.highest_2chain_timeout_cert.replace(tc);
     }
 
-    pub(super) fn highest_ordered_cert(&self) -> Arc<WrappedLedgerInfo> {
+    pub(super) fn highest_ordered_cert(&self) -> Arc<QuorumCert> {
         Arc::clone(&self.highest_ordered_cert)
     }
 
-    pub(super) fn highest_commit_cert(&self) -> Arc<WrappedLedgerInfo> {
+    pub(super) fn highest_commit_cert(&self) -> Arc<QuorumCert> {
         Arc::clone(&self.highest_commit_cert)
     }
 
@@ -223,8 +223,8 @@ impl BlockTree {
 
     pub(super) fn insert_block(
         &mut self,
-        block: PipelinedBlock,
-    ) -> anyhow::Result<Arc<PipelinedBlock>> {
+        block: ExecutedBlock,
+    ) -> anyhow::Result<Arc<ExecutedBlock>> {
         let block_id = block.id();
         if let Some(existing_block) = self.get_block(&block_id) {
             debug!("Already had block {:?} for id {:?} when trying to add another block {:?} for the same id",
@@ -246,7 +246,7 @@ impl BlockTree {
         }
     }
 
-    fn update_highest_commit_cert(&mut self, new_commit_cert: WrappedLedgerInfo) {
+    fn update_highest_commit_cert(&mut self, new_commit_cert: QuorumCert) {
         if new_commit_cert.commit_info().round() > self.highest_commit_cert.commit_info().round() {
             self.highest_commit_cert = Arc::new(new_commit_cert);
             self.update_commit_root(self.highest_commit_cert.commit_info().id());
@@ -285,17 +285,10 @@ impl BlockTree {
             .or_insert_with(|| Arc::clone(&qc));
 
         if self.highest_ordered_cert.commit_info().round() < qc.commit_info().round() {
-            // Question: We are updating highest_ordered_cert but not highest_ordered_root. Is that fine?
-            self.highest_ordered_cert = Arc::new(qc.into_wrapped_ledger_info());
+            self.highest_ordered_cert = qc;
         }
 
         Ok(())
-    }
-
-    pub fn insert_ordered_cert(&mut self, ordered_cert: WrappedLedgerInfo) {
-        if ordered_cert.commit_info().round() > self.highest_ordered_cert.commit_info().round() {
-            self.highest_ordered_cert = Arc::new(ordered_cert);
-        }
     }
 
     /// Find the blocks to prune up to next_root_id (keep next_root_id's block). Any branches not
@@ -378,7 +371,7 @@ impl BlockTree {
         block_id: HashValue,
         root_id: HashValue,
         root_round: u64,
-    ) -> Option<Vec<Arc<PipelinedBlock>>> {
+    ) -> Option<Vec<Arc<ExecutedBlock>>> {
         let mut res = vec![];
         let mut cur_block_id = block_id;
         loop {
@@ -405,14 +398,14 @@ impl BlockTree {
     pub(super) fn path_from_ordered_root(
         &self,
         block_id: HashValue,
-    ) -> Option<Vec<Arc<PipelinedBlock>>> {
+    ) -> Option<Vec<Arc<ExecutedBlock>>> {
         self.path_from_root_to_block(block_id, self.ordered_root_id, self.ordered_root().round())
     }
 
     pub(super) fn path_from_commit_root(
         &self,
         block_id: HashValue,
-    ) -> Option<Vec<Arc<PipelinedBlock>>> {
+    ) -> Option<Vec<Arc<ExecutedBlock>>> {
         self.path_from_root_to_block(block_id, self.commit_root_id, self.commit_root().round())
     }
 
@@ -424,8 +417,8 @@ impl BlockTree {
     pub fn commit_callback(
         &mut self,
         storage: Arc<dyn PersistentLivenessStorage>,
-        blocks_to_commit: &[Arc<PipelinedBlock>],
-        finality_proof: WrappedLedgerInfo,
+        blocks_to_commit: &[Arc<ExecutedBlock>],
+        finality_proof: QuorumCert,
         commit_decision: LedgerInfoWithSignatures,
     ) {
         let commit_proof = finality_proof
@@ -442,14 +435,14 @@ impl BlockTree {
             block_id = block_to_commit.id(),
         );
 
-        let ids_to_remove = self.find_blocks_to_prune(block_to_commit.id());
-        if let Err(e) = storage.prune_tree(ids_to_remove.clone().into_iter().collect()) {
+        let id_to_remove = self.find_blocks_to_prune(block_to_commit.id());
+        if let Err(e) = storage.prune_tree(id_to_remove.clone().into_iter().collect()) {
             // it's fine to fail here, as long as the commit succeeds, the next restart will clean
             // up dangling blocks, and we need to prune the tree to keep the root consistent with
             // executor.
             warn!(error = ?e, "fail to delete block");
         }
-        self.process_pruned_blocks(ids_to_remove);
+        self.process_pruned_blocks(id_to_remove);
         self.update_highest_commit_cert(commit_proof);
     }
 }

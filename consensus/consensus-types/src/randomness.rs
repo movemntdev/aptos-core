@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::block::Block;
-use aptos_types::randomness::FullRandMetadata;
+use aptos_types::randomness::RandMetadata;
 
-impl From<&Block> for FullRandMetadata {
+impl From<&Block> for RandMetadata {
     fn from(block: &Block) -> Self {
         Self::new(
             block.epoch(),

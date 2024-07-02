@@ -1,5 +1,4 @@
 // Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
 
 /// Implements public parameters $h \in G$ for a simple DLOG-based encryption scheme.
 macro_rules! encryption_dlog_pp_impl {

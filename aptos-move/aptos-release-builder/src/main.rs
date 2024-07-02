@@ -4,19 +4,14 @@
 use anyhow::Context;
 use aptos_crypto::{ed25519::Ed25519PrivateKey, ValidCryptoMaterialStringExt};
 use aptos_framework::natives::code::PackageRegistry;
-use aptos_gas_schedule::LATEST_GAS_FEATURE_VERSION;
 use aptos_release_builder::{
     components::fetch_config,
     initialize_aptos_core_path,
     validate::{DEFAULT_RESOLUTION_TIME, FAST_RESOLUTION_TIME},
 };
-use aptos_types::{
-    account_address::AccountAddress,
-    chain_id::ChainId,
-    jwks::{ObservedJWKs, SupportedOIDCProviders},
-};
+use aptos_types::{account_address::AccountAddress, chain_id::ChainId};
 use clap::{Parser, Subcommand};
-use std::{path::PathBuf, str::FromStr};
+use std::path::PathBuf;
 
 #[derive(Parser)]
 pub struct Argument {
@@ -58,16 +53,6 @@ pub enum Commands {
         #[clap(long)]
         mint_to_validator: bool,
     },
-    /// Generate a gas schedule using the current values and store it to a file.
-    GenerateGasSchedule {
-        /// The version of the gas schedule to generate.
-        #[clap(short, long)]
-        version: Option<u64>,
-
-        /// Path of the output file.
-        #[clap(short, long)]
-        output_path: Option<PathBuf>,
-    },
     /// Print out current values of on chain configs.
     PrintConfigs {
         /// Url endpoint for the desired network. e.g: https://fullnode.mainnet.aptoslabs.com/v1.
@@ -99,7 +84,7 @@ pub enum Commands {
 #[derive(Subcommand, Debug)]
 pub enum InputOptions {
     FromDirectory {
-        /// Path to the localnet folder. If you are running localnet via cli, it should be `.aptos/testnet`.
+        /// Path to the local testnet folder. If you are running local testnet via cli, it should be `.aptos/testnet`.
         #[clap(short, long)]
         test_dir: PathBuf,
     },
@@ -130,7 +115,6 @@ async fn main() -> anyhow::Result<()> {
             aptos_release_builder::ReleaseConfig::load_config(release_config.as_path())
                 .with_context(|| "Failed to load release config".to_string())?
                 .generate_release_proposal_scripts(output_dir.as_path())
-                .await
                 .with_context(|| "Failed to generate release proposal scripts".to_string())?;
             Ok(())
         },
@@ -213,22 +197,6 @@ async fn main() -> anyhow::Result<()> {
                 .await?;
             Ok(())
         },
-        Commands::GenerateGasSchedule {
-            version,
-            output_path,
-        } => {
-            let version = version.unwrap_or(LATEST_GAS_FEATURE_VERSION);
-            let output_path =
-                output_path.unwrap_or_else(|| PathBuf::from_str("gas_schedule.json").unwrap());
-
-            let gas_schedule = aptos_gas_schedule_updator::current_gas_schedule(version);
-            let json = serde_json::to_string_pretty(&gas_schedule)?;
-
-            std::fs::write(&output_path, json)?;
-            println!("Gas scheduled saved to {}.", output_path.display());
-
-            Ok(())
-        },
         Commands::PrintConfigs {
             endpoint,
             print_gas_schedule,
@@ -246,7 +214,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
 
-            print_configs!(OnChainConsensusConfig, OnChainExecutionConfig, AptosVersion);
+            print_configs!(OnChainConsensusConfig, OnChainExecutionConfig, Version);
 
             if print_gas_schedule {
                 print_configs!(GasScheduleV2, StorageGasSchedule);
@@ -260,24 +228,6 @@ async fn main() -> anyhow::Result<()> {
                     &aptos_release_builder::components::feature_flags::Features::from(&features)
                 )?
             );
-
-            let oidc_providers = fetch_config::<SupportedOIDCProviders>(&client);
-            let observed_jwks = fetch_config::<ObservedJWKs>(&client);
-            let jwk_consensus_config = fetch_config::<OnChainJWKConsensusConfig>(&client);
-            let randomness_config = fetch_config::<RandomnessConfigMoveStruct>(&client)
-                .and_then(OnChainRandomnessConfig::try_from);
-            println!();
-            println!("SupportedOIDCProviders");
-            println!("{:?}", oidc_providers);
-            println!();
-            println!("ObservedJWKs");
-            println!("{:?}", observed_jwks);
-            println!();
-            println!("JWKConsensusConfig");
-            println!("{:?}", jwk_consensus_config);
-            println!();
-            println!("RandomnessConfig");
-            println!("{:?}", randomness_config);
             Ok(())
         },
         Commands::PrintPackageMetadata {

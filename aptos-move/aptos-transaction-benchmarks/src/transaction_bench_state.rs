@@ -1,7 +1,6 @@
 // Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
 
-use crate::transactions;
+use crate::{transactions, transactions::RAYON_EXEC_POOL};
 use aptos_bitvec::BitVec;
 use aptos_block_executor::txn_commit_hook::NoOpTransactionCommitHook;
 use aptos_block_partitioner::{
@@ -216,6 +215,7 @@ where
             _,
             NoOpTransactionCommitHook<AptosTransactionOutput, VMStatus>,
         >(
+            Arc::clone(&RAYON_EXEC_POOL),
             transactions,
             self.state_view.as_ref(),
             BlockExecutorConfig::new_maybe_block_limit(1, maybe_block_gas_limit),
@@ -264,6 +264,7 @@ where
             _,
             NoOpTransactionCommitHook<AptosTransactionOutput, VMStatus>,
         >(
+            Arc::clone(&RAYON_EXEC_POOL),
             transactions,
             self.state_view.as_ref(),
             BlockExecutorConfig::new_maybe_block_limit(

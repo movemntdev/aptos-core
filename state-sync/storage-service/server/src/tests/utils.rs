@@ -40,8 +40,8 @@ use aptos_types::{
     on_chain_config::ValidatorSet,
     transaction::{
         ExecutionStatus, RawTransaction, Script, SignedTransaction, Transaction,
-        TransactionAuxiliaryData, TransactionListWithProof, TransactionOutput,
-        TransactionOutputListWithProof, TransactionPayload, TransactionStatus,
+        TransactionListWithProof, TransactionOutput, TransactionOutputListWithProof,
+        TransactionPayload, TransactionStatus,
     },
     validator_verifier::ValidatorVerifier,
     write_set::WriteSet,
@@ -285,7 +285,6 @@ fn create_test_transaction_output() -> TransactionOutput {
         vec![],
         0,
         TransactionStatus::Keep(ExecutionStatus::MiscellaneousError(None)),
-        TransactionAuxiliaryData::default(),
     )
 }
 

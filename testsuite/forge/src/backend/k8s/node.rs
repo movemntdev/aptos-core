@@ -20,7 +20,6 @@ use std::{
     fmt::{Debug, Formatter},
     process::{Command, Stdio},
     str::FromStr,
-    sync::atomic::{AtomicU32, Ordering},
     thread,
     time::{Duration, Instant},
 };
@@ -33,7 +32,7 @@ pub struct K8sNode {
     pub(crate) peer_id: PeerId,
     pub(crate) index: usize,
     pub(crate) service_name: String,
-    pub(crate) rest_api_port: AtomicU32,
+    pub(crate) rest_api_port: u32,
     pub version: Version,
     pub namespace: String,
     // whether this node has HAProxy in front of it
@@ -44,7 +43,7 @@ pub struct K8sNode {
 
 impl K8sNode {
     fn rest_api_port(&self) -> u32 {
-        self.rest_api_port.load(Ordering::SeqCst)
+        self.rest_api_port
     }
 
     fn service_name(&self) -> String {
@@ -134,19 +133,19 @@ impl Node for K8sNode {
         self.peer_id
     }
 
-    async fn start(&self) -> Result<()> {
+    async fn start(&mut self) -> Result<()> {
         scale_stateful_set_replicas(self.stateful_set_name(), self.namespace(), 1).await?;
         // need to port-forward again since the node is coming back
         // note that we will get a new port
         if self.port_forward_enabled {
-            self.rest_api_port.store(get_free_port(), Ordering::SeqCst);
+            self.rest_api_port = get_free_port();
             self.port_forward_rest_api()?;
         }
         self.wait_until_healthy(Instant::now() + Duration::from_secs(60))
             .await
     }
 
-    async fn stop(&self) -> Result<()> {
+    async fn stop(&mut self) -> Result<()> {
         info!("going to stop node {}", self.stateful_set_name());
         scale_stateful_set_replicas(self.stateful_set_name(), self.namespace(), 0).await
     }
@@ -165,7 +164,7 @@ impl Node for K8sNode {
             .expect("Invalid URL.")
     }
 
-    async fn clear_storage(&self) -> Result<()> {
+    async fn clear_storage(&mut self) -> Result<()> {
         // Remove all storage files
         let ledger_db_path = format!("{}/db/{}", APTOS_DATA_DIR, LEDGER_DB_NAME);
         let state_db_path = format!("{}/db/{}", APTOS_DATA_DIR, STATE_MERKLE_DB_NAME);
@@ -237,7 +236,7 @@ impl Node for K8sNode {
         Ok(port as u64)
     }
 
-    async fn health_check(&self) -> Result<(), HealthCheckError> {
+    async fn health_check(&mut self) -> Result<(), HealthCheckError> {
         self.rest_client()
             .get_ledger_information()
             .await
@@ -257,21 +256,17 @@ impl Node for K8sNode {
         .unwrap()
     }
 
-    async fn get_identity(&self) -> Result<String> {
+    async fn get_identity(&mut self) -> Result<String> {
         stateful_set::get_identity(self.stateful_set_name(), self.namespace()).await
     }
 
-    async fn set_identity(&self, k8s_secret_name: String) -> Result<()> {
+    async fn set_identity(&mut self, k8s_secret_name: String) -> Result<()> {
         stateful_set::set_identity(
             self.stateful_set_name(),
             self.namespace(),
             k8s_secret_name.as_str(),
         )
         .await
-    }
-
-    fn service_name(&self) -> Option<String> {
-        Some(self.service_name.clone())
     }
 }
 

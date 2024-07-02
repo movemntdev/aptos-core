@@ -26,12 +26,11 @@ use aptos_crypto::{
     hash::{CryptoHash, SPARSE_MERKLE_PLACEHOLDER_HASH},
     HashValue,
 };
-use aptos_drop_helper::ArcAsyncDrop;
 use aptos_types::proof::{SparseMerkleInternalNode, SparseMerkleLeafNode};
 use std::sync::{Arc, Weak};
 
 #[derive(Clone, Debug)]
-pub(crate) struct InternalNode<V: ArcAsyncDrop> {
+pub(crate) struct InternalNode<V: Send + Sync + 'static> {
     pub left: SubTree<V>,
     pub right: SubTree<V>,
 }
@@ -43,12 +42,12 @@ impl<V: CryptoHash + Send + Sync + 'static> InternalNode<V> {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct LeafNode<V: ArcAsyncDrop> {
+pub(crate) struct LeafNode<V: Send + Sync + 'static> {
     pub key: HashValue,
     pub value: LeafValue<V>,
 }
 
-impl<V: ArcAsyncDrop> LeafNode<V> {
+impl<V: Send + Sync + 'static> LeafNode<V> {
     pub fn new(key: HashValue, value: LeafValue<V>) -> Self {
         Self { key, value }
     }
@@ -67,7 +66,7 @@ impl<V: CryptoHash + Send + Sync + 'static> LeafNode<V> {
     }
 }
 
-impl<V: ArcAsyncDrop> From<&SparseMerkleLeafNode> for LeafNode<V>
+impl<V: Send + Sync + 'static> From<&SparseMerkleLeafNode> for LeafNode<V>
 where
     V: CryptoHash,
 {
@@ -80,13 +79,13 @@ where
 }
 
 #[derive(Debug)]
-pub(crate) enum NodeInner<V: ArcAsyncDrop> {
+pub(crate) enum NodeInner<V: Send + Sync + 'static> {
     Internal(InternalNode<V>),
     Leaf(LeafNode<V>),
 }
 
 #[derive(Debug)]
-pub(crate) struct Node<V: ArcAsyncDrop> {
+pub(crate) struct Node<V: Send + Sync + 'static> {
     generation: u64,
     inner: NodeInner<V>,
 }
@@ -100,7 +99,7 @@ impl<V: CryptoHash + Send + Sync + 'static> Node<V> {
     }
 }
 
-impl<V: ArcAsyncDrop> Node<V> {
+impl<V: Send + Sync + 'static> Node<V> {
     pub fn new_leaf(key: HashValue, value: LeafValue<V>, generation: u64) -> Self {
         Self {
             generation,
@@ -177,7 +176,7 @@ impl<R> Clone for Ref<R> {
 pub(crate) type NodeHandle<V> = Ref<Node<V>>;
 
 #[derive(Clone, Debug)]
-pub(crate) enum SubTree<V: ArcAsyncDrop> {
+pub(crate) enum SubTree<V: Send + Sync + 'static> {
     Empty,
     NonEmpty {
         hash: HashValue,
@@ -273,12 +272,12 @@ impl<V: CryptoHash + Send + Sync + 'static> SubTree<V> {
 }
 
 #[derive(Clone, Debug)]
-pub struct LeafValue<V: ArcAsyncDrop> {
+pub struct LeafValue<V: Send + Sync + 'static> {
     pub hash: HashValue,
     pub data: Ref<V>,
 }
 
-impl<V: ArcAsyncDrop> LeafValue<V> {
+impl<V: Send + Sync + 'static> LeafValue<V> {
     pub fn new_with_value(value: V) -> Self
     where
         V: CryptoHash,

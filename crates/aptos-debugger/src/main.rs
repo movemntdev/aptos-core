@@ -7,10 +7,6 @@ use aptos_logger::{Level, Logger};
 use aptos_push_metrics::MetricsPusher;
 use clap::Parser;
 
-#[cfg(unix)]
-#[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
-
 #[tokio::main]
 async fn main() -> Result<()> {
     Logger::new().level(Level::Info).init();

@@ -1,18 +1,19 @@
-// -- Model dump before bytecode pipeline
+// ---- Model Dump
 module 0x8675309::M {
     struct R {
         f: bool,
     }
     private fun t0(x: bool,r: M::R) {
-        false;
-        true;
+        Not(true);
+        Not(false);
         Not(x);
         Not(Copy(x));
         Not(Move(x));
-        Not(select M::R.f<M::R>(r));
+        Not(select M::R.f(r));
         {
           let M::R{ f: _ } = r;
           Tuple()
         }
     }
+    spec fun $t0(x: bool,r: M::R);
 } // end 0x8675309::M

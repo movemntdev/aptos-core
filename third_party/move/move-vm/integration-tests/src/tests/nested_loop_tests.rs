@@ -4,7 +4,7 @@
 use crate::compiler::{as_module, as_script, compile_units};
 use move_bytecode_verifier::VerifierConfig;
 use move_core_types::account_address::AccountAddress;
-use move_vm_runtime::{config::VMConfig, module_traversal::*, move_vm::MoveVM};
+use move_vm_runtime::{config::VMConfig, move_vm::MoveVM};
 use move_vm_test_utils::InMemoryStorage;
 use move_vm_types::gas::UnmeteredGasMeter;
 
@@ -44,13 +44,14 @@ fn test_publish_module_with_nested_loops() {
                 move_stdlib::natives::GasParameters::zeros(),
             ),
             VMConfig {
-                verifier_config: VerifierConfig {
+                verifier: VerifierConfig {
                     max_loop_depth: Some(2),
                     ..Default::default()
                 },
                 ..Default::default()
             },
-        );
+        )
+        .unwrap();
 
         let mut sess = vm.new_session(&storage);
         sess.publish_module(m_blob.clone(), TEST_ADDR, &mut UnmeteredGasMeter)
@@ -66,13 +67,14 @@ fn test_publish_module_with_nested_loops() {
                 move_stdlib::natives::GasParameters::zeros(),
             ),
             VMConfig {
-                verifier_config: VerifierConfig {
+                verifier: VerifierConfig {
                     max_loop_depth: Some(1),
                     ..Default::default()
                 },
                 ..Default::default()
             },
-        );
+        )
+        .unwrap();
 
         let mut sess = vm.new_session(&storage);
         sess.publish_module(m_blob, TEST_ADDR, &mut UnmeteredGasMeter)
@@ -104,7 +106,6 @@ fn test_run_script_with_nested_loops() {
     let s = as_script(units.pop().unwrap());
     let mut s_blob: Vec<u8> = vec![];
     s.serialize(&mut s_blob).unwrap();
-    let traversal_storage = TraversalStorage::new();
 
     // Should succeed with max_loop_depth = 2
     {
@@ -115,24 +116,19 @@ fn test_run_script_with_nested_loops() {
                 move_stdlib::natives::GasParameters::zeros(),
             ),
             VMConfig {
-                verifier_config: VerifierConfig {
+                verifier: VerifierConfig {
                     max_loop_depth: Some(2),
                     ..Default::default()
                 },
                 ..Default::default()
             },
-        );
+        )
+        .unwrap();
 
         let mut sess = vm.new_session(&storage);
         let args: Vec<Vec<u8>> = vec![];
-        sess.execute_script(
-            s_blob.clone(),
-            vec![],
-            args,
-            &mut UnmeteredGasMeter,
-            &mut TraversalContext::new(&traversal_storage),
-        )
-        .unwrap();
+        sess.execute_script(s_blob.clone(), vec![], args, &mut UnmeteredGasMeter)
+            .unwrap();
     }
 
     // Should fail with max_loop_depth = 1
@@ -144,23 +140,18 @@ fn test_run_script_with_nested_loops() {
                 move_stdlib::natives::GasParameters::zeros(),
             ),
             VMConfig {
-                verifier_config: VerifierConfig {
+                verifier: VerifierConfig {
                     max_loop_depth: Some(1),
                     ..Default::default()
                 },
                 ..Default::default()
             },
-        );
+        )
+        .unwrap();
 
         let mut sess = vm.new_session(&storage);
         let args: Vec<Vec<u8>> = vec![];
-        sess.execute_script(
-            s_blob,
-            vec![],
-            args,
-            &mut UnmeteredGasMeter,
-            &mut TraversalContext::new(&traversal_storage),
-        )
-        .unwrap_err();
+        sess.execute_script(s_blob, vec![], args, &mut UnmeteredGasMeter)
+            .unwrap_err();
     }
 }

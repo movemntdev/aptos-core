@@ -164,7 +164,6 @@ fn open_counter_file() -> PortCounterFiles {
                 .read(true)
                 .write(true)
                 .create(true)
-                .truncate(false)
                 .open(counter_path())
             {
                 Ok(counter_file) => return PortCounterFiles::new(counter_file, lock_file),

@@ -119,7 +119,12 @@ pub struct StateKeyWrapper(pub StateKey);
 
 impl fmt::Display for StateKeyWrapper {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let hex_string = hex::encode(self.0.encoded());
+        let hex_string = hex::encode(
+            self.0
+                .encode()
+                .context("Failed to encode StateKey")
+                .map_err(|_| fmt::Error)?,
+        );
         write!(f, "{}", hex_string)
     }
 }

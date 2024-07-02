@@ -36,10 +36,6 @@ impl<T> RwLock<T> {
             .into_inner()
             .expect("Cannot currently handle a poisoned lock")
     }
-
-    pub fn inner(&self) -> &StdRwLock<T> {
-        &self.0
-    }
 }
 
 #[cfg(test)]

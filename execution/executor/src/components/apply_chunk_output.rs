@@ -28,9 +28,8 @@ use aptos_types::{
     proof::accumulator::{InMemoryEventAccumulator, InMemoryTransactionAccumulator},
     state_store::ShardedStateUpdates,
     transaction::{
-        block_epilogue::{BlockEndInfo, BlockEpiloguePayload},
-        ExecutionStatus, Transaction, TransactionAuxiliaryData, TransactionInfo, TransactionOutput,
-        TransactionStatus, TransactionToCommit,
+        ExecutionStatus, Transaction, TransactionInfo, TransactionOutput, TransactionStatus,
+        TransactionToCommit,
     },
     write_set::WriteSet,
 };
@@ -51,7 +50,6 @@ impl ApplyChunkOutput {
             state_cache,
             transactions,
             transaction_outputs,
-            block_end_info,
         } = chunk_output;
         let (new_epoch, statuses_for_input_txns, to_commit, to_discard, to_retry) = {
             let _timer = APTOS_EXECUTOR_OTHER_TIMERS_SECONDS
@@ -63,7 +61,6 @@ impl ApplyChunkOutput {
                 transactions,
                 transaction_outputs,
                 append_state_checkpoint_to_block,
-                block_end_info.clone(),
             )?
         };
 
@@ -94,7 +91,6 @@ impl ApplyChunkOutput {
             state_checkpoint_hashes,
             state_updates_before_last_checkpoint,
             sharded_state_cache,
-            block_end_info,
         );
 
         // On state sync/replay, we generate state checkpoints only periodically, for the
@@ -119,7 +115,6 @@ impl ApplyChunkOutput {
             state_checkpoint_hashes,
             state_updates_before_last_checkpoint,
             sharded_state_cache,
-            block_end_info,
         ) = state_checkpoint_output.into_inner();
 
         let (statuses_for_input_txns, to_commit, to_discard, to_retry) = txns.into_inner();
@@ -158,7 +153,6 @@ impl ApplyChunkOutput {
                 state_updates_until_last_checkpoint: state_updates_before_last_checkpoint,
                 sharded_state_cache,
                 transaction_accumulator,
-                block_end_info,
             },
             to_discard.into_txns(),
             to_retry.into_txns(),
@@ -199,7 +193,6 @@ impl ApplyChunkOutput {
         mut transactions: Vec<Transaction>,
         transaction_outputs: Vec<TransactionOutput>,
         append_state_checkpoint_to_block: Option<HashValue>,
-        block_end_info: Option<BlockEndInfo>,
     ) -> Result<(
         bool,
         Vec<TransactionStatus>,
@@ -251,20 +244,13 @@ impl ApplyChunkOutput {
 
         // Append the StateCheckpoint transaction to the end of to_keep
         if let Some(block_id) = state_checkpoint_to_add {
-            let state_checkpoint_txn =
-                block_end_info.map_or(Transaction::StateCheckpoint(block_id), |block_end_info| {
-                    Transaction::BlockEpilogue(BlockEpiloguePayload::V0 {
-                        block_id,
-                        block_end_info,
-                    })
-                });
+            let state_checkpoint_txn = Transaction::StateCheckpoint(block_id);
             let state_checkpoint_txn_output: ParsedTransactionOutput =
                 Into::into(TransactionOutput::new(
                     WriteSet::default(),
                     Vec::new(),
                     0,
                     TransactionStatus::Keep(ExecutionStatus::Success),
-                    TransactionAuxiliaryData::default(),
                 ));
             to_keep.push((state_checkpoint_txn, state_checkpoint_txn_output));
         }
@@ -342,7 +328,7 @@ impl ApplyChunkOutput {
             state_updates_vec,
             hashes_vec
         ) {
-            let (write_set, events, per_txn_reconfig_events, gas_used, status, auxiliary_data) =
+            let (write_set, events, per_txn_reconfig_events, gas_used, status) =
                 txn_output.unpack();
 
             let subscribable_events: Vec<ContractEvent> = events
@@ -370,7 +356,6 @@ impl ApplyChunkOutput {
                 write_set,
                 events,
                 !per_txn_reconfig_events.is_empty(),
-                auxiliary_data,
             );
             all_subscribable_events.extend(subscribable_events);
             to_commit.push(txn_to_commit);
@@ -432,14 +417,12 @@ fn assemble_ledger_diff_should_filter_subscribable_events() {
                 vec![event_0.clone()],
                 0,
                 TransactionStatus::Keep(ExecutionStatus::Success),
-                TransactionAuxiliaryData::default(),
             )),
             ParsedTransactionOutput::from(TransactionOutput::new(
                 WriteSet::default(),
                 vec![event_1.clone(), event_2.clone()],
                 0,
                 TransactionStatus::Keep(ExecutionStatus::Success),
-                TransactionAuxiliaryData::default(),
             )),
         ]);
     let state_updates_vec = vec![

@@ -1,6 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::server::utils::reply_with_status;
 use aptos_config::config::{AuthenticationConfig, NodeConfig};
 use aptos_consensus::{
     persistent_liveness_storage::StorageWriteProxy, quorum_store::quorum_store_db::QuorumStoreDB,
@@ -8,11 +9,6 @@ use aptos_consensus::{
 use aptos_infallible::RwLock;
 use aptos_logger::info;
 use aptos_storage_interface::DbReaderWriter;
-use aptos_system_utils::utils::reply_with_status;
-#[cfg(target_os = "linux")]
-use aptos_system_utils::{
-    profiling::handle_cpu_profiling_request, thread_dump::handle_thread_dump_request,
-};
 use hyper::{
     service::{make_service_fn, service_fn},
     Body, Request, Response, Server, StatusCode,
@@ -26,6 +22,11 @@ use std::{
 use tokio::runtime::Runtime;
 
 mod consensus;
+#[cfg(target_os = "linux")]
+mod profiling;
+#[cfg(target_os = "linux")]
+mod thread_dump;
+mod utils;
 
 #[derive(Default)]
 pub struct Context {
@@ -168,9 +169,9 @@ impl AdminService {
 
         match (req.method().clone(), req.uri().path()) {
             #[cfg(target_os = "linux")]
-            (hyper::Method::GET, "/profilez") => handle_cpu_profiling_request(req).await,
+            (hyper::Method::GET, "/profilez") => profiling::handle_cpu_profiling_request(req).await,
             #[cfg(target_os = "linux")]
-            (hyper::Method::GET, "/threadz") => handle_thread_dump_request(req).await,
+            (hyper::Method::GET, "/threadz") => thread_dump::handle_thread_dump_request(req).await,
             (hyper::Method::GET, "/debug/consensus/consensusdb") => {
                 let consensus_db = context.consensus_db.read().clone();
                 if let Some(consensus_db) = consensus_db {

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use aptos_framework::{
-    natives::code::PackageMetadata, unzip_metadata_str, BuiltPackage, APTOS_PACKAGES,
+    natives::code::PackageMetadata, unzip_metadata_str, BuildOptions, BuiltPackage, APTOS_PACKAGES,
 };
 use aptos_language_e2e_tests::data_store::FakeDataStore;
 use aptos_types::{
@@ -24,23 +24,20 @@ use std::{
 use tempfile::TempDir;
 
 mod data_collection;
-mod data_state_view;
 mod execution;
-mod online_execution;
 
 pub use data_collection::*;
 pub use execution::*;
 use move_compiler::compiled_unit::CompiledUnitEnum;
 use move_core_types::language_storage::ModuleId;
-use move_model::metadata::CompilerVersion;
 use move_package::{
     compilation::compiled_package::CompiledPackage,
     source_package::{
         manifest_parser::{parse_move_manifest_string, parse_source_manifest},
         parsed_manifest::Dependency,
     },
+    CompilerVersion,
 };
-pub use online_execution::*;
 
 const APTOS_PACKAGES_DIR_NAMES: [&str; 5] = [
     "aptos-framework",
@@ -72,7 +69,11 @@ impl IndexWriter {
             let file = if !path.exists() {
                 File::create(path).expect("Error encountered while creating file!")
             } else {
-                OpenOptions::new().append(true).open(path).unwrap()
+                OpenOptions::new()
+                    .write(true)
+                    .append(true)
+                    .open(path)
+                    .unwrap()
             };
             file
         };
@@ -109,7 +110,7 @@ impl IndexWriter {
     }
 
     pub fn write_err(&mut self, err_msg: &str) {
-        self.err_logger
+        self.index_writer
             .write_fmt(format_args!("{}\n", err_msg))
             .unwrap();
         self.err_logger.flush().unwrap();
@@ -144,10 +145,7 @@ impl IndexReader {
     pub fn _load_all_versions(&mut self) {
         loop {
             let next_val = self.get_next_version();
-            if next_val.is_err() {
-                continue;
-            }
-            if let Some(val) = next_val.unwrap() {
+            if let Some(val) = next_val {
                 self._version_cache.push(val);
             } else {
                 break;
@@ -155,27 +153,19 @@ impl IndexReader {
         }
     }
 
-    pub fn get_next_version(&mut self) -> Result<Option<u64>, ()> {
+    pub fn get_next_version(&mut self) -> Option<u64> {
         let mut cur_idx = String::new();
         let num_bytes = self.index_reader.read_line(&mut cur_idx).unwrap();
         if num_bytes == 0 {
-            return Ok(None);
+            return None;
         }
-        let indx = cur_idx.trim().parse();
-        if indx.is_ok() {
-            Ok(indx.ok())
-        } else {
-            Err(())
-        }
+        Some(cur_idx.trim().parse().unwrap())
     }
 
     pub fn get_next_version_ge(&mut self, version: u64) -> Option<u64> {
         loop {
             let next_val = self.get_next_version();
-            if next_val.is_err() {
-                continue;
-            }
-            if let Some(val) = next_val.unwrap() {
+            if let Some(val) = next_val {
                 if val >= version {
                     return Some(val);
                 }
@@ -325,11 +315,7 @@ fn check_aptos_packages_availability(path: PathBuf) -> bool {
 }
 
 pub async fn prepare_aptos_packages(path: PathBuf) {
-    let mut success = true;
-    if path.exists() {
-        success = std::fs::remove_dir_all(path.clone()).is_ok();
-    }
-    if success {
+    if !path.exists() {
         std::fs::create_dir_all(path.clone()).unwrap();
         download_aptos_packages(&path).await.unwrap();
     }
@@ -338,14 +324,11 @@ pub async fn prepare_aptos_packages(path: PathBuf) {
 #[derive(Default)]
 struct CompilationCache {
     compiled_package_map: HashMap<PackageInfo, CompiledPackage>,
-    failed_packages_v1: HashSet<PackageInfo>,
-    failed_packages_v2: HashSet<PackageInfo>,
-    compiled_package_cache_v1: HashMap<PackageInfo, HashMap<ModuleId, Vec<u8>>>,
-    compiled_package_cache_v2: HashMap<PackageInfo, HashMap<ModuleId, Vec<u8>>>,
+    failed_packages: HashSet<PackageInfo>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Hash)]
-pub(crate) struct PackageInfo {
+struct PackageInfo {
     address: AccountAddress,
     package_name: String,
     upgrade_number: Option<u64>,
@@ -377,7 +360,7 @@ impl PackageInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct TxnIndex {
+struct TxnIndex {
     version: u64,
     package_info: PackageInfo,
     txn: Transaction,
@@ -391,7 +374,7 @@ fn generate_compiled_blob(
     if compiled_blobs.contains_key(package_info) {
         return;
     }
-    let root_modules = &compiled_package.root_compiled_units;
+    let root_modules = compiled_package.all_modules();
     let mut blob_map = HashMap::new();
     for compiled_module in root_modules {
         if let CompiledUnitEnum::Module(module) = &compiled_module.unit {
@@ -409,10 +392,10 @@ fn compile_aptos_packages(
 ) -> anyhow::Result<()> {
     for package in APTOS_PACKAGES {
         let root_package_dir = aptos_commons_path.join(get_aptos_dir(package).unwrap());
-        let compiler_version = if v2_flag {
-            Some(CompilerVersion::V2_0)
+        let compiler_verion = if v2_flag {
+            Some(CompilerVersion::V2)
         } else {
-            Some(CompilerVersion::V1)
+            None
         };
         // For simplicity, all packages including aptos token are stored under 0x1 in the map
         let package_info = PackageInfo {
@@ -420,7 +403,7 @@ fn compile_aptos_packages(
             package_name: package.to_string(),
             upgrade_number: None,
         };
-        let compiled_package = compile_package(root_package_dir, &package_info, compiler_version);
+        let compiled_package = compile_package(root_package_dir, &package_info, compiler_verion);
         if let Ok(built_package) = compiled_package {
             generate_compiled_blob(&package_info, &built_package, compiled_package_map);
         } else {
@@ -449,10 +432,7 @@ fn compile_package(
     if let Ok(built_package) = compiled_package {
         Ok(built_package.package)
     } else {
-        Err(anyhow::Error::msg(format!(
-            "compilation failed for compiler: {:?}",
-            compiler_verion
-        )))
+        Err(anyhow::Error::msg("compilation failed"))
     }
 }
 
@@ -461,10 +441,10 @@ fn dump_and_compile_from_package_metadata(
     root_dir: PathBuf,
     dep_map: &HashMap<(AccountAddress, String), PackageMetadata>,
     compilation_cache: &mut CompilationCache,
-    execution_mode: Option<ExecutionMode>,
+    compiler_verion: Option<CompilerVersion>,
 ) -> anyhow::Result<()> {
     let root_package_dir = root_dir.join(format!("{}", package_info,));
-    if compilation_cache.failed_packages_v1.contains(&package_info) {
+    if compilation_cache.failed_packages.contains(&package_info) {
         return Err(anyhow::Error::msg("compilation failed"));
     }
     if !root_package_dir.exists() {
@@ -535,7 +515,7 @@ fn dump_and_compile_from_package_metadata(
                         root_dir.clone(),
                         dep_map,
                         compilation_cache,
-                        execution_mode,
+                        compiler_verion,
                     )?;
                 }
                 break;
@@ -548,47 +528,23 @@ fn dump_and_compile_from_package_metadata(
     std::fs::write(toml_path, manifest.to_string()).unwrap();
 
     // step 5: test whether the code can be compiled
-    if !compilation_cache
+    if let std::collections::hash_map::Entry::Vacant(e) = compilation_cache
         .compiled_package_map
-        .contains_key(&package_info)
+        .entry(package_info.clone())
     {
-        let package_v1 = compile_package(
-            root_package_dir.clone(),
-            &package_info,
-            Some(CompilerVersion::V1),
-        );
-        if let Ok(built_package) = package_v1 {
-            if execution_mode.is_some_and(|mode| mode.is_v1_or_compare()) {
-                generate_compiled_blob(
-                    &package_info,
-                    &built_package,
-                    &mut compilation_cache.compiled_package_cache_v1,
-                );
-            }
-            compilation_cache
-                .compiled_package_map
-                .insert(package_info.clone(), built_package);
+        let mut build_options = BuildOptions::default();
+        build_options
+            .named_addresses
+            .insert(package_info.package_name.clone(), package_info.address);
+        build_options.compiler_version = compiler_verion;
+        let compiled_package = BuiltPackage::build(root_package_dir, build_options);
+        if let Ok(built_package) = compiled_package {
+            e.insert(built_package.package);
         } else {
-            if !compilation_cache.failed_packages_v1.contains(&package_info) {
-                compilation_cache.failed_packages_v1.insert(package_info);
+            if !compilation_cache.failed_packages.contains(&package_info) {
+                compilation_cache.failed_packages.insert(package_info);
             }
-            return Err(anyhow::Error::msg("compilation failed at v1"));
-        }
-        if execution_mode.is_some_and(|mode| mode.is_v2_or_compare()) {
-            let package_v2 =
-                compile_package(root_package_dir, &package_info, Some(CompilerVersion::V2_0));
-            if let Ok(built_package) = package_v2 {
-                generate_compiled_blob(
-                    &package_info,
-                    &built_package,
-                    &mut compilation_cache.compiled_package_cache_v2,
-                );
-            } else {
-                if !compilation_cache.failed_packages_v1.contains(&package_info) {
-                    compilation_cache.failed_packages_v1.insert(package_info);
-                }
-                return Err(anyhow::Error::msg("compilation failed at v2"));
-            }
+            return Err(anyhow::Error::msg("compilation failed"));
         }
     }
     Ok(())

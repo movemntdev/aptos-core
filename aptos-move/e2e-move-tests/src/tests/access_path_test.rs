@@ -1,9 +1,11 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::MoveHarness;
+use crate::{assert_success, MoveHarness};
 use aptos_types::{
-    account_address::AccountAddress, move_utils::MemberId, transaction::ExecutionStatus,
+    account_address::AccountAddress,
+    move_utils::MemberId,
+    transaction::{ExecutionStatus, ModuleBundle, TransactionPayload},
 };
 use move_binary_format::{
     file_format::{
@@ -22,7 +24,7 @@ use move_core_types::{identifier::Identifier, vm_status::StatusCode};
 fn access_path_panic() {
     // github.com/aptos-labs/aptos-core/security/advisories/GHSA-rpw2-84hq-48jj
     let mut ty = SignatureToken::Bool;
-    for _ in 0..18 {
+    for _ in 0..20 {
         ty = SignatureToken::StructInstantiation(StructHandleIndex(0), vec![ty]);
     }
 
@@ -97,7 +99,11 @@ fn access_path_panic() {
 
     let mut h = MoveHarness::new();
     let acc = h.new_account_at(addr);
-    h.executor.add_module(&cm.self_id(), module_bytes);
+    let publish_tx_res = h.create_transaction_payload(
+        &acc,
+        TransactionPayload::ModuleBundle(ModuleBundle::singleton(module_bytes)),
+    );
+    assert_success!(h.run(publish_tx_res));
 
     let res = h.run_entry_function(
         &acc,

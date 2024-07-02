@@ -15,7 +15,6 @@ use aptos_data_streaming_service::{
     streaming_client::{DataStreamingClient, Epoch, NotificationAndFeedback},
 };
 use aptos_executor_types::{ChunkCommitNotification, ChunkExecutorTrait};
-use aptos_schemadb::DB;
 use aptos_storage_interface::{
     cached_state_view::ShardedStateCache, state_delta::StateDelta, DbReader, DbReaderWriter,
     DbWriter, ExecutedTrees, Order, Result, StateSnapshotReceiver,
@@ -82,7 +81,7 @@ pub fn create_mock_reader_writer_with_version(
 ) -> DbReaderWriter {
     let mut reader = reader.unwrap_or_else(create_mock_db_reader);
     reader
-        .expect_get_synced_version()
+        .expect_get_latest_version()
         .returning(move || Ok(highest_synced_version));
     reader
         .expect_get_latest_epoch_state()
@@ -236,9 +235,7 @@ mock! {
 
         fn get_latest_ledger_info(&self) -> Result<LedgerInfoWithSignatures>;
 
-        fn get_synced_version(&self) -> Result<Version>;
-
-        fn get_latest_ledger_info_version(&self) -> Result<Version>;
+        fn get_latest_version(&self) -> Result<Version>;
 
         fn get_latest_commit_metadata(&self) -> Result<(Version, u64)>;
 
@@ -474,12 +471,11 @@ mock! {
             epoch_change_proofs: Vec<LedgerInfoWithSignatures>,
             target_ledger_info: LedgerInfoWithSignatures,
             target_output_with_proof: TransactionOutputListWithProof,
-            internal_indexer_db: Option<Arc<DB>>,
         ) -> AnyhowResult<JoinHandle<()>, crate::error::Error>;
 
         fn pending_storage_data(&self) -> bool;
 
-        async fn save_state_values(
+        fn save_state_values(
             &mut self,
             notification_id: NotificationId,
             state_value_chunk_with_proof: StateValueChunkWithProof,

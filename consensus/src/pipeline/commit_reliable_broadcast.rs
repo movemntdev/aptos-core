@@ -9,15 +9,10 @@ use aptos_consensus_types::{
 };
 use aptos_infallible::Mutex;
 use aptos_reliable_broadcast::{BroadcastStatus, RBMessage, RBNetworkSender};
-use aptos_types::{validator_verifier::ValidatorVerifier, PeerId};
+use aptos_types::validator_verifier::ValidatorVerifier;
 use async_trait::async_trait;
-use bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 /// Network message for the pipeline phase
@@ -40,14 +35,6 @@ impl CommitMessage {
             CommitMessage::Decision(decision) => decision.verify(verifier),
             CommitMessage::Ack(_) => bail!("Unexpected ack in incoming commit message"),
             CommitMessage::Nack => bail!("Unexpected NACK in incoming commit message"),
-        }
-    }
-
-    pub fn epoch(&self) -> Option<u64> {
-        match self {
-            CommitMessage::Vote(vote) => Some(vote.epoch()),
-            CommitMessage::Decision(decision) => Some(decision.epoch()),
-            _ => None,
         }
     }
 }
@@ -101,56 +88,18 @@ impl BroadcastStatus<CommitMessage> for Arc<AckState> {
 
 #[async_trait]
 impl RBNetworkSender<CommitMessage> for NetworkSender {
-    async fn send_rb_rpc_raw(
-        &self,
-        receiver: Author,
-        raw_message: Bytes,
-        timeout_duration: Duration,
-    ) -> anyhow::Result<CommitMessage> {
-        let response = match self
-            .consensus_network_client
-            .send_rpc_raw(receiver, raw_message, timeout_duration)
-            .await?
-        {
-            ConsensusMsg::CommitMessage(resp) if matches!(*resp, CommitMessage::Ack(_)) => *resp,
-            ConsensusMsg::CommitMessage(resp) if matches!(*resp, CommitMessage::Nack) => {
-                bail!("Received nack, will retry")
-            },
-            _ => bail!("Invalid response to request"),
-        };
-
-        Ok(response)
-    }
-
     async fn send_rb_rpc(
         &self,
         receiver: Author,
         message: CommitMessage,
-        timeout: Duration,
+        timeout_duration: Duration,
     ) -> anyhow::Result<CommitMessage> {
-        let req = ConsensusMsg::CommitMessage(Box::new(message));
-        let response = match self.send_rpc(receiver, req, timeout).await? {
+        let msg = ConsensusMsg::CommitMessage(Box::new(message));
+        let response = match self.send_rpc(receiver, msg, timeout_duration).await? {
             ConsensusMsg::CommitMessage(resp) if matches!(*resp, CommitMessage::Ack(_)) => *resp,
-            ConsensusMsg::CommitMessage(resp) if matches!(*resp, CommitMessage::Nack) => {
-                bail!("Received nack, will retry")
-            },
             _ => bail!("Invalid response to request"),
         };
 
         Ok(response)
-    }
-
-    fn to_bytes_by_protocol(
-        &self,
-        peers: Vec<Author>,
-        message: CommitMessage,
-    ) -> Result<HashMap<Author, bytes::Bytes>, anyhow::Error> {
-        let msg = ConsensusMsg::CommitMessage(Box::new(message));
-        self.consensus_network_client
-            .to_bytes_by_protocol(peers, msg)
-    }
-
-    fn sort_peers_by_latency(&self, peers: &mut [PeerId]) {
-        self.sort_peers_by_latency(peers);
     }
 }

@@ -30,8 +30,6 @@ fn test_create_epoch_ending_requests() {
     let client_requests = stream_engine
         .create_data_client_requests(
             5,
-            5,
-            0,
             &create_epoch_ending_chunk_sizes(10000),
             create_notification_id_generator(),
         )
@@ -50,8 +48,6 @@ fn test_create_epoch_ending_requests() {
     let client_requests = stream_engine
         .create_data_client_requests(
             3,
-            3,
-            0,
             &create_epoch_ending_chunk_sizes(chunk_size),
             create_notification_id_generator(),
         )
@@ -72,8 +68,6 @@ fn test_create_epoch_ending_requests() {
     let client_requests = stream_engine
         .create_data_client_requests(
             100,
-            100,
-            0,
             &create_epoch_ending_chunk_sizes(chunk_size),
             create_notification_id_generator(),
         )
@@ -102,8 +96,6 @@ fn test_create_epoch_ending_requests_dynamic() {
     let client_requests = stream_engine
         .create_data_client_requests(
             5,
-            5,
-            0,
             &create_epoch_ending_chunk_sizes(700),
             create_notification_id_generator(),
         )
@@ -128,8 +120,6 @@ fn test_create_epoch_ending_requests_dynamic() {
     let client_requests = stream_engine
         .create_data_client_requests(
             10,
-            10,
-            0,
             &create_epoch_ending_chunk_sizes(chunk_size),
             create_notification_id_generator(),
         )
@@ -151,8 +141,6 @@ fn test_create_epoch_ending_requests_dynamic() {
     let client_requests = stream_engine
         .create_data_client_requests(
             5,
-            5,
-            0,
             &create_epoch_ending_chunk_sizes(700),
             create_notification_id_generator(),
         )
@@ -171,8 +159,6 @@ fn test_create_epoch_ending_requests_dynamic() {
     // Create a batch of client requests and verify no error
     let client_requests = stream_engine.create_data_client_requests(
         10,
-        10,
-        0,
         &create_epoch_ending_chunk_sizes(50),
         create_notification_id_generator(),
     );

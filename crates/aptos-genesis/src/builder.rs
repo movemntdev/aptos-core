@@ -27,10 +27,7 @@ use aptos_keygen::KeyGen;
 use aptos_logger::prelude::*;
 use aptos_types::{
     chain_id::ChainId,
-    on_chain_config::{
-        Features, GasScheduleV2, OnChainConsensusConfig, OnChainExecutionConfig,
-        OnChainJWKConsensusConfig, OnChainRandomnessConfig,
-    },
+    on_chain_config::{GasScheduleV2, OnChainConsensusConfig, OnChainExecutionConfig},
     transaction::Transaction,
     waypoint::Waypoint,
 };
@@ -434,9 +431,6 @@ pub struct GenesisConfiguration {
     pub consensus_config: OnChainConsensusConfig,
     pub execution_config: OnChainExecutionConfig,
     pub gas_schedule: GasScheduleV2,
-    pub initial_features_override: Option<Features>,
-    pub randomness_config_override: Option<OnChainRandomnessConfig>,
-    pub jwk_consensus_config_override: Option<OnChainJWKConsensusConfig>,
 }
 
 pub type InitConfigFn = Arc<dyn Fn(usize, &mut NodeConfig, &mut NodeConfig) + Send + Sync>;
@@ -528,7 +522,6 @@ impl Builder {
 
         // Generate validator configs
         let template = NodeConfig::get_default_validator_config();
-
         let mut validators: Vec<ValidatorNodeConfig> = (0..self.num_validators.get())
             .map(|i| self.generate_validator_config(i, &mut rng, &template))
             .collect::<anyhow::Result<Vec<ValidatorNodeConfig>>>()?;
@@ -655,9 +648,6 @@ impl Builder {
             consensus_config: OnChainConsensusConfig::default_for_genesis(),
             execution_config: OnChainExecutionConfig::default_for_genesis(),
             gas_schedule: default_gas_schedule(),
-            initial_features_override: None,
-            randomness_config_override: None,
-            jwk_consensus_config_override: None,
         };
         if let Some(init_genesis_config) = &self.init_genesis_config {
             (init_genesis_config)(&mut genesis_config);

@@ -125,9 +125,6 @@ impl<E: Ord + Clone> std::iter::IntoIterator for SetDomain<E> {
 
 impl<E: Ord + Clone> AbstractDomain for SetDomain<E> {
     fn join(&mut self, other: &Self) -> JoinResult {
-        if self.ptr_eq(other) {
-            return JoinResult::Unchanged;
-        }
         let mut change = JoinResult::Unchanged;
         for e in other.iter() {
             if self.insert(e.clone()).is_none() {
@@ -239,9 +236,6 @@ impl<K: Ord + Clone, V: AbstractDomain + Clone> std::iter::IntoIterator for MapD
 
 impl<K: Ord + Clone, V: AbstractDomain + Clone> AbstractDomain for MapDomain<K, V> {
     fn join(&mut self, other: &Self) -> JoinResult {
-        if self.ptr_eq(other) {
-            return JoinResult::Unchanged;
-        }
         let mut change = JoinResult::Unchanged;
         for (k, v) in other.iter() {
             change = change.combine(self.insert_join(k.clone(), v.clone()));

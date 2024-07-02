@@ -1,12 +1,10 @@
 // Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
 
 use crate::{
     dkg::{
         dummy_dkg::{DummyDKG, DummyDKGTranscript, DummySecret},
         DKGSessionMetadata, DKGTrait,
     },
-    on_chain_config::OnChainRandomnessConfig,
     validator_verifier::{ValidatorConsensusInfo, ValidatorConsensusInfoMoveStruct},
 };
 use aptos_crypto::{bls12381, Uniform};
@@ -97,7 +95,6 @@ fn test_dummy_dkg_correctness() {
     // Now imagine DKG starts.
     let dkg_session_metadata = DKGSessionMetadata {
         dealer_epoch: 999,
-        randomness_config: OnChainRandomnessConfig::default_enabled().into(),
         dealer_validator_set: dealer_infos.clone(),
         target_validator_set: new_validator_infos.clone(),
     };
@@ -121,11 +118,7 @@ fn test_dummy_dkg_correctness() {
         .iter()
         .map(|state| state.transcript.clone().unwrap())
         .collect();
-    let mut agg_transcript = DummyDKGTranscript::default();
-    all_transcripts.into_iter().for_each(|trx| {
-        DummyDKG::aggregate_transcripts(&pub_params, &mut agg_transcript, trx);
-    });
-
+    let agg_transcript = DummyDKG::aggregate_transcripts(&pub_params, all_transcripts);
     assert!(DummyDKG::verify_transcript(&pub_params, &agg_transcript).is_ok());
 
     // Optional check: bad transcript should be rejected.
@@ -135,14 +128,13 @@ fn test_dummy_dkg_correctness() {
 
     // Every new validator decrypt their own secret share.
     for (idx, nvi) in new_validator_states.iter_mut().enumerate() {
-        let (secret, _pub_key) = DummyDKG::decrypt_secret_share_from_transcript(
+        nvi.secret_share = DummyDKG::decrypt_secret_share_from_transcript(
             &pub_params,
             &agg_transcript,
             idx as u64,
             &nvi.sk,
         )
-        .unwrap();
-        nvi.secret_share = Some(secret);
+        .ok()
     }
 
     // The dealt secret should be reconstructable.
@@ -155,9 +147,7 @@ fn test_dummy_dkg_correctness() {
         DummyDKG::reconstruct_secret_from_shares(&pub_params, player_share_pairs).unwrap();
 
     let all_input_secrets = dealer_states.iter().map(|ds| ds.input_secret).collect();
-    let dealt_secret_from_input = DummyDKG::dealt_secret_from_input(
-        &pub_params,
-        &DummyDKG::aggregate_input_secret(all_input_secrets),
-    );
+    let dealt_secret_from_input =
+        DummyDKG::dealt_secret_from_input(&DummyDKG::aggregate_input_secret(all_input_secrets));
     assert_eq!(dealt_secret_from_reconstruct, dealt_secret_from_input);
 }

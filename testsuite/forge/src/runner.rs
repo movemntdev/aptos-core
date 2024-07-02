@@ -547,7 +547,7 @@ impl<'cfg, F: Factory> Forge<'cfg, F> {
             let initial_version = self.initial_version();
             // The genesis version should always match the initial node version
             let genesis_version = initial_version.clone();
-            let runtime = Runtime::new().unwrap(); // TODO: new multithreaded?
+            let runtime = Runtime::new().unwrap();
             let mut rng = ::rand::rngs::StdRng::from_seed(OsRng.gen());
             let mut swarm = runtime.block_on(self.factory.launch_swarm(
                 &mut rng,
@@ -586,26 +586,16 @@ impl<'cfg, F: Factory> Forge<'cfg, F> {
                 summary.handle_result(test.name().to_owned(), result)?;
             }
 
-            let logs_location = swarm.logs_location();
-            let swarm = Arc::new(tokio::sync::RwLock::new(swarm));
             for test in self.filter_tests(&self.tests.network_tests) {
-                let network_ctx = NetworkContext::new(
+                let mut network_ctx = NetworkContext::new(
                     CoreContext::from_rng(&mut rng),
-                    swarm.clone(),
+                    &mut *swarm,
                     &mut report,
                     self.global_duration,
                     self.tests.emit_job_request.clone(),
                     self.tests.success_criteria.clone(),
                 );
-                let handle = network_ctx.runtime.handle().clone();
-                let _handle_context = handle.enter();
-                let network_ctx = NetworkContextSynchronizer::new(network_ctx, handle.clone());
-                let result = run_test(|| handle.block_on(test.run(network_ctx.clone())));
-                // explicitly keep network context in scope so that its created tokio Runtime drops after all the stuff has run.
-                let NetworkContextSynchronizer { ctx, handle } = network_ctx;
-                drop(handle);
-                let ctx = Arc::into_inner(ctx).unwrap().into_inner();
-                drop(ctx);
+                let result = run_test(|| test.run(&mut network_ctx));
                 report.report_text(result.to_string());
                 summary.handle_result(test.name().to_owned(), result)?;
             }
@@ -616,7 +606,7 @@ impl<'cfg, F: Factory> Forge<'cfg, F> {
             io::stderr().flush()?;
             if !summary.success() {
                 println!();
-                println!("Swarm logs can be found here: {}", logs_location);
+                println!("Swarm logs can be found here: {}", swarm.logs_location());
             }
         }
 

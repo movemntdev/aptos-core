@@ -1,4 +1,4 @@
-// -- Model dump before bytecode pipeline
+// ---- Model Dump
 module 0x42::m {
     struct A {
         addr: address,
@@ -9,9 +9,10 @@ module 0x42::m {
         {
           let a: m::A = MoveFrom<m::A>(input);
           {
-            let m::A{ addr } = a;
+            let m::A{ addr: addr: address } = a;
             addr
           }
         }
     }
+    spec fun $foo(input: address): address;
 } // end 0x42::m

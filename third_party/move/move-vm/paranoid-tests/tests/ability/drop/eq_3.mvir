@@ -14,7 +14,7 @@ module 0x2.B {
   }
 }
 
-//# run --signers 0x1
+//# run --signers 0x1 --check-runtime-types
 import 0x2.B;
 main(account: signer) {
     let c: B.C;

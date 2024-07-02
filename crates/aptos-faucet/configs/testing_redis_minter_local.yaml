@@ -1,4 +1,4 @@
-# Local redis instance with a localnet.
+# Local redis instance with a local testnet.
 ---
 server_config:
   api_path_base: ""

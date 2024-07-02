@@ -1,4 +1,4 @@
-// -- Model dump before bytecode pipeline
+// ---- Model Dump
 module 0x8675309::M {
     private fun t0() {
         loop {
@@ -18,18 +18,26 @@ module 0x8675309::M {
     }
     private fun t1() {
         loop {
-          if true {
+          if {
+            let foo: bool = true;
+            foo
+          } {
             Tuple()
           } else {
             break
           }
         };
         loop {
-          if false {
+          if {
+            let bar: bool = false;
+            bar
+          } {
             Tuple()
           } else {
             break
           }
         }
     }
+    spec fun $t0();
+    spec fun $t1();
 } // end 0x8675309::M

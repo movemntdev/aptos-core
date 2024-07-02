@@ -479,7 +479,6 @@ fn parse_failure_attribute(
                 status_code,
                 sub_status_code,
                 move_binary_format::errors::Location::Module(location),
-                None,
             )))
         },
     }
@@ -565,7 +564,7 @@ fn convert_constant_value_u64_constant_or_value(
     let (vloc, module, member) = match value {
         sp!(
             vloc,
-            EAV::ModuleAccess(sp!(_, ModuleAccess_::ModuleAccess(m, n, _)))
+            EAV::ModuleAccess(sp!(_, ModuleAccess_::ModuleAccess(m, n)))
         ) => (*vloc, m, n),
         _ => {
             let (vloc, u) = convert_attribute_value_u64(context, loc, value)?;

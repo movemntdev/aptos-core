@@ -7,6 +7,8 @@ use crate::{
         db_metadata::{DbMetadataKey, DbMetadataSchema, DbMetadataValue},
         event::EventSchema,
         event_accumulator::EventAccumulatorSchema,
+        event_by_key::EventByKeySchema,
+        event_by_version::EventByVersionSchema,
     },
     utils::iterators::EventsByVersionIter,
 };
@@ -15,14 +17,9 @@ use aptos_crypto::{
     hash::{CryptoHash, EventAccumulatorHasher},
     HashValue,
 };
-use aptos_db_indexer_schemas::schema::{
-    event_by_key::EventByKeySchema, event_by_version::EventByVersionSchema,
-};
-use aptos_schemadb::{SchemaBatch, DB};
+use aptos_schemadb::{ReadOptions, SchemaBatch, DB};
 use aptos_storage_interface::{AptosDbError, Result};
-use aptos_types::{
-    account_config::new_block_event_key, contract_event::ContractEvent, transaction::Version,
-};
+use aptos_types::{contract_event::ContractEvent, transaction::Version};
 use std::{path::Path, sync::Arc};
 
 #[derive(Debug)]
@@ -64,7 +61,7 @@ impl EventDb {
     pub(crate) fn get_events_by_version(&self, version: Version) -> Result<Vec<ContractEvent>> {
         let mut events = vec![];
 
-        let mut iter = self.db.iter::<EventSchema>()?;
+        let mut iter = self.db.iter::<EventSchema>(ReadOptions::default())?;
         // Grab the first event and then iterate until we get all events for this version.
         iter.seek(&version)?;
         while let Some(((ver, _index), event)) = iter.next().transpose()? {
@@ -77,21 +74,6 @@ impl EventDb {
         Ok(events)
     }
 
-    pub(crate) fn expect_new_block_event(&self, version: Version) -> Result<ContractEvent> {
-        for event in self.get_events_by_version(version)? {
-            if let Some(key) = event.event_key() {
-                if *key == new_block_event_key() {
-                    return Ok(event);
-                }
-            }
-        }
-
-        Err(AptosDbError::NotFound(format!(
-            "NewBlockEvent at version {}",
-            version,
-        )))
-    }
-
     /// Returns an iterator that yields at most `num_versions` versions' events starting from
     /// `start_version`.
     pub(crate) fn get_events_by_version_iter(
@@ -99,7 +81,7 @@ impl EventDb {
         start_version: Version,
         num_versions: usize,
     ) -> Result<EventsByVersionIter> {
-        let mut iter = self.db.iter::<EventSchema>()?;
+        let mut iter = self.db.iter::<EventSchema>(Default::default())?;
         iter.seek(&start_version)?;
 
         Ok(EventsByVersionIter::new(
@@ -113,7 +95,7 @@ impl EventDb {
 
     /// Returns the version of the latest event committed in the event db.
     pub(crate) fn latest_version(&self) -> Result<Option<Version>> {
-        let mut iter = self.db.iter::<EventSchema>()?;
+        let mut iter = self.db.iter::<EventSchema>(ReadOptions::default())?;
         iter.seek_to_last();
         if let Some(((version, _), _)) = iter.next().transpose()? {
             Ok(Some(version))

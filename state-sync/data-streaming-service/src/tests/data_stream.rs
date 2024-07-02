@@ -31,9 +31,7 @@ use crate::{
     },
 };
 use aptos_channels::{aptos_channel, message_queues::QueueStyle};
-use aptos_config::config::{
-    AptosDataClientConfig, DataStreamingServiceConfig, DynamicPrefetchingConfig,
-};
+use aptos_config::config::{AptosDataClientConfig, DataStreamingServiceConfig};
 use aptos_data_client::{
     global_summary::{AdvertisedData, GlobalDataSummary, OptimalChunkSizes},
     interface::{Response, ResponseContext, ResponsePayload},
@@ -53,7 +51,7 @@ use aptos_types::{
 };
 use claims::{assert_err, assert_ge, assert_matches, assert_none, assert_ok, assert_some};
 use futures::{FutureExt, StreamExt};
-use std::{sync::Arc, time::Duration};
+use std::{collections::VecDeque, sync::Arc, time::Duration};
 use tokio::time::timeout;
 
 #[tokio::test]
@@ -268,8 +266,12 @@ async fn test_epoch_stream_out_of_order_responses() {
     let global_data_summary = create_global_data_summary(1);
     initialize_data_requests(&mut data_stream, &global_data_summary);
 
-    // Verify that three requests have been made
-    verify_num_sent_requests(&mut data_stream, max_concurrent_requests);
+    // Verify at least three requests have been made
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_ge!(
+        sent_requests.as_ref().unwrap().len(),
+        max_concurrent_requests as usize
+    );
 
     // Set a response for the second request and verify no notifications
     set_epoch_ending_response_in_queue(&mut data_stream, 1, 0);
@@ -315,14 +317,9 @@ async fn test_epoch_stream_out_of_order_responses() {
 
 #[tokio::test]
 async fn test_state_stream_out_of_order_responses() {
-    // Create a state value data stream with dynamic prefetching disabled
+    // Create a state value data stream
     let max_concurrent_state_requests = 6;
-    let dynamic_prefetching_config = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: false,
-        ..Default::default()
-    };
     let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching: dynamic_prefetching_config,
         max_concurrent_requests: 1,
         max_concurrent_state_requests,
         ..Default::default()
@@ -338,14 +335,19 @@ async fn test_state_stream_out_of_order_responses() {
     initialize_data_requests(&mut data_stream, &global_data_summary);
 
     // Verify a single request is made (to fetch the number of state values)
-    verify_num_sent_requests(&mut data_stream, 1);
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(sent_requests.as_ref().unwrap().len(), 1);
 
     // Set a response for the number of state values
     set_num_state_values_response_in_queue(&mut data_stream, 0);
     process_data_responses(&mut data_stream, &global_data_summary).await;
 
-    // Verify the number of sent requests
-    verify_num_sent_requests(&mut data_stream, max_concurrent_state_requests);
+    // Verify at least six requests have been made
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_ge!(
+        sent_requests.as_ref().unwrap().len(),
+        max_concurrent_state_requests as usize
+    );
 
     // Set a response for the second request and verify no notifications
     set_state_value_response_in_queue(&mut data_stream, 1, 1, 1);
@@ -387,125 +389,14 @@ async fn test_state_stream_out_of_order_responses() {
         );
     }
     assert_none!(stream_listener.select_next_some().now_or_never());
-}
-
-#[tokio::test]
-async fn test_state_stream_out_of_order_responses_dynamic() {
-    // Create a dynamic prefetching config with prefetching enabled
-    let initial_prefetching_value = 3;
-    let prefetching_value_increase = 2;
-    let dynamic_prefetching_config = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: true,
-        initial_prefetching_value,
-        prefetching_value_increase,
-        ..Default::default()
-    };
-
-    // Create a state value data stream
-    let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching: dynamic_prefetching_config,
-        ..Default::default()
-    };
-    let (mut data_stream, mut stream_listener) = create_state_value_stream(
-        AptosDataClientConfig::default(),
-        streaming_service_config,
-        MIN_ADVERTISED_STATES,
-    );
-
-    // Initialize the data stream
-    let global_data_summary = create_global_data_summary(1);
-    initialize_data_requests(&mut data_stream, &global_data_summary);
-
-    // Verify a single request is made (to fetch the number of state values)
-    verify_num_sent_requests(&mut data_stream, 1);
-
-    // Set a response for the number of state values
-    set_num_state_values_response_in_queue(&mut data_stream, 0);
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-
-    // Verify the correct number of requests have been made
-    verify_num_sent_requests(
-        &mut data_stream,
-        initial_prefetching_value + prefetching_value_increase,
-    );
-
-    // Set a response for the second request and verify no notifications
-    set_state_value_response_in_queue(&mut data_stream, 1, 1, 1);
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    assert_none!(stream_listener.select_next_some().now_or_never());
-
-    // Verify the correct number of requests have been made
-    verify_num_sent_requests(
-        &mut data_stream,
-        initial_prefetching_value + prefetching_value_increase + 1,
-    );
-
-    // Set a response for the first request and verify two notifications
-    set_state_value_response_in_queue(&mut data_stream, 0, 0, 0);
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    for _ in 0..2 {
-        let data_notification = get_data_notification(&mut stream_listener).await.unwrap();
-        assert_matches!(
-            data_notification.data_payload,
-            DataPayload::StateValuesWithProof(_)
-        );
-    }
-    assert_none!(stream_listener.select_next_some().now_or_never());
-
-    // Verify the correct number of requests have been made
-    verify_num_sent_requests(
-        &mut data_stream,
-        initial_prefetching_value + (prefetching_value_increase * 3),
-    );
-
-    // Set the response for the first and third request and verify one notification sent
-    set_state_value_response_in_queue(&mut data_stream, 2, 2, 0);
-    set_state_value_response_in_queue(&mut data_stream, 4, 4, 2);
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    let data_notification = get_data_notification(&mut stream_listener).await.unwrap();
-    assert_matches!(
-        data_notification.data_payload,
-        DataPayload::StateValuesWithProof(_)
-    );
-    assert_none!(stream_listener.select_next_some().now_or_never());
-
-    // Verify the correct number of requests have been made
-    verify_num_sent_requests(
-        &mut data_stream,
-        initial_prefetching_value + (prefetching_value_increase * 4) + 1,
-    );
-
-    // Set the response for the first and third request and verify three notifications sent
-    set_state_value_response_in_queue(&mut data_stream, 3, 3, 0);
-    set_state_value_response_in_queue(&mut data_stream, 5, 5, 2);
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    for _ in 0..3 {
-        let data_notification = get_data_notification(&mut stream_listener).await.unwrap();
-        assert_matches!(
-            data_notification.data_payload,
-            DataPayload::StateValuesWithProof(_)
-        );
-    }
-    assert_none!(stream_listener.select_next_some().now_or_never());
-
-    // Verify the correct number of requests have been made
-    verify_num_sent_requests(
-        &mut data_stream,
-        initial_prefetching_value + (prefetching_value_increase * 7),
-    );
 }
 
 #[tokio::test]
 async fn test_stream_max_pending_requests() {
-    // Create an epoch ending data stream with dynamic prefetching disabled
+    // Create an epoch ending data stream
     let max_concurrent_requests = 6;
     let max_pending_requests = 19;
-    let dynamic_prefetching_config = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: false,
-        ..Default::default()
-    };
     let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching: dynamic_prefetching_config,
         max_concurrent_requests,
         max_pending_requests,
         ..Default::default()
@@ -521,7 +412,11 @@ async fn test_stream_max_pending_requests() {
     initialize_data_requests(&mut data_stream, &global_data_summary);
 
     // Verify that the correct number of client requests have been made
-    verify_num_sent_requests(&mut data_stream, max_concurrent_requests);
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(
+        sent_requests.as_ref().unwrap().len(),
+        max_concurrent_requests as usize
+    );
 
     // Set a valid response for each request except the first one
     set_epoch_ending_response_for_indices(
@@ -536,11 +431,15 @@ async fn test_stream_max_pending_requests() {
 
     // Verify the correct number of requests have been made
     let num_expected_pending_requests = (max_concurrent_requests * 2) - 1; // The first request failed
-    verify_num_sent_requests(&mut data_stream, num_expected_pending_requests);
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(
+        sent_requests.as_ref().unwrap().len() as u64,
+        num_expected_pending_requests
+    );
 
     // Verify the state of the pending responses
     verify_pending_responses_for_indices(
-        &mut data_stream,
+        sent_requests,
         num_expected_pending_requests,
         (1..max_concurrent_requests).collect::<Vec<_>>(),
     );
@@ -558,11 +457,15 @@ async fn test_stream_max_pending_requests() {
 
     // Verify the correct number of requests have been made
     let num_expected_pending_requests = (max_concurrent_requests * 3) - 3;
-    verify_num_sent_requests(&mut data_stream, num_expected_pending_requests);
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(
+        sent_requests.as_ref().unwrap().len() as u64,
+        num_expected_pending_requests
+    );
 
     // Verify the state of the pending responses
     verify_pending_responses_for_indices(
-        &mut data_stream,
+        sent_requests,
         num_expected_pending_requests,
         (1..(max_concurrent_requests * 2) - 2).collect::<Vec<_>>(),
     );
@@ -579,11 +482,15 @@ async fn test_stream_max_pending_requests() {
     assert_none!(stream_listener.select_next_some().now_or_never());
 
     // Verify the correct number of requests have been made
-    verify_num_sent_requests(&mut data_stream, max_pending_requests);
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(
+        sent_requests.as_ref().unwrap().len() as u64,
+        max_pending_requests
+    );
 
     // Verify the state of the pending responses
     verify_pending_responses_for_indices(
-        &mut data_stream,
+        sent_requests,
         num_expected_pending_requests,
         (1..(max_concurrent_requests * 3) - 3).collect::<Vec<_>>(),
     );
@@ -602,152 +509,12 @@ async fn test_stream_max_pending_requests() {
         assert_none!(stream_listener.select_next_some().now_or_never());
 
         // Verify that no more requests have been made (we're at the max)
-        verify_num_sent_requests(&mut data_stream, max_pending_requests);
-    }
-
-    // Set a valid response for every request
-    set_epoch_ending_response_for_indices(
-        &mut data_stream,
-        max_pending_requests,
-        (0..max_pending_requests).collect::<Vec<_>>(),
-    );
-
-    // Process the responses and send more client requests
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-
-    // Verify that more requests have been made (and the entire buffer has been flushed)
-    verify_num_sent_requests(&mut data_stream, max_concurrent_requests);
-
-    // Verify that we received a notification for each flushed response
-    for _ in 0..max_pending_requests {
-        let data_notification = get_data_notification(&mut stream_listener).await.unwrap();
-        assert_matches!(
-            data_notification.data_payload,
-            DataPayload::EpochEndingLedgerInfos(_)
+        let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+        assert_eq!(
+            sent_requests.as_ref().unwrap().len() as u64,
+            max_pending_requests
         );
     }
-}
-
-#[tokio::test]
-async fn test_stream_max_pending_requests_dynamic() {
-    // Create a dynamic prefetching config with prefetching enabled
-    let initial_prefetching_value = 5;
-    let min_prefetching_value = 1;
-    let prefetching_value_increase = 2;
-    let prefetching_value_decrease = 3;
-    let dynamic_prefetching_config = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: true,
-        initial_prefetching_value,
-        min_prefetching_value,
-        prefetching_value_increase,
-        prefetching_value_decrease,
-        timeout_freeze_duration_secs: 0, // Don't freeze the prefetching value
-        ..Default::default()
-    };
-
-    // Create an epoch ending data stream
-    let max_pending_requests = 6;
-    let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching: dynamic_prefetching_config,
-        max_pending_requests,
-        ..Default::default()
-    };
-    let (mut data_stream, mut stream_listener) = create_epoch_ending_stream(
-        AptosDataClientConfig::default(),
-        streaming_service_config,
-        MIN_ADVERTISED_EPOCH_END,
-    );
-
-    // Initialize the data stream
-    let global_data_summary = create_global_data_summary(1);
-    initialize_data_requests(&mut data_stream, &global_data_summary);
-
-    // Verify that the correct number of client requests have been made
-    verify_num_sent_requests(&mut data_stream, initial_prefetching_value);
-
-    // Set a valid response for each request except the first one
-    set_epoch_ending_response_for_indices(
-        &mut data_stream,
-        initial_prefetching_value,
-        (1..initial_prefetching_value).collect::<Vec<_>>(),
-    );
-
-    // Process the responses and send more client requests
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    assert_none!(stream_listener.select_next_some().now_or_never());
-
-    // Verify the correct number of requests have been made
-    let num_expected_pending_requests =
-        ((initial_prefetching_value * 2) - prefetching_value_decrease) - 1; // The first request failed
-    verify_num_sent_requests(&mut data_stream, num_expected_pending_requests);
-
-    // Verify the state of the pending responses
-    verify_pending_responses_for_indices(
-        &mut data_stream,
-        num_expected_pending_requests,
-        (1..initial_prefetching_value).collect::<Vec<_>>(),
-    );
-
-    // Set a valid response for each request except the first and last ones
-    set_epoch_ending_response_for_indices(
-        &mut data_stream,
-        num_expected_pending_requests,
-        (1..num_expected_pending_requests - 1).collect::<Vec<_>>(),
-    );
-
-    // Process the responses and send more client requests
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    assert_none!(stream_listener.select_next_some().now_or_never());
-
-    // Verify the correct number of requests have been made
-    let num_expected_pending_requests =
-        ((initial_prefetching_value * 2) - prefetching_value_decrease) - 1; // The first request failed
-    verify_num_sent_requests(&mut data_stream, num_expected_pending_requests);
-
-    // Verify the state of the pending responses
-    verify_pending_responses_for_indices(
-        &mut data_stream,
-        num_expected_pending_requests,
-        (1..num_expected_pending_requests - 1).collect::<Vec<_>>(),
-    );
-
-    // Set a valid response for each request except the first one
-    set_epoch_ending_response_for_indices(
-        &mut data_stream,
-        num_expected_pending_requests,
-        (1..num_expected_pending_requests).collect::<Vec<_>>(),
-    );
-
-    // Process the responses and send more client requests
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    assert_none!(stream_listener.select_next_some().now_or_never());
-
-    // Verify the correct number of requests have been made
-    verify_num_sent_requests(&mut data_stream, max_pending_requests);
-
-    // Verify the state of the pending responses
-    verify_pending_responses_for_indices(
-        &mut data_stream,
-        num_expected_pending_requests,
-        (1..num_expected_pending_requests).collect::<Vec<_>>(),
-    );
-
-    // Set a valid response for each request except the first one
-    set_epoch_ending_response_for_indices(
-        &mut data_stream,
-        num_expected_pending_requests,
-        (1..num_expected_pending_requests).collect::<Vec<_>>(),
-    );
-
-    // Process the responses and send more client requests several times
-    for _ in 0..10 {
-        // Process the responses and send more client requests
-        process_data_responses(&mut data_stream, &global_data_summary).await;
-        assert_none!(stream_listener.select_next_some().now_or_never());
-
-        // Verify that no more requests have been made (we're at the max)
-        verify_num_sent_requests(&mut data_stream, max_pending_requests);
-    }
 
     // Set a valid response for every request
     set_epoch_ending_response_for_indices(
@@ -760,7 +527,11 @@ async fn test_stream_max_pending_requests_dynamic() {
     process_data_responses(&mut data_stream, &global_data_summary).await;
 
     // Verify that more requests have been made (and the entire buffer has been flushed)
-    verify_num_sent_requests(&mut data_stream, max_pending_requests);
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(
+        sent_requests.as_ref().unwrap().len() as u64,
+        max_concurrent_requests
+    );
 
     // Verify that we received a notification for each flushed response
     for _ in 0..max_pending_requests {
@@ -774,15 +545,10 @@ async fn test_stream_max_pending_requests_dynamic() {
 
 #[tokio::test]
 async fn test_stream_max_pending_requests_flushing() {
-    // Create an epoch ending data stream with dynamic prefetching disabled
+    // Create an epoch ending data stream
     let max_concurrent_requests = 2;
     let max_pending_requests = 4;
-    let dynamic_prefetching_config = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: false,
-        ..Default::default()
-    };
     let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching: dynamic_prefetching_config,
         max_concurrent_requests,
         max_pending_requests,
         ..Default::default()
@@ -798,7 +564,11 @@ async fn test_stream_max_pending_requests_flushing() {
     initialize_data_requests(&mut data_stream, &global_data_summary);
 
     // Verify that the correct number of client requests have been made
-    verify_num_sent_requests(&mut data_stream, max_concurrent_requests);
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(
+        sent_requests.as_ref().unwrap().len(),
+        max_concurrent_requests as usize
+    );
 
     // Set a valid response for the second request
     set_epoch_ending_response_in_queue(&mut data_stream, 1, 0);
@@ -808,7 +578,11 @@ async fn test_stream_max_pending_requests_flushing() {
     assert_none!(stream_listener.select_next_some().now_or_never());
 
     // Verify that the correct number of client requests have been made
-    verify_num_sent_requests(&mut data_stream, max_concurrent_requests + 1);
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(
+        sent_requests.as_ref().unwrap().len(),
+        (max_concurrent_requests + 1) as usize
+    );
 
     // Set a valid response for the third request
     set_epoch_ending_response_in_queue(&mut data_stream, 2, 0);
@@ -818,7 +592,11 @@ async fn test_stream_max_pending_requests_flushing() {
     assert_none!(stream_listener.select_next_some().now_or_never());
 
     // Verify that the correct number of client requests have been made
-    verify_num_sent_requests(&mut data_stream, max_pending_requests);
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(
+        sent_requests.as_ref().unwrap().len(),
+        max_pending_requests as usize
+    );
 
     // Set a valid response for the first request
     set_epoch_ending_response_in_queue(&mut data_stream, 0, 0);
@@ -831,7 +609,11 @@ async fn test_stream_max_pending_requests_flushing() {
     assert_none!(stream_listener.select_next_some().now_or_never());
 
     // Verify the correct number of client requests have been made
-    verify_num_sent_requests(&mut data_stream, max_concurrent_requests);
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(
+        sent_requests.as_ref().unwrap().len(),
+        max_concurrent_requests as usize
+    );
 
     // Set a valid response for the second request
     set_epoch_ending_response_in_queue(&mut data_stream, 1, 0);
@@ -841,7 +623,11 @@ async fn test_stream_max_pending_requests_flushing() {
     assert_none!(stream_listener.select_next_some().now_or_never());
 
     // Verify the correct number of client requests have been made
-    verify_num_sent_requests(&mut data_stream, max_concurrent_requests + 1);
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(
+        sent_requests.as_ref().unwrap().len(),
+        (max_concurrent_requests + 1) as usize
+    );
 
     // Set a valid response for the first request
     set_epoch_ending_response_in_queue(&mut data_stream, 0, 0);
@@ -854,7 +640,11 @@ async fn test_stream_max_pending_requests_flushing() {
     assert_none!(stream_listener.select_next_some().now_or_never());
 
     // Verify the correct number of client requests have been made
-    verify_num_sent_requests(&mut data_stream, max_concurrent_requests);
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(
+        sent_requests.as_ref().unwrap().len(),
+        max_concurrent_requests as usize
+    );
 
     // Set an error response for all requests
     for index in 0..max_concurrent_requests {
@@ -866,7 +656,11 @@ async fn test_stream_max_pending_requests_flushing() {
     assert_none!(stream_listener.select_next_some().now_or_never());
 
     // Verify no more client requests have been made
-    verify_num_sent_requests(&mut data_stream, max_concurrent_requests);
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(
+        sent_requests.as_ref().unwrap().len() as u64,
+        max_concurrent_requests
+    );
 
     // Set a valid response for the first request
     set_epoch_ending_response_in_queue(&mut data_stream, 0, 0);
@@ -877,261 +671,19 @@ async fn test_stream_max_pending_requests_flushing() {
     assert_none!(stream_listener.select_next_some().now_or_never());
 
     // Verify no more client requests have been made
-    verify_num_sent_requests(&mut data_stream, max_concurrent_requests);
-}
-
-#[tokio::test]
-async fn test_stream_max_pending_requests_flushing_dynamic() {
-    // Create a dynamic prefetching config with prefetching enabled
-    let initial_prefetching_value = 3;
-    let min_prefetching_value = 1;
-    let prefetching_value_increase = 2;
-    let dynamic_prefetching_config = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: true,
-        initial_prefetching_value,
-        min_prefetching_value,
-        prefetching_value_increase,
-        timeout_freeze_duration_secs: 0, // Don't freeze the prefetching value
-        ..Default::default()
-    };
-
-    // Create an epoch ending data stream
-    let max_pending_requests = 7;
-    let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching: dynamic_prefetching_config,
-        max_pending_requests,
-        ..Default::default()
-    };
-    let (mut data_stream, mut stream_listener) = create_epoch_ending_stream(
-        AptosDataClientConfig::default(),
-        streaming_service_config,
-        MIN_ADVERTISED_EPOCH_END,
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(
+        sent_requests.as_ref().unwrap().len() as u64,
+        max_concurrent_requests
     );
-
-    // Initialize the data stream
-    let global_data_summary = create_global_data_summary(1);
-    initialize_data_requests(&mut data_stream, &global_data_summary);
-
-    // Verify that the correct number of client requests have been made
-    verify_num_sent_requests(&mut data_stream, initial_prefetching_value);
-
-    // Set a valid response for the second request
-    set_epoch_ending_response_in_queue(&mut data_stream, 1, 0);
-
-    // Process the responses and verify we get no notifications
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    assert_none!(stream_listener.select_next_some().now_or_never());
-
-    // Verify that the correct number of client requests have been made
-    verify_num_sent_requests(&mut data_stream, initial_prefetching_value + 1);
-
-    // Set a valid response for the third request
-    set_epoch_ending_response_in_queue(&mut data_stream, 2, 0);
-
-    // Process the responses and send more client requests
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    assert_none!(stream_listener.select_next_some().now_or_never());
-
-    // Verify that the correct number of client requests have been made
-    verify_num_sent_requests(&mut data_stream, initial_prefetching_value + 2);
-
-    // Set a valid response for the first request
-    set_epoch_ending_response_in_queue(&mut data_stream, 0, 0);
-
-    // Process the responses and verify we get three notifications
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    for _ in 0..3 {
-        assert_some!(stream_listener.select_next_some().now_or_never());
-    }
-    assert_none!(stream_listener.select_next_some().now_or_never());
-
-    // Verify the correct number of client requests have been made
-    verify_num_sent_requests(&mut data_stream, max_pending_requests);
-
-    // Set a valid response for the second request
-    set_epoch_ending_response_in_queue(&mut data_stream, 1, 0);
-
-    // Process the responses and verify we get no notifications
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    assert_none!(stream_listener.select_next_some().now_or_never());
-
-    // Verify the correct number of client requests have been made
-    verify_num_sent_requests(&mut data_stream, max_pending_requests);
-
-    // Set a valid response for the first request
-    set_epoch_ending_response_in_queue(&mut data_stream, 0, 0);
-
-    // Process the responses and verify we get two notifications
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    for _ in 0..2 {
-        assert_some!(stream_listener.select_next_some().now_or_never());
-    }
-    assert_none!(stream_listener.select_next_some().now_or_never());
-
-    // Verify the correct number of client requests have been made
-    verify_num_sent_requests(&mut data_stream, max_pending_requests);
-
-    // Set an error response for all requests
-    for index in 0..max_pending_requests {
-        set_failure_response_in_queue(&mut data_stream, index as usize);
-    }
-
-    // Process the responses and (potentially) send more client requests
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    assert_none!(stream_listener.select_next_some().now_or_never());
-
-    // Verify no more client requests have been made
-    verify_num_sent_requests(&mut data_stream, max_pending_requests);
-
-    // Set a valid response for the first request
-    set_epoch_ending_response_in_queue(&mut data_stream, 0, 0);
-
-    // Process the responses and verify we get one notification
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    assert_some!(stream_listener.select_next_some().now_or_never());
-    assert_none!(stream_listener.select_next_some().now_or_never());
-
-    // Verify more client requests have been made
-    verify_num_sent_requests(&mut data_stream, max_pending_requests);
-}
-
-#[tokio::test]
-async fn test_stream_max_pending_requests_freeze_dynamic() {
-    // Create a dynamic prefetching config with prefetching enabled
-    let initial_prefetching_value = 10;
-    let max_prefetching_value = 12;
-    let prefetching_value_increase = 2;
-    let prefetching_value_decrease = 2;
-    let timeout_freeze_duration_secs = 10;
-    let dynamic_prefetching_config = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: true,
-        initial_prefetching_value,
-        max_prefetching_value,
-        prefetching_value_increase,
-        prefetching_value_decrease,
-        timeout_freeze_duration_secs,
-        ..Default::default()
-    };
-
-    // Create an data streaming service config with prefetching enabled
-    let max_pending_requests = 100;
-    let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching: dynamic_prefetching_config,
-        max_pending_requests,
-        ..Default::default()
-    };
-
-    // Create an epoch ending data stream
-    let stream_request =
-        StreamRequest::GetAllEpochEndingLedgerInfos(GetAllEpochEndingLedgerInfosRequest {
-            start_epoch: MIN_ADVERTISED_EPOCH_END,
-        });
-    let (mut data_stream, mut stream_listener, time_service) = create_data_stream(
-        AptosDataClientConfig::default(),
-        streaming_service_config,
-        stream_request,
-    );
-
-    // Initialize the data stream
-    let global_data_summary = create_global_data_summary(1);
-    initialize_data_requests(&mut data_stream, &global_data_summary);
-
-    // Verify that the correct number of client requests have been made
-    verify_num_sent_requests(&mut data_stream, initial_prefetching_value);
-
-    // Set a valid response for each request except the first one
-    set_epoch_ending_response_for_indices(
-        &mut data_stream,
-        initial_prefetching_value,
-        (1..initial_prefetching_value).collect::<Vec<_>>(),
-    );
-
-    // Set an invalid response for the first request
-    set_failure_response_in_queue(&mut data_stream, 0);
-
-    // Process the responses and verify we get no notifications
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    assert_none!(stream_listener.select_next_some().now_or_never());
-
-    // Verify that the correct number of client requests have been made
-    let mut num_expected_pending_requests =
-        ((initial_prefetching_value * 2) - prefetching_value_decrease) - 1; // The first request failed
-    verify_num_sent_requests(&mut data_stream, num_expected_pending_requests);
-
-    // Set a valid response for each request except the first one
-    set_epoch_ending_response_for_indices(
-        &mut data_stream,
-        num_expected_pending_requests,
-        (1..num_expected_pending_requests).collect::<Vec<_>>(),
-    );
-
-    // Set an invalid response for the first request
-    set_failure_response_in_queue(&mut data_stream, 0);
-
-    // Elapse some time (but not enough for the prefetching value to be unfrozen)
-    let time_service = time_service.into_mock();
-    time_service.advance(Duration::from_secs(timeout_freeze_duration_secs / 2));
-
-    // Process the responses and verify we get no notifications
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    assert_none!(stream_listener.select_next_some().now_or_never());
-
-    // Verify that the correct number of client requests have been made
-    num_expected_pending_requests +=
-        initial_prefetching_value - (prefetching_value_decrease * 2) - 1; // The first request failed
-    verify_num_sent_requests(&mut data_stream, num_expected_pending_requests);
-
-    // Set a valid response for all requests
-    set_epoch_ending_response_for_indices(
-        &mut data_stream,
-        num_expected_pending_requests,
-        (0..num_expected_pending_requests).collect::<Vec<_>>(),
-    );
-
-    // Process the responses and verify we get the correct number of notifications
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    for _ in 0..num_expected_pending_requests {
-        assert_some!(stream_listener.select_next_some().now_or_never());
-    }
-    assert_none!(stream_listener.select_next_some().now_or_never());
-
-    // Verify the correct number of client requests have been made
-    let num_expected_pending_requests =
-        initial_prefetching_value - (prefetching_value_decrease * 2);
-    verify_num_sent_requests(&mut data_stream, num_expected_pending_requests);
-
-    // Elapse enough time for the prefetching value to be unfrozen
-    time_service.advance(Duration::from_secs(timeout_freeze_duration_secs + 1));
-
-    // Set a valid response for all requests
-    set_epoch_ending_response_for_indices(
-        &mut data_stream,
-        num_expected_pending_requests,
-        (0..num_expected_pending_requests).collect::<Vec<_>>(),
-    );
-
-    // Process the responses and verify we get the correct number of notifications
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    for _ in 0..num_expected_pending_requests {
-        assert_some!(stream_listener.select_next_some().now_or_never());
-    }
-    assert_none!(stream_listener.select_next_some().now_or_never());
-
-    // Verify the correct number of client requests have been made
-    verify_num_sent_requests(&mut data_stream, max_prefetching_value);
 }
 
 #[tokio::test]
 async fn test_stream_max_pending_requests_missing_data() {
-    // Create an epoch ending data stream with dynamic prefetching disabled
+    // Create an epoch ending data stream
     let max_concurrent_requests = 1;
     let max_pending_requests = 3;
-    let dynamic_prefetching_config = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: false,
-        ..Default::default()
-    };
     let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching: dynamic_prefetching_config,
         max_concurrent_requests,
         max_pending_requests,
         ..Default::default()
@@ -1148,7 +700,11 @@ async fn test_stream_max_pending_requests_missing_data() {
     initialize_data_requests(&mut data_stream, &global_data_summary);
 
     // Verify that the correct number of client requests have been made
-    verify_num_sent_requests(&mut data_stream, max_concurrent_requests);
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(
+        sent_requests.as_ref().unwrap().len(),
+        max_concurrent_requests as usize
+    );
 
     // Set a valid (but partial) response for the first request
     set_epoch_ending_response_in_queue(&mut data_stream, 0, 1);
@@ -1158,7 +714,11 @@ async fn test_stream_max_pending_requests_missing_data() {
     assert_some!(stream_listener.select_next_some().now_or_never());
 
     // Verify that the correct number of client requests have been made
-    verify_num_sent_requests(&mut data_stream, max_concurrent_requests);
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(
+        sent_requests.as_ref().unwrap().len(),
+        max_concurrent_requests as usize
+    );
 
     // Set a valid (now complete) response for the first request
     set_epoch_ending_response_in_queue(&mut data_stream, 0, 1);
@@ -1168,79 +728,10 @@ async fn test_stream_max_pending_requests_missing_data() {
     assert_some!(stream_listener.select_next_some().now_or_never());
 
     // Verify that no more client requests have been made
-    verify_num_sent_requests(&mut data_stream, max_concurrent_requests);
-
-    // Set a valid (but partial) response for the first request again
-    set_epoch_ending_response_in_queue(&mut data_stream, 0, 1);
-
-    // Process the responses and verify we get a notification
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    assert_some!(stream_listener.select_next_some().now_or_never());
-
-    // Verify that the correct number of client requests have been made
-    verify_num_sent_requests(&mut data_stream, max_concurrent_requests);
-}
-
-#[tokio::test]
-async fn test_stream_max_pending_requests_missing_data_dynamic() {
-    // Create a dynamic prefetching config with prefetching enabled
-    let initial_prefetching_value = 3;
-    let min_prefetching_value = 1;
-    let prefetching_value_increase = 2;
-    let dynamic_prefetching_config = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: true,
-        initial_prefetching_value,
-        min_prefetching_value,
-        prefetching_value_increase,
-        timeout_freeze_duration_secs: 0, // Don't freeze the prefetching value
-        ..Default::default()
-    };
-
-    // Create an epoch ending data stream
-    let max_pending_requests = 10;
-    let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching: dynamic_prefetching_config,
-        max_pending_requests,
-        ..Default::default()
-    };
-    let (mut data_stream, mut stream_listener) = create_epoch_ending_stream(
-        AptosDataClientConfig::default(),
-        streaming_service_config,
-        MIN_ADVERTISED_EPOCH_END,
-    );
-
-    // Initialize the data stream
-    let optimal_epoch_chunk_sizes = 2;
-    let global_data_summary = create_global_data_summary(optimal_epoch_chunk_sizes);
-    initialize_data_requests(&mut data_stream, &global_data_summary);
-
-    // Verify that the correct number of client requests have been made
-    verify_num_sent_requests(&mut data_stream, initial_prefetching_value);
-
-    // Set a valid (but partial) response for the first request
-    set_epoch_ending_response_in_queue(&mut data_stream, 0, 1);
-
-    // Process the responses and verify we get a notification
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    assert_some!(stream_listener.select_next_some().now_or_never());
-
-    // Verify that the correct number of client requests have been made
-    verify_num_sent_requests(
-        &mut data_stream,
-        initial_prefetching_value + prefetching_value_increase,
-    );
-
-    // Set a valid (now complete) response for the first request
-    set_epoch_ending_response_in_queue(&mut data_stream, 0, 1);
-
-    // Process the responses and verify we get a notification
-    process_data_responses(&mut data_stream, &global_data_summary).await;
-    assert_some!(stream_listener.select_next_some().now_or_never());
-
-    // Verify that more client requests have been made
-    verify_num_sent_requests(
-        &mut data_stream,
-        initial_prefetching_value + (2 * prefetching_value_increase),
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(
+        sent_requests.as_ref().unwrap().len(),
+        max_concurrent_requests as usize
     );
 
     // Set a valid (but partial) response for the first request again
@@ -1251,23 +742,19 @@ async fn test_stream_max_pending_requests_missing_data_dynamic() {
     assert_some!(stream_listener.select_next_some().now_or_never());
 
     // Verify that the correct number of client requests have been made
-    verify_num_sent_requests(
-        &mut data_stream,
-        initial_prefetching_value + (3 * prefetching_value_increase),
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(
+        sent_requests.as_ref().unwrap().len(),
+        max_concurrent_requests as usize
     );
 }
 
 #[tokio::test]
 async fn test_continuous_stream_epoch_change_retry() {
-    // Create a test streaming service config with dynamic prefetching disabled
+    // Create a test streaming service config
     let max_request_retry = 10;
     let max_concurrent_requests = 3;
-    let dynamic_prefetching_config = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: false,
-        ..Default::default()
-    };
     let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching: dynamic_prefetching_config,
         max_concurrent_requests,
         max_request_retry,
         ..Default::default()
@@ -1298,7 +785,8 @@ async fn test_continuous_stream_epoch_change_retry() {
         initialize_data_requests(&mut data_stream, &global_data_summary);
 
         // Verify a single request is made
-        verify_num_sent_requests(&mut data_stream, 1);
+        let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+        assert_eq!(sent_requests.as_ref().unwrap().len(), 1);
 
         // Verify the request is for an epoch ending ledger info
         let client_request = get_pending_client_request(&mut data_stream, 0);
@@ -1326,84 +814,8 @@ async fn test_continuous_stream_epoch_change_retry() {
 
         // Verify the correct number of data requests are now pending,
         // i.e., a target has been found and we're fetching data up to it.
-        verify_num_sent_requests(&mut data_stream, 3);
-    }
-}
-
-#[tokio::test]
-async fn test_continuous_stream_epoch_change_retry_dynamic() {
-    // Create a dynamic prefetching config with prefetching enabled
-    let initial_prefetching_value = 5;
-    let min_prefetching_value = 2;
-    let dynamic_prefetching_config = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: true,
-        initial_prefetching_value,
-        min_prefetching_value,
-        ..Default::default()
-    };
-
-    // Create a test streaming service config
-    let max_request_retry = 10;
-    let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching: dynamic_prefetching_config,
-        max_request_retry,
-        ..Default::default()
-    };
-
-    // Test all types of continuous data streams
-    let (data_stream_1, _stream_listener_1, _) = create_continuous_transaction_stream(
-        AptosDataClientConfig::default(),
-        streaming_service_config,
-        MIN_ADVERTISED_TRANSACTION,
-        MIN_ADVERTISED_EPOCH_END,
-    );
-    let (data_stream_2, _stream_listener_2, _) = create_continuous_transaction_output_stream(
-        AptosDataClientConfig::default(),
-        streaming_service_config,
-        MIN_ADVERTISED_TRANSACTION_OUTPUT,
-        MIN_ADVERTISED_EPOCH_END,
-    );
-    let (data_stream_3, _stream_listener_3, _) = create_continuous_transaction_or_output_stream(
-        AptosDataClientConfig::default(),
-        streaming_service_config,
-        MIN_ADVERTISED_TRANSACTION_OUTPUT,
-        MIN_ADVERTISED_EPOCH_END,
-    );
-    for mut data_stream in [data_stream_1, data_stream_2, data_stream_3] {
-        // Initialize the data stream and drive progress
-        let global_data_summary = create_global_data_summary(1);
-        initialize_data_requests(&mut data_stream, &global_data_summary);
-
-        // Verify a single request is made
-        verify_num_sent_requests(&mut data_stream, 1);
-
-        // Verify the request is for an epoch ending ledger info
-        let client_request = get_pending_client_request(&mut data_stream, 0);
-        let epoch_ending_request =
-            DataClientRequest::EpochEndingLedgerInfos(EpochEndingLedgerInfosRequest {
-                start_epoch: MIN_ADVERTISED_EPOCH_END,
-                end_epoch: MIN_ADVERTISED_EPOCH_END,
-            });
-        assert_eq!(client_request, epoch_ending_request);
-
-        // Handle multiple timeouts and retries
-        for _ in 0..max_request_retry - 1 {
-            // Set a timeout response for the epoch ending ledger info and process it
-            set_timeout_response_in_queue(&mut data_stream, 0);
-            process_data_responses(&mut data_stream, &global_data_summary).await;
-
-            // Verify the data client request was resent to the network (retried)
-            let client_request = get_pending_client_request(&mut data_stream, 0);
-            assert_eq!(client_request, epoch_ending_request);
-        }
-
-        // Set an epoch ending response in the queue and process it
-        set_epoch_ending_response_in_queue(&mut data_stream, 0, MIN_ADVERTISED_TRANSACTION + 100);
-        process_data_responses(&mut data_stream, &global_data_summary).await;
-
-        // Verify the correct number of data requests are now pending,
-        // i.e., a target has been found and we're fetching data up to it.
-        verify_num_sent_requests(&mut data_stream, min_prefetching_value);
+        let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+        assert_eq!(sent_requests.as_ref().unwrap().len(), 3);
     }
 }
 
@@ -1520,17 +932,10 @@ async fn test_continuous_stream_optimistic_fetch_timeout() {
 
 #[tokio::test]
 async fn test_continuous_stream_subscription_failures() {
-    // Create a dynamic prefetching config with prefetching disabled
-    let dynamic_prefetching = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: false,
-        ..Default::default()
-    };
-
     // Create a test streaming service config with subscriptions enabled
     let max_request_retry = 3;
     let max_concurrent_requests = 3;
     let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching,
         enable_subscription_streaming: true,
         max_concurrent_requests,
         max_request_retry,
@@ -1640,7 +1045,8 @@ async fn test_continuous_stream_subscription_failures() {
             0,
         );
 
-        // Set a timeout response for the subscription request and process it
+        // Set a timeout response for the subscription request and process it.
+        // This will cause the same request to be re-sent.
         set_timeout_response_in_queue(&mut data_stream, 0);
         process_data_responses(&mut data_stream, &global_data_summary).await;
 
@@ -1657,158 +1063,11 @@ async fn test_continuous_stream_subscription_failures() {
 }
 
 #[tokio::test]
-async fn test_continuous_stream_subscription_failures_prefetching() {
-    // Create a dynamic prefetching config with prefetching enabled
-    let max_in_flight_subscription_requests = 5;
-    let initial_prefetching_value = 7;
-    let dynamic_prefetching = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: true,
-        initial_prefetching_value,
-        max_in_flight_subscription_requests,
-        ..Default::default()
-    };
-
-    // Create a test streaming service config with subscriptions enabled
-    let max_request_retry = 3;
-    let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching,
-        enable_subscription_streaming: true,
-        max_request_retry,
-        ..Default::default()
-    };
-
-    // Test all types of continuous data streams
-    let continuous_data_streams = enumerate_continuous_data_streams(
-        AptosDataClientConfig::default(),
-        streaming_service_config,
-    );
-    for (
-        mut data_stream,
-        mut stream_listener,
-        _,
-        transactions_only,
-        allow_transactions_or_outputs,
-    ) in continuous_data_streams
-    {
-        // Initialize the data stream
-        let global_data_summary = create_global_data_summary(1);
-        initialize_data_requests(&mut data_stream, &global_data_summary);
-
-        // Fetch the subscription stream ID from the first pending request
-        let mut subscription_stream_id = get_subscription_stream_id(&mut data_stream, 0);
-
-        // Verify the pending requests are for the correct data and correctly formed
-        verify_pending_subscription_requests(
-            &mut data_stream,
-            max_in_flight_subscription_requests,
-            allow_transactions_or_outputs,
-            transactions_only,
-            0,
-            subscription_stream_id,
-            0,
-        );
-
-        // Set a failure response for the first subscription request and process it
-        set_failure_response_in_queue(&mut data_stream, 0);
-        process_data_responses(&mut data_stream, &global_data_summary).await;
-        assert_none!(stream_listener.select_next_some().now_or_never());
-
-        // Handle multiple timeouts and retries
-        for _ in 0..max_request_retry * 3 {
-            // Set a timeout response for the first request and process it
-            set_timeout_response_in_queue(&mut data_stream, 0);
-            process_data_responses(&mut data_stream, &global_data_summary).await;
-
-            // Fetch the subscription stream ID from the first pending request
-            let next_subscription_stream_id = get_subscription_stream_id(&mut data_stream, 0);
-
-            // Verify the next stream ID is different from the previous one
-            assert_ne!(subscription_stream_id, next_subscription_stream_id);
-            subscription_stream_id = next_subscription_stream_id;
-
-            // Verify the pending requests are for the correct data and correctly formed
-            verify_pending_subscription_requests(
-                &mut data_stream,
-                max_in_flight_subscription_requests,
-                allow_transactions_or_outputs,
-                transactions_only,
-                0,
-                subscription_stream_id,
-                0,
-            );
-        }
-
-        // Set a failure response for the first request and process it
-        set_failure_response_in_queue(&mut data_stream, 0);
-        process_data_responses(&mut data_stream, &global_data_summary).await;
-
-        // Fetch the next subscription stream ID from the first pending request
-        let next_subscription_stream_id = get_subscription_stream_id(&mut data_stream, 0);
-
-        // Verify the next stream ID is different from the previous one
-        assert_ne!(subscription_stream_id, next_subscription_stream_id);
-        subscription_stream_id = next_subscription_stream_id;
-
-        // Verify the pending requests are for the correct data and correctly formed
-        verify_pending_subscription_requests(
-            &mut data_stream,
-            max_in_flight_subscription_requests,
-            allow_transactions_or_outputs,
-            transactions_only,
-            0,
-            subscription_stream_id,
-            0,
-        );
-
-        // Set a subscription response in the queue and process it
-        set_new_data_response_in_queue(
-            &mut data_stream,
-            0,
-            MAX_ADVERTISED_TRANSACTION + 1,
-            transactions_only,
-        );
-        process_data_responses(&mut data_stream, &global_data_summary).await;
-
-        // Verify the pending requests are for the correct data and correctly formed
-        verify_pending_subscription_requests(
-            &mut data_stream,
-            max_in_flight_subscription_requests,
-            allow_transactions_or_outputs,
-            transactions_only,
-            1,
-            subscription_stream_id, // The subscription stream ID should be the same
-            0,
-        );
-
-        // Set a timeout response for the subscription request and process it
-        set_timeout_response_in_queue(&mut data_stream, 0);
-        process_data_responses(&mut data_stream, &global_data_summary).await;
-
-        // Advertise new data and verify the data is requested
-        advertise_new_data_and_verify_requests(
-            &mut data_stream,
-            global_data_summary,
-            transactions_only,
-            allow_transactions_or_outputs,
-            initial_prefetching_value,
-        )
-        .await;
-    }
-}
-
-#[tokio::test]
 async fn test_continuous_stream_subscription_lag() {
-    // Create a dynamic prefetching config with prefetching disabled
-    let dynamic_prefetching = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: false,
-        ..Default::default()
-    };
-
     // Create a test streaming service config with subscriptions enabled
     let max_concurrent_requests = 3;
     let max_subscription_stream_lag_secs = 10;
     let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching,
         enable_subscription_streaming: true,
         max_subscription_stream_lag_secs,
         max_concurrent_requests,
@@ -2063,17 +1322,10 @@ async fn test_continuous_stream_subscription_lag_bounded() {
 
 #[tokio::test]
 async fn test_continuous_stream_subscription_lag_catch_up() {
-    // Create a dynamic prefetching config with prefetching disabled
-    let dynamic_prefetching = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: false,
-        ..Default::default()
-    };
-
     // Create a test streaming service config with subscriptions enabled
     let max_concurrent_requests = 3;
     let max_subscription_stream_lag_secs = 10;
     let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching,
         enable_subscription_streaming: true,
         max_subscription_stream_lag_secs,
         max_concurrent_requests,
@@ -2179,243 +1431,6 @@ async fn test_continuous_stream_subscription_lag_catch_up() {
         assert_some!(stream_listener.select_next_some().now_or_never());
 
         // Verify that the subscription stream lag has now been reset (the stream caught up)
-        assert!(data_stream.get_subscription_stream_lag().is_none());
-    }
-}
-
-#[tokio::test]
-async fn test_continuous_stream_subscription_lag_catch_up_prefetching() {
-    // Create a dynamic prefetching config with prefetching enabled
-    let max_in_flight_subscription_requests = 4;
-    let dynamic_prefetching = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: true,
-        max_in_flight_subscription_requests,
-        ..Default::default()
-    };
-
-    // Create a test streaming service config with subscriptions enabled
-    let max_subscription_stream_lag_secs = 10;
-    let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching,
-        enable_subscription_streaming: true,
-        max_subscription_stream_lag_secs,
-        ..Default::default()
-    };
-
-    // Test all types of continuous data streams
-    let continuous_data_streams = enumerate_continuous_data_streams(
-        AptosDataClientConfig::default(),
-        streaming_service_config,
-    );
-    for (
-        mut data_stream,
-        mut stream_listener,
-        time_service,
-        transactions_only,
-        allow_transactions_or_outputs,
-    ) in continuous_data_streams
-    {
-        // Initialize the data stream
-        let mut global_data_summary = create_global_data_summary(1);
-        initialize_data_requests(&mut data_stream, &global_data_summary);
-
-        // Fetch the subscription stream ID from the first pending request
-        let subscription_stream_id = get_subscription_stream_id(&mut data_stream, 0);
-
-        // Update the global data summary to be ahead of the subscription stream
-        let highest_advertised_version = MAX_ADVERTISED_TRANSACTION + 1000;
-        global_data_summary.advertised_data.synced_ledger_infos = vec![create_ledger_info(
-            highest_advertised_version,
-            MAX_ADVERTISED_EPOCH_END,
-            false,
-        )];
-
-        // Set a valid response for the first subscription request and process it
-        let highest_response_version = highest_advertised_version - 500; // Behind the advertised version
-        set_new_data_response_in_queue(
-            &mut data_stream,
-            0,
-            highest_response_version,
-            transactions_only,
-        );
-        process_data_responses(&mut data_stream, &global_data_summary).await;
-        assert_some!(stream_listener.select_next_some().now_or_never());
-
-        // Verify the stream is now tracking the subscription lag
-        let subscription_stream_lag = data_stream.get_subscription_stream_lag().unwrap();
-        assert_eq!(subscription_stream_lag.start_time, time_service.now());
-        assert_eq!(
-            subscription_stream_lag.version_lag,
-            highest_advertised_version - highest_response_version
-        );
-
-        // Elapse enough time for the stream to be killed
-        let time_service = time_service.into_mock();
-        time_service.advance_secs(max_subscription_stream_lag_secs);
-
-        // Update the global data summary to be further ahead (by 1)
-        let highest_advertised_version = highest_advertised_version + 1;
-        global_data_summary.advertised_data.synced_ledger_infos = vec![create_ledger_info(
-            highest_advertised_version,
-            MAX_ADVERTISED_EPOCH_END,
-            false,
-        )];
-
-        // Set a valid response for the first subscription request and process it
-        let highest_response_version = highest_response_version + 1; // Still behind, but not worse
-        set_new_data_response_in_queue(
-            &mut data_stream,
-            0,
-            highest_response_version,
-            transactions_only,
-        );
-        process_data_responses(&mut data_stream, &global_data_summary).await;
-        assert_some!(stream_listener.select_next_some().now_or_never());
-
-        // Verify that we still have pending subscription requests (the stream hasn't fallen further behind)
-        verify_pending_subscription_requests(
-            &mut data_stream,
-            max_in_flight_subscription_requests,
-            allow_transactions_or_outputs,
-            transactions_only,
-            2,
-            subscription_stream_id,
-            0,
-        );
-
-        // Verify the state of the subscription stream lag
-        let subscription_stream_lag = data_stream.get_subscription_stream_lag().unwrap();
-        assert_eq!(
-            subscription_stream_lag.version_lag,
-            highest_advertised_version - highest_response_version
-        );
-
-        // Set a valid response for the first subscription request and process it
-        set_new_data_response_in_queue(
-            &mut data_stream,
-            0,
-            highest_advertised_version, // Catch the stream up to the advertised version
-            transactions_only,
-        );
-        process_data_responses(&mut data_stream, &global_data_summary).await;
-        assert_some!(stream_listener.select_next_some().now_or_never());
-
-        // Verify that the subscription stream lag has now been reset (the stream caught up)
-        assert!(data_stream.get_subscription_stream_lag().is_none());
-    }
-}
-
-#[tokio::test]
-async fn test_continuous_stream_subscription_lag_prefetching() {
-    // Create a dynamic prefetching config with prefetching enabled
-    let max_in_flight_subscription_requests = 7;
-    let dynamic_prefetching = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: true,
-        max_in_flight_subscription_requests,
-        ..Default::default()
-    };
-
-    // Create a test streaming service config with subscriptions enabled
-    let max_subscription_stream_lag_secs = 10;
-    let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching,
-        enable_subscription_streaming: true,
-        max_subscription_stream_lag_secs,
-        ..Default::default()
-    };
-
-    // Test all types of continuous data streams
-    let continuous_data_streams = enumerate_continuous_data_streams(
-        AptosDataClientConfig::default(),
-        streaming_service_config,
-    );
-    for (
-        mut data_stream,
-        mut stream_listener,
-        time_service,
-        transactions_only,
-        allow_transactions_or_outputs,
-    ) in continuous_data_streams
-    {
-        // Initialize the data stream
-        let mut global_data_summary = create_global_data_summary(1);
-        initialize_data_requests(&mut data_stream, &global_data_summary);
-
-        // Fetch the subscription stream ID from the first pending request
-        let subscription_stream_id = get_subscription_stream_id(&mut data_stream, 0);
-
-        // Verify the pending subscription requests
-        verify_pending_subscription_requests(
-            &mut data_stream,
-            max_in_flight_subscription_requests,
-            allow_transactions_or_outputs,
-            transactions_only,
-            0,
-            subscription_stream_id,
-            0,
-        );
-
-        // Update the global data summary to be ahead of the subscription stream
-        let highest_advertised_version = MAX_ADVERTISED_TRANSACTION + 1000;
-        global_data_summary.advertised_data.synced_ledger_infos = vec![create_ledger_info(
-            highest_advertised_version,
-            MAX_ADVERTISED_EPOCH_END,
-            false,
-        )];
-
-        // Set a valid response for the first subscription request and process it
-        let highest_response_version = highest_advertised_version - 900; // Behind the advertised version
-        set_new_data_response_in_queue(
-            &mut data_stream,
-            0,
-            highest_response_version,
-            transactions_only,
-        );
-        process_data_responses(&mut data_stream, &global_data_summary).await;
-        assert_some!(stream_listener.select_next_some().now_or_never());
-
-        // Update the global data summary to be further ahead of the subscription stream
-        let highest_advertised_version = MAX_ADVERTISED_TRANSACTION + 2000;
-        global_data_summary.advertised_data.synced_ledger_infos = vec![create_ledger_info(
-            highest_advertised_version,
-            MAX_ADVERTISED_EPOCH_END,
-            false,
-        )];
-
-        // Elapse some time (but not enough for the stream to be killed)
-        let time_service = time_service.into_mock();
-        time_service.advance_secs(max_subscription_stream_lag_secs / 2);
-
-        // Set a valid response for the first subscription request and process it
-        let highest_response_version = highest_advertised_version - 1000; // Further behind the advertised
-        set_new_data_response_in_queue(
-            &mut data_stream,
-            0,
-            highest_response_version,
-            transactions_only,
-        );
-        process_data_responses(&mut data_stream, &global_data_summary).await;
-        assert_some!(stream_listener.select_next_some().now_or_never());
-
-        // Elapse enough time for the stream to be killed
-        time_service.advance_secs(max_subscription_stream_lag_secs);
-
-        // Set a valid response for the first subscription request and process it
-        let highest_response_version = highest_advertised_version - 901; // Behind the initial lag
-        set_new_data_response_in_queue(
-            &mut data_stream,
-            0,
-            highest_response_version,
-            transactions_only,
-        );
-        process_data_responses(&mut data_stream, &global_data_summary).await;
-        assert_some!(stream_listener.select_next_some().now_or_never());
-
-        // Verify that we no longer have pending subscription requests (the stream was killed)
-        let client_request = get_pending_client_request(&mut data_stream, 0);
-        assert!(!client_request.is_subscription_request());
-
-        // Verify that the subscription stream lag has been reset
         assert!(data_stream.get_subscription_stream_lag().is_none());
     }
 }
@@ -2525,17 +1540,10 @@ async fn test_continuous_stream_subscription_lag_time() {
 
 #[tokio::test]
 async fn test_continuous_stream_subscription_max() {
-    // Create a dynamic prefetching config with prefetching disabled
-    let dynamic_prefetching = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: false,
-        ..Default::default()
-    };
-
     // Create a test streaming service config with subscriptions enabled
     let max_concurrent_requests = 3;
     let max_num_consecutive_subscriptions = 5;
     let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching,
         enable_subscription_streaming: true,
         max_concurrent_requests,
         max_num_consecutive_subscriptions,
@@ -2583,9 +1591,10 @@ async fn test_continuous_stream_subscription_max() {
             process_data_responses(&mut data_stream, &global_data_summary).await;
 
             // Verify the number of pending requests
-            verify_num_sent_requests(
-                &mut data_stream,
-                max_num_consecutive_subscriptions - max_concurrent_requests,
+            let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+            assert_eq!(
+                sent_requests.as_ref().unwrap().len(),
+                (max_num_consecutive_subscriptions - max_concurrent_requests) as usize
             );
 
             // Set valid responses for all pending requests and process the responses
@@ -2608,297 +1617,6 @@ async fn test_continuous_stream_subscription_max() {
     }
 }
 
-#[tokio::test]
-async fn test_continuous_stream_subscription_max_pending() {
-    // Create a dynamic prefetching config with prefetching disabled
-    let dynamic_prefetching = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: false,
-        ..Default::default()
-    };
-
-    // Create a test streaming service config with subscriptions enabled
-    let max_concurrent_requests = 4;
-    let max_num_consecutive_subscriptions = 1000;
-    let max_pending_requests = 10;
-    let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching,
-        enable_subscription_streaming: true,
-        max_concurrent_requests,
-        max_num_consecutive_subscriptions,
-        max_pending_requests,
-        ..Default::default()
-    };
-
-    // Test all types of continuous data streams
-    let continuous_data_streams = enumerate_continuous_data_streams(
-        AptosDataClientConfig::default(),
-        streaming_service_config,
-    );
-    for (mut data_stream, _stream_listener, _, transactions_only, allow_transactions_or_outputs) in
-        continuous_data_streams
-    {
-        // Initialize the data stream
-        let global_data_summary = create_global_data_summary(1);
-        initialize_data_requests(&mut data_stream, &global_data_summary);
-
-        // Fetch the subscription stream ID from the first pending request
-        let subscription_stream_id = get_subscription_stream_id(&mut data_stream, 0);
-
-        // Verify the pending requests are for the correct data and correctly formed
-        verify_pending_subscription_requests(
-            &mut data_stream,
-            max_concurrent_requests,
-            allow_transactions_or_outputs,
-            transactions_only,
-            0,
-            subscription_stream_id,
-            0,
-        );
-
-        // Set valid responses for all pending requests except the first
-        for request_index in 1..max_concurrent_requests {
-            set_new_data_response_in_queue(
-                &mut data_stream,
-                request_index as usize,
-                MAX_ADVERTISED_TRANSACTION + request_index,
-                transactions_only,
-            );
-        }
-
-        // Process the responses
-        process_data_responses(&mut data_stream, &global_data_summary).await;
-
-        // Verify more requests are sent
-        let num_pending_requests = (max_concurrent_requests * 2) - 1;
-        verify_num_sent_requests(&mut data_stream, num_pending_requests);
-
-        // Set valid responses for all pending requests except the first
-        for request_index in 1..num_pending_requests {
-            set_new_data_response_in_queue(
-                &mut data_stream,
-                request_index as usize,
-                MAX_ADVERTISED_TRANSACTION + request_index,
-                transactions_only,
-            );
-        }
-
-        // Process the responses
-        process_data_responses(&mut data_stream, &global_data_summary).await;
-
-        // Verify more requests are sent (but not more than the max pending requests)
-        verify_num_sent_requests(&mut data_stream, max_pending_requests);
-
-        // Set responses and process them multiple times
-        for _ in 0..10 {
-            // Set valid responses for all pending requests except the first
-            for request_index in 1..max_pending_requests {
-                set_new_data_response_in_queue(
-                    &mut data_stream,
-                    request_index as usize,
-                    MAX_ADVERTISED_TRANSACTION + request_index,
-                    transactions_only,
-                );
-            }
-
-            // Process the responses
-            process_data_responses(&mut data_stream, &global_data_summary).await;
-
-            // Verify more requests are sent (but not more than the max pending requests)
-            verify_num_sent_requests(&mut data_stream, max_pending_requests);
-        }
-    }
-}
-
-#[tokio::test]
-async fn test_continuous_stream_subscription_max_pending_prefetching() {
-    // Create a dynamic prefetching config with prefetching enabled
-    let max_in_flight_subscription_requests = 5;
-    let dynamic_prefetching = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: true,
-        max_in_flight_subscription_requests,
-        ..Default::default()
-    };
-
-    // Create a test streaming service config with subscriptions enabled
-    let max_num_consecutive_subscriptions = 1000;
-    let max_pending_requests = 11;
-    let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching,
-        enable_subscription_streaming: true,
-        max_num_consecutive_subscriptions,
-        max_pending_requests,
-        ..Default::default()
-    };
-
-    // Test all types of continuous data streams
-    let continuous_data_streams = enumerate_continuous_data_streams(
-        AptosDataClientConfig::default(),
-        streaming_service_config,
-    );
-    for (mut data_stream, _stream_listener, _, transactions_only, allow_transactions_or_outputs) in
-        continuous_data_streams
-    {
-        // Initialize the data stream
-        let global_data_summary = create_global_data_summary(1);
-        initialize_data_requests(&mut data_stream, &global_data_summary);
-
-        // Fetch the subscription stream ID from the first pending request
-        let subscription_stream_id = get_subscription_stream_id(&mut data_stream, 0);
-
-        // Verify the pending requests are for the correct data and correctly formed
-        verify_pending_subscription_requests(
-            &mut data_stream,
-            max_in_flight_subscription_requests,
-            allow_transactions_or_outputs,
-            transactions_only,
-            0,
-            subscription_stream_id,
-            0,
-        );
-
-        // Set valid responses for all pending requests except the first
-        for request_index in 1..max_in_flight_subscription_requests {
-            set_new_data_response_in_queue(
-                &mut data_stream,
-                request_index as usize,
-                MAX_ADVERTISED_TRANSACTION + request_index,
-                transactions_only,
-            );
-        }
-
-        // Process the responses
-        process_data_responses(&mut data_stream, &global_data_summary).await;
-
-        // Verify more requests are sent
-        let num_pending_requests = (max_in_flight_subscription_requests * 2) - 1;
-        verify_num_sent_requests(&mut data_stream, num_pending_requests);
-
-        // Set valid responses for all pending requests except the first
-        for request_index in 1..num_pending_requests {
-            set_new_data_response_in_queue(
-                &mut data_stream,
-                request_index as usize,
-                MAX_ADVERTISED_TRANSACTION + request_index,
-                transactions_only,
-            );
-        }
-
-        // Process the responses
-        process_data_responses(&mut data_stream, &global_data_summary).await;
-
-        // Verify more requests are sent (but not more than the max pending requests)
-        verify_num_sent_requests(&mut data_stream, max_pending_requests);
-
-        // Set responses and process them multiple times
-        for _ in 0..10 {
-            // Set valid responses for all pending requests except the first
-            for request_index in 1..max_pending_requests {
-                set_new_data_response_in_queue(
-                    &mut data_stream,
-                    request_index as usize,
-                    MAX_ADVERTISED_TRANSACTION + request_index,
-                    transactions_only,
-                );
-            }
-
-            // Process the responses
-            process_data_responses(&mut data_stream, &global_data_summary).await;
-
-            // Verify more requests are sent (but not more than the max pending requests)
-            verify_num_sent_requests(&mut data_stream, max_pending_requests);
-        }
-    }
-}
-
-#[tokio::test]
-async fn test_continuous_stream_subscription_max_prefetching() {
-    // Create a dynamic prefetching config with prefetching enabled
-    let max_in_flight_subscription_requests = 8;
-    let dynamic_prefetching = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: true,
-        max_in_flight_subscription_requests,
-        ..Default::default()
-    };
-
-    // Create a test streaming service config with subscriptions enabled
-    let max_num_consecutive_subscriptions = 9;
-    let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching,
-        enable_subscription_streaming: true,
-        max_num_consecutive_subscriptions,
-        ..Default::default()
-    };
-
-    // Test all types of continuous data streams
-    let continuous_data_streams = enumerate_continuous_data_streams(
-        AptosDataClientConfig::default(),
-        streaming_service_config,
-    );
-    for (mut data_stream, _stream_listener, _, transactions_only, allow_transactions_or_outputs) in
-        continuous_data_streams
-    {
-        // Initialize the data stream
-        let global_data_summary = create_global_data_summary(1);
-        initialize_data_requests(&mut data_stream, &global_data_summary);
-
-        // Iterate through several changes in subscription streams
-        let num_subscription_stream_changes = 5;
-        for stream_number in 0..num_subscription_stream_changes {
-            // Fetch the subscription stream ID from the first pending request
-            let subscription_stream_id = get_subscription_stream_id(&mut data_stream, 0);
-
-            // Verify the pending requests are for the correct data and correctly formed
-            verify_pending_subscription_requests(
-                &mut data_stream,
-                max_in_flight_subscription_requests,
-                allow_transactions_or_outputs,
-                transactions_only,
-                0,
-                subscription_stream_id,
-                stream_number * max_num_consecutive_subscriptions,
-            );
-
-            // Set valid responses for all pending requests and process the responses
-            for request_index in 0..max_in_flight_subscription_requests {
-                set_new_data_response_in_queue(
-                    &mut data_stream,
-                    request_index as usize,
-                    MAX_ADVERTISED_TRANSACTION + request_index,
-                    transactions_only,
-                );
-            }
-            process_data_responses(&mut data_stream, &global_data_summary).await;
-
-            // Verify the number of pending requests
-            verify_num_sent_requests(
-                &mut data_stream,
-                max_num_consecutive_subscriptions - max_in_flight_subscription_requests,
-            );
-
-            // Set valid responses for all pending requests and process the responses
-            for request_index in
-                0..(max_num_consecutive_subscriptions - max_in_flight_subscription_requests)
-            {
-                set_new_data_response_in_queue(
-                    &mut data_stream,
-                    request_index as usize,
-                    MAX_ADVERTISED_TRANSACTION
-                        + request_index
-                        + max_in_flight_subscription_requests,
-                    transactions_only,
-                );
-            }
-            process_data_responses(&mut data_stream, &global_data_summary).await;
-
-            // Fetch the next subscription stream ID from the first pending request
-            let next_subscription_stream_id = get_subscription_stream_id(&mut data_stream, 0);
-
-            // Verify the subscription stream ID has changed (because we hit the max number of requests)
-            assert_ne!(subscription_stream_id, next_subscription_stream_id);
-        }
-    }
-}
-
 #[tokio::test(flavor = "multi_thread")]
 async fn test_continuous_stream_subscription_timeout() {
     // Create a test data client config
@@ -2907,18 +1625,10 @@ async fn test_continuous_stream_subscription_timeout() {
         ..Default::default()
     };
 
-    // Create a dynamic prefetching config with prefetching disabled
-    let dynamic_prefetching = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: false,
-        ..Default::default()
-    };
-
     // Create a test streaming service config with subscriptions enabled
-    let max_concurrent_requests = 3;
     let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching,
         enable_subscription_streaming: true,
-        max_concurrent_requests,
+        max_concurrent_requests: 7,
         ..Default::default()
     };
 
@@ -2926,39 +1636,7 @@ async fn test_continuous_stream_subscription_timeout() {
     verify_continuous_stream_request_timeouts(
         data_client_config,
         streaming_service_config,
-        max_concurrent_requests,
-    )
-    .await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_continuous_stream_subscription_timeout_prefetching() {
-    // Create a test data client config
-    let data_client_config = AptosDataClientConfig {
-        subscription_response_timeout_ms: 500,
-        ..Default::default()
-    };
-
-    // Create a dynamic prefetching config with prefetching enabled
-    let max_in_flight_subscription_requests = 6;
-    let dynamic_prefetching = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: true,
-        max_in_flight_subscription_requests,
-        ..Default::default()
-    };
-
-    // Create a test streaming service config with subscriptions enabled
-    let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching,
-        enable_subscription_streaming: true,
-        ..Default::default()
-    };
-
-    // Verify the timeouts of all continuous data streams
-    verify_continuous_stream_request_timeouts(
-        data_client_config,
-        streaming_service_config,
-        max_in_flight_subscription_requests,
+        streaming_service_config.max_concurrent_requests,
     )
     .await;
 }
@@ -2974,15 +1652,10 @@ async fn test_stream_timeouts() {
         ..Default::default()
     };
 
-    // Create a test streaming service config with dynamic prefetching disabled
+    // Create a test streaming service config
     let max_concurrent_requests = 3;
     let max_request_retry = 10;
-    let dynamic_prefetching_config = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: false,
-        ..Default::default()
-    };
     let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching: dynamic_prefetching_config,
         max_concurrent_requests,
         max_request_retry,
         ..Default::default()
@@ -3017,7 +1690,11 @@ async fn test_stream_timeouts() {
         initialize_data_requests(&mut data_stream, &global_data_summary);
 
         // Verify the correct number of requests are made
-        verify_num_sent_requests(&mut data_stream, max_concurrent_requests);
+        let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+        assert_eq!(
+            sent_requests.as_ref().unwrap().len(),
+            max_concurrent_requests as usize
+        );
 
         // Wait for the data client to satisfy all requests
         for request_index in 0..max_concurrent_requests as usize {
@@ -3044,124 +1721,6 @@ async fn test_stream_timeouts() {
 
         // Wait for the data client to satisfy all requests
         for request_index in 0..max_concurrent_requests as usize {
-            wait_for_data_client_to_respond(&mut data_stream, request_index).await;
-        }
-
-        // Set a timeout on the second request
-        set_timeout_response_in_queue(&mut data_stream, 1);
-
-        // Handle multiple invalid type responses on the first request
-        for _ in 0..max_request_retry / 2 {
-            set_state_value_response_in_queue(&mut data_stream, 0, 0, 0);
-            process_data_responses(&mut data_stream, &global_data_summary).await;
-            wait_for_data_client_to_respond(&mut data_stream, 0).await;
-        }
-
-        // Handle multiple invalid type responses on the third request
-        for _ in 0..max_request_retry / 2 {
-            set_state_value_response_in_queue(&mut data_stream, 2, 2, 2);
-            process_data_responses(&mut data_stream, &global_data_summary).await;
-            wait_for_data_client_to_respond(&mut data_stream, 2).await;
-        }
-
-        // Wait until a notification is finally sent along the stream
-        wait_for_notification_and_verify(
-            &mut data_stream,
-            &mut stream_listener,
-            transactions_only,
-            allow_transactions_or_outputs,
-            false,
-            &global_data_summary,
-        )
-        .await;
-    }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_stream_timeouts_dynamic() {
-    // Create a test data client config
-    let max_response_timeout_ms = 85;
-    let response_timeout_ms = 7;
-    let data_client_config = AptosDataClientConfig {
-        max_response_timeout_ms,
-        response_timeout_ms,
-        ..Default::default()
-    };
-
-    // Create a dynamic prefetching config with prefetching enabled
-    let initial_prefetching_value = 5;
-    let min_prefetching_value = 3;
-    let dynamic_prefetching_config = DynamicPrefetchingConfig {
-        enable_dynamic_prefetching: true,
-        initial_prefetching_value,
-        min_prefetching_value,
-        ..Default::default()
-    };
-
-    // Create a test streaming service config with dynamic prefetching disabled
-    let max_request_retry = 10;
-    let streaming_service_config = DataStreamingServiceConfig {
-        dynamic_prefetching: dynamic_prefetching_config,
-        max_request_retry,
-        ..Default::default()
-    };
-
-    // Test all types of data streams
-    let (data_stream_1, stream_listener_1) = create_transaction_stream(
-        data_client_config,
-        streaming_service_config,
-        MIN_ADVERTISED_TRANSACTION,
-        MAX_ADVERTISED_TRANSACTION,
-    );
-    let (data_stream_2, stream_listener_2) = create_output_stream(
-        data_client_config,
-        streaming_service_config,
-        MIN_ADVERTISED_TRANSACTION_OUTPUT,
-        MAX_ADVERTISED_TRANSACTION_OUTPUT,
-    );
-    let (data_stream_3, stream_listener_3) = create_transactions_or_output_stream(
-        data_client_config,
-        streaming_service_config,
-        MIN_ADVERTISED_TRANSACTION_OUTPUT,
-        MAX_ADVERTISED_TRANSACTION_OUTPUT,
-    );
-    for (mut data_stream, mut stream_listener, transactions_only, allow_transactions_or_outputs) in [
-        (data_stream_1, stream_listener_1, true, false),
-        (data_stream_2, stream_listener_2, false, false),
-        (data_stream_3, stream_listener_3, false, true),
-    ] {
-        // Initialize the data stream
-        let global_data_summary = create_global_data_summary(1);
-        initialize_data_requests(&mut data_stream, &global_data_summary);
-
-        // Verify the correct number of requests are made
-        verify_num_sent_requests(&mut data_stream, initial_prefetching_value);
-
-        // Wait for the data client to satisfy all requests
-        for request_index in 0..initial_prefetching_value as usize {
-            wait_for_data_client_to_respond(&mut data_stream, request_index).await;
-        }
-
-        // Handle multiple timeouts and retries on the first request
-        for _ in 0..max_request_retry / 2 {
-            set_timeout_response_in_queue(&mut data_stream, 0);
-            process_data_responses(&mut data_stream, &global_data_summary).await;
-            wait_for_data_client_to_respond(&mut data_stream, 0).await;
-        }
-
-        // Wait until a notification is finally sent along the stream
-        wait_for_notification_and_verify(
-            &mut data_stream,
-            &mut stream_listener,
-            transactions_only,
-            allow_transactions_or_outputs,
-            false,
-            &global_data_summary,
-        )
-        .await;
-
-        // Wait for the data client to satisfy all requests
-        for request_index in 0..min_prefetching_value as usize {
             wait_for_data_client_to_respond(&mut data_stream, request_index).await;
         }
 
@@ -3277,7 +1836,11 @@ async fn advertise_new_data_and_verify_requests(
     process_data_responses(data_stream, &new_global_data_summary).await;
 
     // Verify multiple data requests have now been sent to fetch the missing data
-    verify_num_sent_requests(data_stream, max_concurrent_requests);
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(
+        sent_requests.as_ref().unwrap().len(),
+        max_concurrent_requests as usize,
+    );
 
     // Verify the pending requests are for the correct data and correctly formed
     for request_index in 0..max_concurrent_requests {
@@ -3642,7 +2205,7 @@ fn set_epoch_ending_response_for_indices(
         } else if random_number % 3 == 1 {
             set_failure_response_in_queue(data_stream, index as usize); // Set a failure response
         } else {
-            set_pending_response_in_queue(data_stream, index as usize); // Set a pending response
+            // Do nothing (to emulate the request still being in-flight)
         }
     }
 }
@@ -3700,7 +2263,7 @@ fn set_state_value_response_in_queue(
             last_index: last_state_value_index,
             first_key: Default::default(),
             last_key: Default::default(),
-            raw_values: vec![(StateKey::raw(&[]), StateValue::new_legacy(vec![].into()))],
+            raw_values: vec![(StateKey::raw(vec![]), StateValue::new_legacy(vec![].into()))],
             proof: SparseMerkleRangeProof::new(vec![]),
             root_hash: Default::default(),
         }),
@@ -3745,19 +2308,8 @@ fn set_failure_response_in_queue(data_stream: &mut DataStream<MockAptosDataClien
     );
 }
 
-/// Sets the client response at the index in the pending
-/// queue to contain a pending response.
-fn set_pending_response_in_queue(data_stream: &mut DataStream<MockAptosDataClient>, index: usize) {
-    // Get the pending response at the specified index
-    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
-    let pending_response = sent_requests.as_mut().unwrap().get_mut(index).unwrap();
-
-    // Set the response to still be pending
-    pending_response.lock().client_response = None;
-}
-
-/// Sets the client response at the index in the pending
-/// queue to contain a timeout response.
+/// Sets the client response at the index in the pending queue to contain a
+/// timeout response.
 fn set_timeout_response_in_queue(data_stream: &mut DataStream<MockAptosDataClient>, index: usize) {
     set_response_in_queue(
         data_stream,
@@ -3867,7 +2419,11 @@ async fn verify_continuous_stream_request_timeouts(
         initialize_data_requests(&mut data_stream, &global_data_summary);
 
         // Verify that the expected number of requests are made
-        verify_num_sent_requests(&mut data_stream, num_expected_requests);
+        let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+        assert_eq!(
+            sent_requests.as_ref().unwrap().len(),
+            num_expected_requests as usize
+        );
 
         // Wait until a notification is sent. The mock data client
         // will verify the timeout.
@@ -3889,7 +2445,11 @@ async fn verify_continuous_stream_request_timeouts(
             process_data_responses(&mut data_stream, &global_data_summary).await;
 
             // Verify more requests are made
-            verify_num_sent_requests(&mut data_stream, num_expected_requests);
+            let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+            assert_eq!(
+                sent_requests.as_ref().unwrap().len(),
+                num_expected_requests as usize
+            );
         }
 
         // Wait until a notification is sent. The mock data client
@@ -3979,20 +2539,6 @@ fn get_subscription_stream_id(
     }
 }
 
-/// Verifies that the length of the pending requests queue is
-/// equal to the expected length.
-fn verify_num_sent_requests(
-    data_stream: &mut DataStream<MockAptosDataClient>,
-    expected_length: u64,
-) {
-    // Get the number of sent requests
-    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
-    let num_sent_requests = sent_requests.as_ref().unwrap().len() as u64;
-
-    // Verify the number of sent requests
-    assert_eq!(num_sent_requests, expected_length);
-}
-
 /// Verifies that a single pending optimistic fetch exists and
 /// that it is for the correct data.
 fn verify_pending_optimistic_fetch(
@@ -4002,7 +2548,8 @@ fn verify_pending_optimistic_fetch(
     known_version_offset: u64,
 ) {
     // Verify a single request is pending
-    verify_num_sent_requests(data_stream, 1);
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(sent_requests.as_ref().unwrap().len(), 1);
 
     // Verify the request is for the correct data
     let client_request = get_pending_client_request(data_stream, 0);
@@ -4031,14 +2578,10 @@ fn verify_pending_optimistic_fetch(
 
 /// Verifies that the pending requests are fulfilled for the specified indices
 fn verify_pending_responses_for_indices(
-    data_stream: &mut DataStream<MockAptosDataClient>,
+    sent_requests: &mut Option<VecDeque<Arc<Mutex<Box<PendingClientResponse>>>>>,
     max_queue_length: u64,
     indices: Vec<u64>,
 ) {
-    // Get the sent requests queue
-    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
-
-    // Verify the client responses for the specified indices
     for index in 0..max_queue_length {
         // Get the client response
         let sent_request = sent_requests.as_ref().unwrap().get(index as usize);
@@ -4070,7 +2613,11 @@ fn verify_pending_subscription_requests(
     known_version_offset: u64,
 ) {
     // Verify the correct number of pending requests
-    verify_num_sent_requests(data_stream, max_concurrent_requests);
+    let (sent_requests, _) = data_stream.get_sent_requests_and_notifications();
+    assert_eq!(
+        sent_requests.as_ref().unwrap().len(),
+        max_concurrent_requests as usize
+    );
 
     // Verify the pending requests are for the correct data and correctly formed
     for request_index in 0..max_concurrent_requests {

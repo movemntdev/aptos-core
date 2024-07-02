@@ -15,7 +15,7 @@ use serde::Serialize;
 use std::{
     collections::{
         btree_map::{self, BTreeMap},
-        HashMap,
+        HashMap, HashSet,
     },
     fmt::Debug,
     hash::Hash,
@@ -62,10 +62,6 @@ pub(crate) struct VersionedGroupValue<T, V> {
 
     /// Group contents corresponding to the latest committed version.
     committed_group: HashMap<T, ValueWithLayout<V>>,
-
-    /// Group size has changed between speculative executions. Useful to know for the best
-    /// heuristic behavior when reading the group size (e.g. wait on the dependency or not).
-    size_changed: bool,
 }
 
 /// Maps each key (access path) to an internal VersionedValue.
@@ -81,7 +77,6 @@ impl<T: Hash + Clone + Debug + Eq + Serialize, V: TransactionWrite> Default
             versioned_map: HashMap::new(),
             idx_to_update: BTreeMap::new(),
             committed_group: HashMap::new(),
-            size_changed: false,
         }
     }
 }
@@ -175,21 +170,14 @@ impl<T: Hash + Clone + Debug + Eq + Serialize, V: TransactionWrite> VersionedGro
         let at_base_version = shifted_idx == zero_idx;
 
         // Remove any prior entries.
-        let mut prev_tag_and_sizes: HashMap<T, Option<usize>> =
-            self.remove(shifted_idx.clone()).into_iter().collect();
-
-        // Changes the set of values, or the size of the entries (that might have been
-        // used even when marked as an estimate, if self.size_changed was still false).
-        // Note: we can flag if an estimate entry's size was used, or if the group size
-        // read observed self.size_changed == false. Otherwise, as in vanilla Block-STM,
-        // it would suffice to simply check if the re-execution writes outside of the
-        // prior (group) write-set. Not implemented (yet), as for this optimization to
-        // be useful, the group metadata checks also need to be handled similarly.
-        let mut changes_behavior = false;
+        let prev_tags: HashSet<T> = self.remove(shifted_idx.clone()).into_iter().collect();
+        let mut writes_outside = false;
 
         let arc_map = values
             .map(|(tag, v)| {
-                changes_behavior |= prev_tag_and_sizes.remove(&tag) != Some(v.bytes_len());
+                if !prev_tags.contains(&tag) {
+                    writes_outside = true;
+                }
 
                 // Update versioned_map.
                 self.versioned_map.entry(tag.clone()).or_default().insert(
@@ -201,10 +189,6 @@ impl<T: Hash + Clone + Debug + Eq + Serialize, V: TransactionWrite> VersionedGro
             })
             .collect();
 
-        if !prev_tag_and_sizes.is_empty() {
-            changes_behavior = true;
-        }
-
         assert_none!(
             self.idx_to_update
                 .insert(shifted_idx, CachePadded::new(arc_map)),
@@ -213,18 +197,11 @@ impl<T: Hash + Clone + Debug + Eq + Serialize, V: TransactionWrite> VersionedGro
 
         if at_base_version {
             // base version is from storage and final - immediately treat as committed.
-            self.commit_idx(zero_idx, true)
+            self.commit_idx(zero_idx)
                 .expect("Marking storage version as committed must succeed");
         }
 
-        if changes_behavior && incarnation > 0 {
-            // Incarnation 0 sets the group contents the first time, but this is not
-            // considered as changing size between speculative executions - all later
-            // incarnations, however, are considered.
-            self.size_changed = true;
-        }
-
-        changes_behavior
+        writes_outside
     }
 
     fn mark_estimate(&mut self, txn_idx: TxnIndex) {
@@ -247,20 +224,15 @@ impl<T: Hash + Clone + Debug + Eq + Serialize, V: TransactionWrite> VersionedGro
         }
     }
 
-    fn remove(&mut self, shifted_idx: ShiftedTxnIndex) -> Vec<(T, Option<usize>)> {
+    fn remove(&mut self, shifted_idx: ShiftedTxnIndex) -> Vec<T> {
         // Remove idx updates first, then entries.
-        let idx_update_tags: Vec<(T, Option<usize>)> = self
+        let idx_update_tags: Vec<T> = self
             .idx_to_update
             .remove(&shifted_idx)
-            .map_or(vec![], |map| {
-                map.into_inner()
-                    .into_iter()
-                    .map(|(tag, v)| (tag, v.bytes_len()))
-                    .collect()
-            });
+            .map_or(vec![], |map| map.into_inner().into_keys().collect());
 
         // Similar to mark_estimate, need to remove an individual entry for each tag.
-        for (tag, _) in idx_update_tags.iter() {
+        for tag in idx_update_tags.iter() {
             assert_some!(
                 self.versioned_map
                     .get_mut(tag)
@@ -274,11 +246,7 @@ impl<T: Hash + Clone + Debug + Eq + Serialize, V: TransactionWrite> VersionedGro
     }
 
     // Records the latest committed op for each tag in the group (removed tags ar excluded).
-    fn commit_idx(
-        &mut self,
-        shifted_idx: ShiftedTxnIndex,
-        allow_new_modification: bool,
-    ) -> anyhow::Result<()> {
+    fn commit_idx(&mut self, shifted_idx: ShiftedTxnIndex) -> anyhow::Result<()> {
         use std::collections::hash_map::Entry::*;
         use WriteOpKind::*;
 
@@ -297,16 +265,14 @@ impl<T: Hash + Clone + Debug + Eq + Serialize, V: TransactionWrite> VersionedGro
                 (Vacant(entry), Creation) => {
                     entry.insert(v.clone());
                 },
-                (Vacant(entry), Modification) if allow_new_modification => {
-                    entry.insert(v.clone());
-                },
                 (Occupied(mut entry), Creation) if entry.get().write_op_kind() == Deletion => {
                     entry.insert(v.clone());
                 },
-                (e, _) => {
+                (_, _) => {
                     bail!(
-                        "[{shifted_idx:?}] WriteOp kind {:?} not consistent with previous value at tag {tag:?}, value: {e:?}",
+                        "WriteOp kind {:?} not consistent with previous value at tag {:?}",
                         v.write_op_kind(),
+                        tag
                     );
                 },
             }
@@ -376,11 +342,7 @@ impl<T: Hash + Clone + Debug + Eq + Serialize, V: TransactionWrite> VersionedGro
                 tree.range(ShiftedTxnIndex::zero_idx()..ShiftedTxnIndex::new(txn_idx))
                     .next_back()
                     .and_then(|(idx, entry)| {
-                        // We would like to use the value in an estimated entry if size never changed
-                        // between speculative executions, i.e. to depend on estimates only when the
-                        // size has changed. In this case, execution can wait on a dependency, while
-                        // validation can short circuit to fail.
-                        if entry.flag == Flag::Estimate && self.size_changed {
+                        if entry.flag == Flag::Estimate {
                             Some(Err(MVGroupError::Dependency(
                                 idx.idx().expect("May not depend on storage version"),
                             )))
@@ -407,10 +369,6 @@ impl<
         Self {
             group_values: DashMap::new(),
         }
-    }
-
-    pub(crate) fn num_keys(&self) -> usize {
-        self.group_values.len()
     }
 
     pub fn set_raw_base_values(&self, key: K, base_values: impl IntoIterator<Item = (T, V)>) {
@@ -462,12 +420,10 @@ impl<
 
     /// Remove all entries from transaction 'txn_idx' at access path 'key'.
     pub fn remove(&self, key: &K, txn_idx: TxnIndex) {
-        let mut group = self.group_values.get_mut(key).expect("Path must exist");
-        let removed = group.remove(ShiftedTxnIndex::new(txn_idx));
-
-        if !removed.is_empty() {
-            group.size_changed = true;
-        }
+        self.group_values
+            .get_mut(key)
+            .expect("Path must exist")
+            .remove(ShiftedTxnIndex::new(txn_idx));
     }
 
     /// Read the latest value corresponding to a tag at a given group (identified by key).
@@ -487,12 +443,11 @@ impl<
         }
     }
 
-    /// Returns the sum of latest sizes of all group members (and respective tags), collected
-    /// based on the recorded list of tags. If the latest entry at a tag is marked as estimate
-    /// and the group size has changed between speculative executions then a dependency is
-    /// returned. Otherwise, the size is computed including the sizes of estimated entries.
-    /// This works w. Block-STM, because a validation wave is triggered when any group entry
-    /// size changes after re-execution (also when an entry is added or removed).
+    /// Returns the sum of latest sizes of all group members (and their respective tags),
+    /// collected based on the list of recorded tags. If the latest entry at any tag was
+    /// marked as an estimate, a dependency is returned. Note: it would be possible to
+    /// process estimated entry sizes, but would have to mark that if after the re-execution
+    /// the entry size changes, then re-execution must reduce validation idx.
     pub fn get_group_size(
         &self,
         key: &K,
@@ -502,15 +457,6 @@ impl<
             Some(g) => g.get_latest_group_size(txn_idx),
             None => Err(MVGroupError::Uninitialized),
         }
-    }
-
-    pub fn validate_group_size(
-        &self,
-        key: &K,
-        txn_idx: TxnIndex,
-        group_size_to_validate: ResourceGroupSize,
-    ) -> bool {
-        self.get_group_size(key, txn_idx) == Ok(group_size_to_validate)
     }
 
     /// For a given key that corresponds to a group, and an index of a transaction the last
@@ -533,7 +479,7 @@ impl<
     ) -> anyhow::Result<Vec<(T, ValueWithLayout<V>)>> {
         let mut v = self.group_values.get_mut(key).expect("Path must exist");
 
-        v.commit_idx(ShiftedTxnIndex::new(txn_idx), false)?;
+        v.commit_idx(ShiftedTxnIndex::new(txn_idx))?;
         Ok(v.get_committed_group())
     }
 
@@ -748,14 +694,6 @@ mod test {
             // tags 0, 1
             (0..2).map(|i| (i, (TestValue::creation_with_len(2), None))),
         );
-
-        map.write(
-            ap.clone(),
-            5,
-            3,
-            // tags 0, 1
-            (0..2).map(|i| (i, (TestValue::creation_with_len(2), None))),
-        );
         assert_matches!(map.get_group_size(&ap, 12), Err(Uninitialized));
 
         map.set_raw_base_values(
@@ -822,135 +760,6 @@ mod test {
 
         map.remove(&ap, 5);
         assert_ok_eq!(map.get_group_size(&ap, 6), exp_size_4);
-    }
-
-    #[test]
-    fn size_changed_dependency() {
-        let ap = KeyType(b"/foo/f".to_vec());
-        let map = VersionedGroupData::<KeyType<Vec<u8>>, usize, TestValue>::new();
-
-        map.write(
-            ap.clone(),
-            5,
-            0,
-            // tags 0, 1
-            (0..2).map(|i| (i, (TestValue::creation_with_len(2), None))),
-        );
-
-        map.set_raw_base_values(
-            ap.clone(),
-            // base tag 1, 2, 3, 4
-            (1..5).map(|i| (i, TestValue::creation_with_len(1))),
-        );
-        // Incarnation 0 and base values should not affect size_changed flag.
-        assert!(!map.group_values.get(&ap).unwrap().size_changed);
-
-        let tag: usize = 5;
-        let one_entry_len = TestValue::creation_with_len(1).bytes().unwrap().len();
-        let two_entry_len = TestValue::creation_with_len(2).bytes().unwrap().len();
-        let exp_size = group_size_as_sum(vec![(&tag, two_entry_len); 2].into_iter().chain(vec![
-            (
-                &tag,
-                one_entry_len
-            );
-            3
-        ]))
-        .unwrap();
-        let exp_size_with_ones =
-            group_size_as_sum(vec![(&tag, one_entry_len); 5].into_iter()).unwrap();
-
-        // Despite estimates, should still return size.
-        map.mark_estimate(&ap, 5);
-        assert_ok_eq!(map.get_group_size(&ap, 12), exp_size);
-        assert!(map.validate_group_size(&ap, 12, exp_size));
-        assert!(!map.validate_group_size(&ap, 12, exp_size_with_ones));
-
-        // Same write again won't change size.
-        map.write(
-            ap.clone(),
-            5,
-            1,
-            (0..2).map(|i| (i, (TestValue::creation_with_len(2), None))),
-        );
-        assert!(!map.group_values.get(&ap).unwrap().size_changed);
-        map.mark_estimate(&ap, 5);
-        assert_ok_eq!(map.get_group_size(&ap, 12), exp_size);
-        assert!(map.validate_group_size(&ap, 12, exp_size));
-        assert!(!map.validate_group_size(&ap, 12, exp_size_with_ones));
-
-        // Removing nothing won't change size.
-        map.remove(&ap, 6);
-        assert!(!map.group_values.get(&ap).unwrap().size_changed);
-
-        map.write(
-            ap.clone(),
-            5,
-            2,
-            (0..2).map(|i| (i, (TestValue::creation_with_len(1), None))),
-        );
-        // Size has changed between speculative writes.
-        assert!(map.group_values.get(&ap).unwrap().size_changed);
-        assert_ok_eq!(map.get_group_size(&ap, 12), exp_size_with_ones);
-        assert!(map.validate_group_size(&ap, 12, exp_size_with_ones));
-        assert!(!map.validate_group_size(&ap, 12, exp_size));
-
-        map.mark_estimate(&ap, 5);
-        assert_matches!(
-            map.get_group_size(&ap, 12),
-            Err(MVGroupError::Dependency(5))
-        );
-        assert!(!map.validate_group_size(&ap, 12, exp_size_with_ones));
-        assert!(!map.validate_group_size(&ap, 12, exp_size));
-
-        // Next check that size change gets properly set w. differing set of writes.
-        let ap_1 = KeyType(b"/foo/1".to_vec());
-        let ap_2 = KeyType(b"/foo/2".to_vec());
-        let ap_3 = KeyType(b"/foo/3".to_vec());
-
-        map.write(
-            ap_1.clone(),
-            5,
-            0,
-            // tags 0, 1
-            (0..2).map(|i| (i, (TestValue::creation_with_len(2), None))),
-        );
-        assert!(!map.group_values.get(&ap_1).unwrap().size_changed);
-        map.write(
-            ap_1.clone(),
-            5,
-            1,
-            // tags 0, 1
-            (0..1).map(|i| (i, (TestValue::creation_with_len(2), None))),
-        );
-        assert!(map.group_values.get(&ap_1).unwrap().size_changed);
-
-        map.write(
-            ap_2.clone(),
-            5,
-            0,
-            // tags 0, 1
-            (0..2).map(|i| (i, (TestValue::creation_with_len(2), None))),
-        );
-        assert!(!map.group_values.get(&ap_2).unwrap().size_changed);
-        map.write(
-            ap_2.clone(),
-            5,
-            1,
-            // tags 0, 1
-            (1..3).map(|i| (i, (TestValue::creation_with_len(2), None))),
-        );
-        assert!(map.group_values.get(&ap_2).unwrap().size_changed);
-
-        map.write(
-            ap_3.clone(),
-            5,
-            0,
-            // tags 0, 1
-            (0..2).map(|i| (i, (TestValue::creation_with_len(2), None))),
-        );
-        assert!(!map.group_values.get(&ap_3).unwrap().size_changed);
-        map.remove(&ap_3, 5);
-        assert!(map.group_values.get(&ap_3).unwrap().size_changed);
     }
 
     fn finalize_group_as_hashmap(

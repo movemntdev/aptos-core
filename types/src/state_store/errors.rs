@@ -11,8 +11,6 @@ pub enum StateviewError {
     /// Other non-classified error.
     #[error("{0}")]
     Other(String),
-    #[error(transparent)]
-    BcsError(#[from] bcs::Error),
 }
 
 impl From<anyhow::Error> for StateviewError {

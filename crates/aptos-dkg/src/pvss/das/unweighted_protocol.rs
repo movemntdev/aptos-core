@@ -1,5 +1,4 @@
 // Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
 
 use crate::{
     algebra::polynomials::{get_nonzero_powers_of_tau, shamir_secret_share},
@@ -145,7 +144,7 @@ impl traits::Transcript for Transcript {
         pp: &Self::PublicParameters,
         spks: &Vec<Self::SigningPubKey>,
         eks: &Vec<Self::EncryptPubKey>,
-        auxs: &Vec<A>,
+        aux: &Vec<A>,
     ) -> anyhow::Result<()> {
         if eks.len() != sc.n {
             bail!("Expected {} encryption keys, but got {}", sc.n, eks.len());
@@ -164,16 +163,8 @@ impl traits::Transcript for Transcript {
         }
 
         // Derive challenges deterministically via Fiat-Shamir; easier to debug for distributed systems
-        let (f, extra) = fiat_shamir::fiat_shamir(
-            self,
-            sc,
-            pp,
-            spks,
-            eks,
-            auxs,
-            &DAS_PVSS_FIAT_SHAMIR_DST[..],
-            2,
-        );
+        let (f, extra) =
+            fiat_shamir::fiat_shamir(self, sc, pp, eks, &DAS_PVSS_FIAT_SHAMIR_DST[..], 2);
 
         // Verify signature(s) on the secret commitment, player ID and `aux`
         let g_2 = *pp.get_commitment_base();
@@ -182,7 +173,7 @@ impl traits::Transcript for Transcript {
             &g_2,
             &self.V[sc.n],
             spks,
-            auxs,
+            aux,
             &extra[0],
         )?;
 

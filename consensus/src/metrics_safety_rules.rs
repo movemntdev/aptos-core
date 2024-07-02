@@ -8,8 +8,6 @@ use crate::{
 };
 use aptos_consensus_types::{
     block_data::BlockData,
-    order_vote::OrderVote,
-    order_vote_proposal::OrderVoteProposal,
     timeout_2chain::{TwoChainTimeout, TwoChainTimeoutCertificate},
     vote::Vote,
     vote_proposal::VoteProposal,
@@ -125,18 +123,6 @@ impl TSafetyRules for MetricsSafetyRules {
         })
     }
 
-    fn construct_and_sign_order_vote(
-        &mut self,
-        order_vote_proposal: &OrderVoteProposal,
-    ) -> Result<OrderVote, Error> {
-        self.retry(|inner| {
-            monitor!(
-                "safety_rules",
-                inner.construct_and_sign_order_vote(order_vote_proposal)
-            )
-        })
-    }
-
     fn sign_commit_vote(
         &mut self,
         ledger_info: LedgerInfoWithSignatures,
@@ -166,8 +152,6 @@ mod tests {
     use crate::{metrics_safety_rules::MetricsSafetyRules, test_utils::EmptyStorage};
     use aptos_consensus_types::{
         block_data::BlockData,
-        order_vote::OrderVote,
-        order_vote_proposal::OrderVoteProposal,
         timeout_2chain::{TwoChainTimeout, TwoChainTimeoutCertificate},
         vote::Vote,
         vote_proposal::VoteProposal,
@@ -240,13 +224,6 @@ mod tests {
             _: &VoteProposal,
             _: Option<&TwoChainTimeoutCertificate>,
         ) -> Result<Vote, Error> {
-            unimplemented!()
-        }
-
-        fn construct_and_sign_order_vote(
-            &mut self,
-            _: &OrderVoteProposal,
-        ) -> Result<OrderVote, Error> {
             unimplemented!()
         }
 

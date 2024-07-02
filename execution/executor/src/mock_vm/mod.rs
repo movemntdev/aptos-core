@@ -10,7 +10,9 @@ use anyhow::Result;
 use aptos_crypto::{ed25519::Ed25519PrivateKey, PrivateKey, Uniform};
 use aptos_storage_interface::cached_state_view::CachedStateView;
 use aptos_types::{
+    access_path::AccessPath,
     account_address::AccountAddress,
+    account_config::CORE_CODE_ADDRESS,
     block_executor::{
         config::BlockExecutorConfigFromOnchain,
         partitioner::{ExecutableTransactions, PartitionedTransactions},
@@ -19,13 +21,16 @@ use aptos_types::{
     chain_id::ChainId,
     contract_event::ContractEvent,
     event::EventKey,
-    on_chain_config::{new_epoch_event_key, ConfigurationResource, ValidatorSet},
+    on_chain_config::{
+        access_path_for_config, new_epoch_event_key, ConfigurationResource, OnChainConfig,
+        ValidatorSet,
+    },
     state_store::{state_key::StateKey, StateView},
     transaction::{
         signature_verified_transaction::SignatureVerifiedTransaction, BlockOutput, ChangeSet,
         ExecutionStatus, RawTransaction, Script, SignedTransaction, Transaction,
-        TransactionArgument, TransactionAuxiliaryData, TransactionOutput, TransactionPayload,
-        TransactionStatus, WriteSetPayload,
+        TransactionArgument, TransactionOutput, TransactionPayload, TransactionStatus,
+        WriteSetPayload,
     },
     vm_status::{StatusCode, VMStatus},
     write_set::{WriteOp, WriteSet, WriteSetMut},
@@ -34,7 +39,7 @@ use aptos_vm::{
     sharded_block_executor::{executor_client::ExecutorClient, ShardedBlockExecutor},
     VMExecutor,
 };
-use move_core_types::language_storage::TypeTag;
+use move_core_types::{language_storage::TypeTag, move_resource::MoveResource};
 use once_cell::sync::Lazy;
 use std::{collections::HashMap, sync::Arc};
 
@@ -89,7 +94,6 @@ impl VMExecutor for MockVM {
                     vec![],
                     0,
                     KEEP_STATUS.clone(),
-                    TransactionAuxiliaryData::default(),
                 ));
                 continue;
             }
@@ -97,11 +101,12 @@ impl VMExecutor for MockVM {
             if matches!(txn, Transaction::GenesisTransaction(_)) {
                 read_state_value_from_storage(
                     state_view,
-                    &StateKey::on_chain_config::<ValidatorSet>().unwrap(),
+                    &access_path_for_config(ValidatorSet::CONFIG_ID)
+                        .map_err(|_| VMStatus::error(StatusCode::TOO_MANY_TYPE_NODES, None))?,
                 );
                 read_state_value_from_storage(
                     state_view,
-                    &StateKey::on_chain_config::<ConfigurationResource>().unwrap(),
+                    &AccessPath::new(CORE_CODE_ADDRESS, ConfigurationResource::resource_path()),
                 );
                 outputs.push(TransactionOutput::new(
                     // WriteSet cannot be empty so use genesis writeset only for testing.
@@ -115,7 +120,6 @@ impl VMExecutor for MockVM {
                     )],
                     0,
                     KEEP_STATUS.clone(),
-                    TransactionAuxiliaryData::default(),
                 ));
                 continue;
             }
@@ -137,7 +141,6 @@ impl VMExecutor for MockVM {
                         events,
                         0,
                         KEEP_STATUS.clone(),
-                        TransactionAuxiliaryData::default(),
                     ));
                 },
                 MockVMTransaction::Payment {
@@ -153,7 +156,6 @@ impl VMExecutor for MockVM {
                             vec![],
                             0,
                             DISCARD_STATUS.clone(),
-                            TransactionAuxiliaryData::default(),
                         ));
                         continue;
                     }
@@ -180,13 +182,12 @@ impl VMExecutor for MockVM {
                         events,
                         0,
                         TransactionStatus::Keep(ExecutionStatus::Success),
-                        TransactionAuxiliaryData::default(),
                     ));
                 },
             }
         }
 
-        Ok(BlockOutput::new(outputs, None))
+        Ok(BlockOutput::new(outputs))
     }
 
     fn execute_block_sharded<S: StateView + Sync + Send + 'static, E: ExecutorClient<S>>(
@@ -200,7 +201,7 @@ impl VMExecutor for MockVM {
 }
 
 fn read_balance(
-    output_cache: &HashMap<Vec<u8>, u64>,
+    output_cache: &HashMap<AccessPath, u64>,
     state_view: &impl StateView,
     account: AccountAddress,
 ) -> u64 {
@@ -212,7 +213,7 @@ fn read_balance(
 }
 
 fn read_seqnum(
-    output_cache: &HashMap<Vec<u8>, u64>,
+    output_cache: &HashMap<AccessPath, u64>,
     state_view: &impl StateView,
     account: AccountAddress,
 ) -> u64 {
@@ -223,27 +224,27 @@ fn read_seqnum(
     }
 }
 
-fn read_balance_from_storage(state_view: &impl StateView, balance_access_path: &[u8]) -> u64 {
+fn read_balance_from_storage(state_view: &impl StateView, balance_access_path: &AccessPath) -> u64 {
     read_u64_from_storage(state_view, balance_access_path)
 }
 
-fn read_seqnum_from_storage(state_view: &impl StateView, seqnum_access_path: &[u8]) -> u64 {
+fn read_seqnum_from_storage(state_view: &impl StateView, seqnum_access_path: &AccessPath) -> u64 {
     read_u64_from_storage(state_view, seqnum_access_path)
 }
 
-fn read_u64_from_storage(state_view: &impl StateView, access_path: &[u8]) -> u64 {
+fn read_u64_from_storage(state_view: &impl StateView, access_path: &AccessPath) -> u64 {
     state_view
-        .get_state_value_bytes(&StateKey::raw(access_path))
+        .get_state_value_bytes(&StateKey::access_path(access_path.clone()))
         .expect("Failed to query storage.")
         .map_or(0, |bytes| decode_bytes(&bytes))
 }
 
 fn read_state_value_from_storage(
     state_view: &impl StateView,
-    state_key: &StateKey,
+    access_path: &AccessPath,
 ) -> Option<Vec<u8>> {
     state_view
-        .get_state_value_bytes(state_key)
+        .get_state_value_bytes(&StateKey::access_path(access_path.clone()))
         .expect("Failed to query storage.")
         .map(|bytes| bytes.to_vec())
 }
@@ -254,26 +255,27 @@ fn decode_bytes(bytes: &[u8]) -> u64 {
     u64::from_le_bytes(buf)
 }
 
-fn balance_ap(account: AccountAddress) -> Vec<u8> {
-    let mut path = account.to_vec();
-    path.extend(b"balance");
-    path
+fn balance_ap(account: AccountAddress) -> AccessPath {
+    AccessPath::new(account, b"balance".to_vec())
 }
 
-fn seqnum_ap(account: AccountAddress) -> Vec<u8> {
-    let mut path = account.to_vec();
-    path.extend(b"seqnum");
-    path
+fn seqnum_ap(account: AccountAddress) -> AccessPath {
+    AccessPath::new(account, b"seqnum".to_vec())
 }
 
 fn gen_genesis_writeset() -> WriteSet {
     let mut write_set = WriteSetMut::default();
+    let validator_set_ap =
+        access_path_for_config(ValidatorSet::CONFIG_ID).expect("access path in test");
     write_set.insert((
-        StateKey::on_chain_config::<ValidatorSet>().unwrap(),
+        StateKey::access_path(validator_set_ap),
         WriteOp::legacy_modification(bcs::to_bytes(&ValidatorSet::new(vec![])).unwrap().into()),
     ));
     write_set.insert((
-        StateKey::on_chain_config::<ConfigurationResource>().unwrap(),
+        StateKey::access_path(AccessPath::new(
+            CORE_CODE_ADDRESS,
+            ConfigurationResource::resource_path(),
+        )),
         WriteOp::legacy_modification(
             bcs::to_bytes(&ConfigurationResource::default())
                 .unwrap()
@@ -288,11 +290,11 @@ fn gen_genesis_writeset() -> WriteSet {
 fn gen_mint_writeset(sender: AccountAddress, balance: u64, seqnum: u64) -> WriteSet {
     let mut write_set = WriteSetMut::default();
     write_set.insert((
-        StateKey::raw(&balance_ap(sender)),
+        StateKey::access_path(balance_ap(sender)),
         WriteOp::legacy_modification(balance.le_bytes()),
     ));
     write_set.insert((
-        StateKey::raw(&seqnum_ap(sender)),
+        StateKey::access_path(seqnum_ap(sender)),
         WriteOp::legacy_modification(seqnum.le_bytes()),
     ));
     write_set.freeze().expect("mint writeset should be valid")
@@ -307,15 +309,15 @@ fn gen_payment_writeset(
 ) -> WriteSet {
     let mut write_set = WriteSetMut::default();
     write_set.insert((
-        StateKey::raw(&balance_ap(sender)),
+        StateKey::access_path(balance_ap(sender)),
         WriteOp::legacy_modification(sender_balance.le_bytes()),
     ));
     write_set.insert((
-        StateKey::raw(&seqnum_ap(sender)),
+        StateKey::access_path(seqnum_ap(sender)),
         WriteOp::legacy_modification(sender_seqnum.le_bytes()),
     ));
     write_set.insert((
-        StateKey::raw(&balance_ap(recipient)),
+        StateKey::access_path(balance_ap(recipient)),
         WriteOp::legacy_modification(recipient_balance.le_bytes()),
     ));
     write_set
@@ -409,9 +411,9 @@ fn decode_transaction(txn: &SignedTransaction) -> MockVMTransaction {
         TransactionPayload::Multisig(_) => {
             unimplemented!("MockVM does not support multisig transaction payload.")
         },
-        // Deprecated.
+        // Deprecated. Will be removed in the future.
         TransactionPayload::ModuleBundle(_) => {
-            unreachable!("Module bundle payload has been removed")
+            unimplemented!("MockVM does not support Module transaction payload.")
         },
     }
 }

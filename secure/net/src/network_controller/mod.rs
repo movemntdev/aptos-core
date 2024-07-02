@@ -1,5 +1,4 @@
 // Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
 
 use crate::network_controller::{
     inbound_handler::InboundHandler, outbound_handler::OutboundHandler,

@@ -1,5 +1,4 @@
 // Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
 
 use ark_ff::{BigInteger256, Field};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};

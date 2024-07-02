@@ -1,5 +1,4 @@
 // Copyright © Aptos Foundation
-// SPDX-License-Identifier: Apache-2.0
 
 macro_rules! dealt_secret_key_share_impl {
     ($GTProjective:ident, $gt:ident) => {

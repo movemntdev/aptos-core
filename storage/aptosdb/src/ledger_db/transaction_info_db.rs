@@ -9,7 +9,7 @@ use crate::{
     },
     utils::iterators::ExpectContinuousVersions,
 };
-use aptos_schemadb::{SchemaBatch, DB};
+use aptos_schemadb::{ReadOptions, SchemaBatch, DB};
 use aptos_storage_interface::{AptosDbError, Result};
 use aptos_types::{
     proof::TransactionInfoWithProof,
@@ -64,7 +64,9 @@ impl TransactionInfoDb {
         start_version: Version,
         num_transaction_infos: usize,
     ) -> Result<impl Iterator<Item = Result<TransactionInfo>> + '_> {
-        let mut iter = self.db.iter::<TransactionInfoSchema>()?;
+        let mut iter = self
+            .db
+            .iter::<TransactionInfoSchema>(ReadOptions::default())?;
         iter.seek(&start_version)?;
         iter.expect_continuous_versions(start_version, num_transaction_infos)
     }
