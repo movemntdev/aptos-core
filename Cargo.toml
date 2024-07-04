@@ -8,6 +8,7 @@ members = [
     "api/types",
     "aptos-move/aptos-abstract-gas-usage",
     "aptos-move/aptos-aggregator",
+    "aptos-move/aptos-debugger",
     "aptos-move/aptos-gas-algebra",
     "aptos-move/aptos-gas-meter",
     "aptos-move/aptos-gas-profiling",
@@ -37,11 +38,13 @@ members = [
     "aptos-move/package-builder",
     "aptos-move/vm-genesis",
     "aptos-move/writeset-transaction-generator",
+    "aptos-node",
     "aptos-utils",
     "config",
     "config/global-constants",
     "consensus/consensus-types",
     "consensus/safety-rules",
+    "crates/aptos",
     "crates/aptos-api-tester",
     "crates/aptos-bcs-utils",
     "crates/aptos-bitvec",
@@ -222,6 +225,7 @@ members = [
 # For more, see the "Conditional compilation for tests" section in documentation/coding_guidelines.md.
 default-members = [
     "consensus/safety-rules",
+    "crates/aptos",
     "crates/aptos-faucet/service",
     "crates/aptos-keygen",
     "crates/aptos-rate-limiter",
@@ -245,6 +249,7 @@ rust-version = "1.75.0"
 [workspace.dependencies]
 # Internal crate dependencies.
 # Please do not add any test features here: they should be declared by the individual crate.
+aptos = { path = "crates/aptos" }
 aptos-accumulator = { path = "storage/accumulator" }
 aptos-aggregator = { path = "aptos-move/aptos-aggregator" }
 aptos-api = { path = "api" }
@@ -321,6 +326,7 @@ aptos-mempool = { path = "mempool" }
 aptos-mempool-notifications = { path = "state-sync/inter-component/mempool-notifications" }
 aptos-memsocket = { path = "network/memsocket" }
 aptos-metrics-core = { path = "crates/aptos-metrics-core" }
+aptos-move-debugger = { path = "aptos-move/aptos-debugger" }
 aptos-move-examples = { path = "aptos-move/move-examples" }
 aptos-move-e2e-benchmark = { path = "aptos-move/e2e-benchmark" }
 aptos-mvhashmap = { path = "aptos-move/mvhashmap" }
@@ -331,6 +337,7 @@ aptos-network-benchmark = { path = "network/benchmark" }
 aptos-network-builder = { path = "network/builder" }
 aptos-network-checker = { path = "crates/aptos-network-checker" }
 aptos-network-discovery = { path = "network/discovery" }
+aptos-node = { path = "aptos-node" }
 aptos-node-checker = { path = "ecosystem/node-checker" }
 aptos-node-identity = { path = "crates/aptos-node-identity" }
 aptos-node-resource-metrics = { path = "crates/node-resource-metrics" }

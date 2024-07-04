@@ -35,9 +35,6 @@ pub struct Command {
 
     #[clap(long)]
     add_system_txns: bool,
-
-    #[clap(long)]
-    repeat_execution_times: Option<u64>,
 }
 
 impl Command {
@@ -72,11 +69,12 @@ impl Command {
                 "Getting block {:?} from {consensus_db_path:?}.",
                 self.block_id
             );
-            let cmd = aptos_consensus::util::db_tool::Command {
-                db_dir: consensus_db_path,
-                block_id: self.block_id,
-            };
-            cmd.dump_pending_txns()?
+            unimplemented!("consensus crate removed, ojo");
+            // let cmd = aptos_consensus::util::db_tool::Command {
+            //     db_dir: consensus_db_path,
+            //     block_id: self.block_id,
+            // };
+            // cmd.dump_pending_txns()?
         } else {
             unreachable!("Must provide one target.");
         };
@@ -87,11 +85,7 @@ impl Command {
             user_txns
         };
 
-        let txn_outputs = debugger.execute_transactions_at_version(
-            self.begin_version,
-            block,
-            self.repeat_execution_times.unwrap_or(1),
-        )?;
+        let txn_outputs = debugger.execute_transactions_at_version(self.begin_version, block)?;
         println!("{txn_outputs:#?}");
 
         Ok(())
