@@ -121,6 +121,9 @@ aptos-move/aptos-vm-profiling/**/*.txt
 # Gas profiler outputs
 aptos-move/e2e-move-tests/gas-profiling
 
+# Atpos move generated files
+aptos-move/aptos-e2e-comparison-testing/test-data-mainnet-10m-15/rocks_txn_idx_db/*
+
 # replay-verify and module-verify script outputs
 metadata-cache
 /local/
