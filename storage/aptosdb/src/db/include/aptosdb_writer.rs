@@ -201,10 +201,7 @@ impl DbWriter for AptosDB {
     }
 
     /// Revert a commit.
-    fn revert_commit(
-        &self,
-        ledger_info_with_sigs: &LedgerInfoWithSignatures,
-    ) -> Result<()> {
+    fn revert_commit(&self, ledger_info_with_sigs: &LedgerInfoWithSignatures) -> Result<()> {
         let _timer = OTHER_TIMERS_SECONDS
             .with_label_values(&["revert_commit"])
             .start_timer();
@@ -281,11 +278,7 @@ impl DbWriter for AptosDB {
 
         // Update the provided ledger info
         let new_root_hash = ledger_info_with_sigs.commit_info().executed_state_id();
-        self.commit_ledger_info(
-            target_version,
-            new_root_hash,
-            Some(&ledger_info_with_sigs),
-        )?;
+        self.commit_ledger_info(target_version, new_root_hash, Some(&ledger_info_with_sigs))?;
 
         Ok(())
     }
