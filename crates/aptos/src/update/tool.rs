@@ -20,7 +20,7 @@ use std::process::Command;
 #[derive(Debug, Parser)]
 pub struct UpdateTool {
     /// The owner of the repo to download the binary from.
-    #[clap(long, default_value = "aptos-labs")]
+    #[clap(long, default_value = "movementlabsxyz")]
     repo_owner: String,
 
     /// The name of the repo to download the binary from.
@@ -47,7 +47,7 @@ impl UpdateTool {
             },
             InstallationMethod::Homebrew => {
                 return Err(anyhow!(
-                    "Detected this CLI comes from homebrew, use `brew upgrade aptos` instead"
+                    "Detected this CLI comes from homebrew, use `brew upgrade movement` instead"
                 )
                 .into());
             },
@@ -107,7 +107,7 @@ impl UpdateTool {
         let config = Update::configure()
             .repo_owner(&self.repo_owner)
             .repo_name(&self.repo_name)
-            .bin_name("aptos")
+            .bin_name("movement")
             .current_version(cargo_crate_version!())
             .target_version_tag(&info.latest_version_tag)
             .target(target)
@@ -117,7 +117,7 @@ impl UpdateTool {
         // Update the binary.
         let result = config
             .update()
-            .map_err(|e| anyhow!("Failed to update Aptos CLI: {:#}", e))?;
+            .map_err(|e| anyhow!("Failed to update Movement CLI: {:#}", e))?;
 
         let message = match result {
             Status::UpToDate(_) => panic!("We should have caught this already"),
@@ -140,6 +140,6 @@ impl CliCommand<String> for UpdateTool {
     async fn execute(self) -> CliTypedResult<String> {
         tokio::task::spawn_blocking(move || self.update())
             .await
-            .context("Failed to self-update Aptos CLI")?
+            .context("Failed to self-update Movement CLI")?
     }
 }

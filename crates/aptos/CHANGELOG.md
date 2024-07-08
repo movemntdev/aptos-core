@@ -1,6 +1,8 @@
-# Aptos CLI Changelog
+# Movement CLI Changelog
 
-All notable changes to the Aptos CLI will be captured in this file. This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and the format set out by [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+All notable changes to the Movement CLI will be captured in this file. This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and the format set out by [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+Note, all changes listed before version 2.4.0 were for Aptos CLI, from which Movement CLI was derived.
 
 ## Unreleased
 - Updated CLI source compilation to use rust toolchain version 1.75.0 (from 1.74.1).
