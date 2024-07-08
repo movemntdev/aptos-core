@@ -43,6 +43,7 @@ members = [
     "config/global-constants",
     "consensus/consensus-types",
     "consensus/safety-rules",
+    "crates/aptos",
     "crates/aptos-api-tester",
     "crates/aptos-bcs-utils",
     "crates/aptos-bitvec",
@@ -223,6 +224,7 @@ members = [
 # For more, see the "Conditional compilation for tests" section in documentation/coding_guidelines.md.
 default-members = [
     "consensus/safety-rules",
+    "crates/aptos",
     "crates/aptos-faucet/service",
     "crates/aptos-keygen",
     "crates/aptos-rate-limiter",
@@ -246,6 +248,7 @@ rust-version = "1.75.0"
 [workspace.dependencies]
 # Internal crate dependencies.
 # Please do not add any test features here: they should be declared by the individual crate.
+aptos = { path = "crates/aptos" }
 aptos-accumulator = { path = "storage/accumulator" }
 aptos-aggregator = { path = "aptos-move/aptos-aggregator" }
 aptos-api = { path = "api" }
