@@ -24,7 +24,7 @@ use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-static MINTER_SCRIPT: &[u8] = include_bytes!(
+pub static MINTER_SCRIPT: &[u8] = include_bytes!(
     "../../../../../aptos-move/move-examples/scripts/minter/build/Minter/bytecode_scripts/main.mv"
 );
 

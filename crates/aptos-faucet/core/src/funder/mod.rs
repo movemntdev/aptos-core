@@ -3,7 +3,7 @@
 
 mod common;
 mod fake;
-mod mint;
+pub mod mint;
 mod transfer;
 
 pub use self::{
