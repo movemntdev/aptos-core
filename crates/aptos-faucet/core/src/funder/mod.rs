@@ -4,7 +4,7 @@
 mod common;
 mod fake;
 pub mod mint;
-mod transfer;
+pub mod transfer;
 
 pub use self::{
     common::{ApiConnectionConfig, TransactionSubmissionConfig},
