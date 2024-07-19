@@ -51,19 +51,19 @@ pub struct RunConfig {
     pub server_config: ServerConfig,
 
     /// Metrics server config.
-    metrics_server_config: MetricsServerConfig,
+    pub metrics_server_config: MetricsServerConfig,
 
     /// Configs for any Bypassers we might want to enable.
-    bypasser_configs: Vec<BypasserConfig>,
+    pub bypasser_configs: Vec<BypasserConfig>,
 
     /// Configs for any Checkers we might want to enable.
-    checker_configs: Vec<CheckerConfig>,
+    pub checker_configs: Vec<CheckerConfig>,
 
     /// Config for the Funder component.
-    funder_config: FunderConfig,
+    pub funder_config: FunderConfig,
 
     /// General args for the runner / handler.
-    handler_config: HandlerConfig,
+    pub handler_config: HandlerConfig,
 }
 
 impl RunConfig {
