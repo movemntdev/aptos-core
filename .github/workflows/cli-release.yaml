@@ -1,4 +1,4 @@
-# This defines a workflow to build and release a new version of the aptos CLI.
+# This defines a workflow to build and release a new version of the Movement CLI.
 # In order to trigger it go to the Actions Tab of the Repo, click "Release CLI" and then "Run Workflow".
 
 name: "Release CLI"
@@ -28,14 +28,14 @@ jobs:
       - uses: actions/checkout@v3
         with:
           ref: ${{ github.event.inputs.source_git_ref_override }}
-      - uses: aptos-labs/aptos-core/.github/actions/rust-setup@main
+      - uses: movementlabsxyz/aptos-core/.github/actions/rust-setup@andygolay/movement-cli-release
       - name: Build CLI
         run: scripts/cli/build_cli_release.sh "Ubuntu"
       - name: Upload Binary
         uses: actions/upload-artifact@v3
         with:
           name: cli-builds
-          path: aptos-cli-*.zip
+          path: movement-cli-*.zip
 
   build-ubuntu22-binary:
     name: "Build Ubuntu 22.04 binary"
@@ -44,14 +44,14 @@ jobs:
       - uses: actions/checkout@v3
         with:
           ref: ${{ github.event.inputs.source_git_ref_override }}
-      - uses: aptos-labs/aptos-core/.github/actions/rust-setup@main
+      - uses: movementlabsxyz/aptos-core/.github/actions/rust-setup@andygolay/movement-cli-release
       - name: Build CLI
         run: scripts/cli/build_cli_release.sh "Ubuntu-22.04"
       - name: Upload Binary
         uses: actions/upload-artifact@v3
         with:
           name: cli-builds
-          path: aptos-cli-*.zip
+          path: movement-cli-*.zip
 
   build-windows-binary:
     name: "Build Windows binary"
@@ -66,7 +66,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: cli-builds
-          path: aptos-cli-*.zip
+          path: movement-cli-*.zip
 
   release-binaries:
     name: "Release binaries"
@@ -88,29 +88,29 @@ jobs:
         uses: marvinpinto/action-automatic-releases@919008cf3f741b179569b7a6fb4d8860689ab7f0 # pin@v1.2.1
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "${{ format('aptos-cli-v{0}', inputs.release_version) }}"
+          automatic_release_tag: "${{ format('movement-cli-v{0}', inputs.release_version) }}"
           prerelease: false
-          title: "${{ format('Aptos CLI Release v{0}', inputs.release_version) }}"
+          title: "${{ format('Movement CLI Release v{0}', inputs.release_version) }}"
           files: |
-            aptos-cli-*.zip
+            movement-cli-*.zip
 
-  bump-homebrew-version-pr:
-    name: "Make PR to bump version in Homebrew"
-    needs:
-      - release-binaries
-    runs-on: ubuntu-latest
-    steps:
-      - uses: mislav/bump-homebrew-formula-action@v3
-        with:
-          formula-name: aptos
-          tag-name: "${{ format('aptos-cli-v{0}', inputs.release_version) }}"
-          base-branch: master
-          create-pullrequest: true
-          commit-message: |
-            {{formulaName}} {{version}}
-
-            Created by https://github.com/mislav/bump-homebrew-formula-action
-
-            From CLI release run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        env:
-          COMMITTER_TOKEN: ${{ secrets.APTOS_BOT_GH_PAT_APTOS_CORE_HOMEBREW_BUMPER }}
+  #bump-homebrew-version-pr:
+  #  name: "Make PR to bump version in Homebrew"
+  #  needs:
+  #    - release-binaries
+  #  runs-on: ubuntu-latest
+  #  steps:
+  #    - uses: mislav/bump-homebrew-formula-action@v3
+  #      with:
+  #        formula-name: aptos
+  #        tag-name: "${{ format('aptos-cli-v{0}', inputs.release_version) }}"
+  #        base-branch: master
+  #        create-pullrequest: true
+  #        commit-message: |
+  #          {{formulaName}} {{version}}
+  #
+  #          Created by https://github.com/mislav/bump-homebrew-formula-action
+  #
+  #          From CLI release run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+  #      env:
+  #        COMMITTER_TOKEN: ${{ secrets.APTOS_BOT_GH_PAT_APTOS_CORE_HOMEBREW_BUMPER }}
