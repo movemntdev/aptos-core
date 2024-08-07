@@ -8,8 +8,8 @@
 # Note: This must be run from the root of the aptos-core repository.
 
 # Set up basic variables.
-$NAME="aptos-cli"
-$CRATE_NAME="aptos"
+$NAME="movement-cli"
+$CRATE_NAME="movement"
 $CARGO_PATH="crates\$CRATE_NAME\Cargo.toml"
 $Env:VCPKG_ROOT = 'C:\vcpkg\'
 
