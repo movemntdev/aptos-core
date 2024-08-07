@@ -10,8 +10,8 @@
 
 set -e
 
-NAME='aptos-cli'
-CRATE_NAME='aptos'
+NAME='movement-cli'
+CRATE_NAME='movement'
 CARGO_PATH="crates/$CRATE_NAME/Cargo.toml"
 PLATFORM_NAME="$1"
 
