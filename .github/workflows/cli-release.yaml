@@ -9,7 +9,7 @@ on:
       release_version:
         type: string
         required: true
-        description: "The release version. E.g. `0.2.3`:"
+        description: "The release version. E.g. `0.2.3`"
       source_git_ref_override:
         type: string
         required: false
@@ -34,7 +34,7 @@ jobs:
       - name: Set default values
         id: set-defaults
         run: |
-          echo "::set-output name=release_version::${{ github.event.inputs.release_version || 'default-release-version' }}"
+          echo "::set-output name=release_version::v3.5.1 || 'default-release-version' }}"
           echo "::set-output name=source_git_ref_override::${{ github.event.inputs.source_git_ref_override || github.sha }}"
           echo "::set-output name=dry_run::${{ github.event.inputs.dry_run || 'false' }}"
 
