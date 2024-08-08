@@ -17,7 +17,7 @@ on:
       dry_run:
         type: boolean
         required: false
-        default: true
+        default: false
         description: "Dry run - If checked, the release will not be created"
   push:
     branches:
@@ -36,7 +36,7 @@ jobs:
         run: |
           echo "::set-output name=release_version::${{ github.event.inputs.release_version || 'default-release-version' }}"
           echo "::set-output name=source_git_ref_override::${{ github.event.inputs.source_git_ref_override || github.sha }}"
-          echo "::set-output name=dry_run::${{ github.event.inputs.dry_run || 'true' }}"
+          echo "::set-output name=dry_run::${{ github.event.inputs.dry_run || 'false' }}"
 
   build-ubuntu20-binary:
     name: "Build Ubuntu 20.04 binary"
