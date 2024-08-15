@@ -15,7 +15,7 @@ use crate::{
 };
 use aptos_config::config::{
     EpochSnapshotPrunerConfig, LedgerPrunerConfig, PrunerConfig, RocksdbConfigs,
-    StateMerklePrunerConfig, StorageDirPaths, BUFFERED_STATE_TARGET_ITEMS,
+    StateMerklePrunerConfig, StorageDirPaths, BUFFERED_STATE_TARGET_ITEMS_FOR_TEST,
     DEFAULT_MAX_NUM_NODES_PER_LRU_CACHE_SHARD,
 };
 use aptos_crypto::{hash::CryptoHash, HashValue};
@@ -118,6 +118,7 @@ fn test_pruner_config() {
                 batch_size: 1,
                 user_pruning_window_offset: 0,
             },
+            None,
         );
         assert_eq!(ledger_pruner.is_pruner_enabled(), enable);
         assert_eq!(ledger_pruner.get_prune_window(), 100);
@@ -388,8 +389,9 @@ pub fn test_state_merkle_pruning_impl(
         },
         RocksdbConfigs::default(),
         false, /* enable_indexer */
-        BUFFERED_STATE_TARGET_ITEMS,
+        BUFFERED_STATE_TARGET_ITEMS_FOR_TEST,
         DEFAULT_MAX_NUM_NODES_PER_LRU_CACHE_SHARD,
+        None,
     )
     .unwrap();
 
