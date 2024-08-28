@@ -352,10 +352,14 @@ impl CliCommand<()> for RunLocalnet {
             .collect();
 
         let mut join_set = JoinSet::new();
+        let mut task_id = 0usize;
 
         // Start each of the services.
         for manager in managers.into_iter() {
-            join_set.spawn(manager.run());
+            task_id += 1;
+            join_set.spawn(async move {
+                manager.run().await.map(|()| task_id)
+            });
         }
 
         // Wait for all the services to start up. While doing so we also wait for any
@@ -398,29 +402,23 @@ impl CliCommand<()> for RunLocalnet {
         // see `ShutdownStep` for more info. In particular, to speak to how "best effort"
         // this really is, to make sure ctrl-c happens more or less instantly, we only
         // register this handler after all the services have started.
-        let abort_handle = join_set.spawn(async move {
+        join_set.spawn(async move {
             tokio::signal::ctrl_c()
                 .await
                 .expect("Failed to register ctrl-c hook");
-            Ok(())
+            Ok(0)
         });
-        let ctrl_c_task_id = abort_handle.id();
 
         // Wait for one of the tasks to end. We should never get past this point unless
         // something goes goes wrong or the user signals for the process to end. We
         // unwrap once because we know for certain the set is not empty and that's the
         // only condition in which this can return `None`.
-        let result = join_set.join_next_with_id().await.unwrap();
+        let result = join_set.join_next().await.unwrap();
 
         // We want to print a different message depending on which task ended. We can
         // determine if the task that ended was the ctrl-c task based on the ID of the
         // task.
-        let finished_task_id = match &result {
-            Ok((id, _)) => *id,
-            Err(err) => err.id(),
-        };
-
-        let was_ctrl_c = finished_task_id == ctrl_c_task_id;
+        let was_ctrl_c = matches!(result, Ok(Ok(id)) if id == 0);
         if was_ctrl_c {
             eprintln!("\nReceived ctrl-c, running shutdown steps...");
         } else {
