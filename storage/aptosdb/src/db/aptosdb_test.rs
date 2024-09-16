@@ -3,10 +3,10 @@
 
 use crate::{
     db::{
-        get_first_seq_num_and_limit, test_helper,
+        get_first_seq_num_and_limit,
         test_helper::{
-            arb_blocks_to_commit, put_as_state_root, put_transaction_auxiliary_data,
-            put_transaction_infos,
+            self, arb_blocks_to_commit, arb_blocks_to_commit_with_block_nums, put_as_state_root,
+            put_transaction_auxiliary_data, put_transaction_infos, update_in_memory_state,
         },
         AptosDB,
     },
@@ -19,7 +19,8 @@ use aptos_config::config::{
     DEFAULT_MAX_NUM_NODES_PER_LRU_CACHE_SHARD,
 };
 use aptos_crypto::{hash::CryptoHash, HashValue};
-use aptos_storage_interface::{DbReader, ExecutedTrees, Order};
+use aptos_proptest_helpers::ValueGenerator;
+use aptos_storage_interface::{DbReader, DbWriter, ExecutedTrees, Order};
 use aptos_temppath::TempPath;
 use aptos_types::{
     ledger_info::LedgerInfoWithSignatures,
@@ -33,7 +34,7 @@ use aptos_types::{
     },
     vm_status::StatusCode,
 };
-use proptest::prelude::*;
+use proptest::{prelude::*, std_facade::HashMap};
 use std::{collections::HashSet, sync::Arc};
 use test_helper::{test_save_blocks_impl, test_sync_transactions_impl};
 
@@ -207,6 +208,156 @@ fn test_get_latest_executed_trees() {
             vec![txn_info.hash()],
             1,
         ))
+    );
+}
+
+#[test]
+fn test_revert_single_commit() {
+    aptos_logger::Logger::new().init();
+
+    let tmp_dir = TempPath::new();
+    let db = AptosDB::new_for_test(&tmp_dir);
+
+    let mut cur_ver: Version = 0;
+    let mut in_memory_state = db.buffered_state().lock().current_state().clone();
+    let _ancestor = in_memory_state.base.clone();
+    let mut val_generator = ValueGenerator::new();
+    let (blocks, _) = val_generator.generate(arb_blocks_to_commit_with_block_nums(3, 3));
+    for (txns_to_commit, ledger_info_with_sigs) in &blocks {
+        update_in_memory_state(&mut in_memory_state, txns_to_commit.as_slice());
+        db.save_transactions_for_test(
+            txns_to_commit,
+            cur_ver, /* first_version */
+            cur_ver.checked_sub(1),
+            Some(ledger_info_with_sigs),
+            true, /* sync_commit */
+            in_memory_state.clone(),
+        )
+        .unwrap();
+        cur_ver += txns_to_commit.len() as u64;
+    }
+
+    // Check expected before revert commit
+    let pre_revert_version = cur_ver - 1;
+    assert_eq!(db.get_synced_version().unwrap(), pre_revert_version);
+
+    // Get the latest ledger info before revert
+    let revert_ledger_info = blocks[1].1.clone();
+    let version_to_revert_to = revert_ledger_info.commit_info().version();
+
+    // Revert the last commit
+    db.revert_commit(&revert_ledger_info).unwrap();
+
+    assert_eq!(db.get_synced_version().unwrap(), version_to_revert_to);
+    let ledger_info = db.get_latest_ledger_info().unwrap();
+    assert_eq!(ledger_info, revert_ledger_info);
+
+    // Check the ledger database has been cleaned up.
+    let event_db = db.ledger_db.event_db();
+    let tx_acc_db = db.ledger_db.transaction_accumulator_db();
+    for i in version_to_revert_to + 1..=pre_revert_version {
+        let _ = tx_acc_db
+            .get_root_hash(i)
+            .expect_err(&format!("expected no state for {i}"));
+        let events = event_db.get_events_by_version(i).unwrap();
+        assert!(events.is_empty(), "events not removed for version {i}")
+    }
+
+    // Check consistency of the transaction accumulator DB
+    let root_hash = tx_acc_db.get_root_hash(version_to_revert_to).unwrap();
+    assert_eq!(
+        root_hash,
+        revert_ledger_info
+            .commit_info()
+            .executed_state_id()
+    );
+}
+
+#[test]
+fn test_revert_nth_commit() {
+    aptos_logger::Logger::new().init();
+    let tmp_dir = TempPath::new();
+    let db = AptosDB::new_for_test(&tmp_dir);
+
+    let mut cur_ver: Version = 0;
+    let mut in_memory_state = db.buffered_state().lock().current_state().clone();
+    let _ancestor = in_memory_state.base.clone();
+
+    let mut val_generator = ValueGenerator::new();
+    // set range of min and max blocks to 5 to always gen 5 blocks
+    let (blocks, _) = val_generator.generate(arb_blocks_to_commit_with_block_nums(5, 5));
+
+    #[derive(Debug)]
+    struct Commit {
+        info: LedgerInfoWithSignatures,
+        first_version: Version,
+    }
+
+    let mut committed_blocks = HashMap::new();
+    let mut commit_versions = Vec::new();
+    let mut blockheight = 0;
+
+    for (txns_to_commit, ledger_info_with_sigs) in &blocks {
+        let first_version = cur_ver;
+        update_in_memory_state(&mut in_memory_state, txns_to_commit.as_slice());
+        db.save_transactions_for_test(
+            txns_to_commit,
+            cur_ver, /* first_version */
+            cur_ver.checked_sub(1),
+            Some(ledger_info_with_sigs),
+            true, /* sync_commit */
+            in_memory_state.clone(),
+        )
+        .unwrap();
+
+        committed_blocks.insert(
+            blockheight,
+            Commit {
+                info: ledger_info_with_sigs.clone(),
+                first_version,
+            },
+        );
+        commit_versions.push(cur_ver);
+        cur_ver += txns_to_commit.len() as u64;
+        blockheight += 1;
+    }
+
+    // Check expected before revert commit
+    let pre_revert_version = cur_ver - 1;
+    assert_eq!(db.get_synced_version().unwrap(), pre_revert_version);
+
+    // Get the 3rd block back from the latest block
+    let revert_block_num = blockheight - 3;
+    let revert = committed_blocks.get(&revert_block_num).unwrap();
+    let revert_ledger_info = committed_blocks[&(revert_block_num - 1)].info.clone();
+
+    // Get the version to revert to
+    let version_to_revert_to = revert.first_version - 1;
+
+    db.revert_commit(&revert_ledger_info).unwrap();
+
+    assert_eq!(db.get_synced_version().unwrap(), version_to_revert_to);
+    let ledger_info = db.get_latest_ledger_info().unwrap();
+    assert_eq!(ledger_info, revert_ledger_info);
+
+    // Check the ledger database has been cleaned up.
+    let event_db = db.ledger_db.event_db();
+    let tx_acc_db = db.ledger_db.transaction_accumulator_db();
+    for i in version_to_revert_to + 1..=pre_revert_version {
+        let _ = tx_acc_db
+            .get_root_hash(i)
+            .expect_err(&format!("expected no state for {i}"));
+        let events = event_db.get_events_by_version(i).unwrap();
+        assert!(events.is_empty(), "events not removed for version {i}")
+    }
+
+    // Check consistency of the transaction accumulator DB
+    let root_hash = tx_acc_db.get_root_hash(version_to_revert_to).unwrap();
+    assert_eq!(
+        root_hash,
+        revert_ledger_info
+            .commit_info()
+            .executed_state_id()
     );
 }
 

@@ -305,6 +305,24 @@ impl LedgerMetadataDb {
 
         Ok(())
     }
+
+    /// Delete committed block info indices starting from the specified version.
+    pub(crate) fn truncate_block_info(
+        &self,
+        target_version: Version,
+        batch: &SchemaBatch,
+    ) -> Result<()> {
+        let from_version = target_version + 1;
+        let mut iter = self
+            .db
+            .iter::<BlockByVersionSchema>()?;
+        iter.seek(&from_version)?;
+        while let Some((block_version, block_height)) = iter.next().transpose()? {
+            batch.delete::<BlockInfoSchema>(&block_height)?;
+            batch.delete::<BlockByVersionSchema>(&block_version)?;
+        }
+        Ok(())
+    }
 }
 
 /// Usage APIs.

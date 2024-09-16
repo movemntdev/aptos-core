@@ -64,12 +64,7 @@ impl AccountsApi {
         self.context
             .check_api_output_enabled("Get account", &accept_type)?;
 
-        let context = self.context.clone();
-        api_spawn_blocking(move || {
-            let account = Account::new(context, address.0, ledger_version.0, None, None, false)?;
-            account.account(&accept_type)
-        })
-        .await
+        self.get_account_inner(accept_type, address.0, ledger_version.0).await
     }
 
     /// Get account resources
@@ -174,6 +169,22 @@ impl AccountsApi {
                 true,
             )?;
             account.modules(&accept_type)
+        })
+        .await
+    }
+}
+
+impl AccountsApi {
+    pub async fn get_account_inner(
+        &self,
+        accept_type: AcceptType,
+        address: Address,
+        ledger_version: Option<U64>,
+    ) -> BasicResultWith404<AccountData> {
+        let context = self.context.clone();
+        api_spawn_blocking(move || {
+            let account = Account::new(context, address, ledger_version, None, None, false)?;
+            account.account(&accept_type)
         })
         .await
     }

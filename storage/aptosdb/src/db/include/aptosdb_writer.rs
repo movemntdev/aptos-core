@@ -1,5 +1,6 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
+use crate::utils::truncation_helper::{truncate_ledger_db, truncate_state_kv_db_shards, truncate_state_merkle_db};
 
 impl DbWriter for AptosDB {
     /// `first_version` is the version of the first transaction in `txns_to_commit`.
@@ -19,9 +20,9 @@ impl DbWriter for AptosDB {
         sharded_state_cache: Option<&ShardedStateCache>,
     ) -> Result<()> {
         gauged_api("save_transactions", || {
-            // Executing and committing from more than one threads not allowed -- consensus and
-            // state sync must hand over to each other after all pending execution and committing
-            // complete.
+            // Executing, committing, or reverting from more than one threads not allowed --
+            // consensus and state sync must hand over to each other after all pending execution
+            // and committing complete.
             let _lock = self
                 .ledger_commit_lock
                 .try_lock()
@@ -196,6 +197,59 @@ impl DbWriter for AptosDB {
 
             Ok(())
         })
+    }
+
+    /// Revert a commit.
+    fn revert_commit(&self, ledger_info_with_sigs: &LedgerInfoWithSignatures) -> Result<()> {
+        // TODO: check if the pruners' progress needs to be set back
+        // to prevent them from pruning useful states.
+
+        let _timer = OTHER_TIMERS_SECONDS
+            .with_label_values(&["revert_commit"])
+            .start_timer();
+
+        // Executing, committing, or reverting from more than one threads not allowed --
+        // consensus and state sync must hand over to each other after all pending execution
+        // and committing complete.
+        let _lock = self
+            .ledger_commit_lock
+            .try_lock()
+            .expect("Concurrent committing detected.");
+
+        let latest_version = self.get_synced_version()?;
+        let target_version = ledger_info_with_sigs.ledger_info().version();
+
+        // Update in-memory state first, as this is what
+        // concurrent readers would use for the latest ledger info.
+        self.pre_revert(latest_version, &ledger_info_with_sigs);
+
+        // Lock buffered state in the state store
+        let state_lock = self.state_store.reset_lock();
+
+        // Update the provided ledger info and the overall commit progress
+        let new_root_hash = ledger_info_with_sigs.commit_info().executed_state_id();
+        self.commit_ledger_info(target_version, new_root_hash, Some(&ledger_info_with_sigs))?;
+
+        truncate_ledger_db(self.ledger_db.clone(), target_version)?;
+        truncate_state_kv_db_shards(
+            &self.state_store.state_kv_db,
+            target_version,
+        )?;
+        truncate_state_merkle_db(&self.state_store.state_merkle_db, target_version)?;
+
+        // Revert block index if event index is skipped.
+        if self.skip_index_and_usage {
+            let batch = SchemaBatch::new();
+            self.ledger_db
+                .metadata_db()
+                .truncate_block_info(target_version, &batch)?;
+            self.ledger_db.metadata_db().write_schemas(batch)?;
+        }
+
+        // Reset buffered state after truncation
+        state_lock.reset();
+
+        Ok(())
     }
 }
 
@@ -587,18 +641,6 @@ impl AptosDB {
                 new_root_hash,
                 expected_root_hash,
             );
-            let current_epoch = self
-                .ledger_db
-                .metadata_db()
-                .get_latest_ledger_info_option()
-                .map_or(0, |li| li.ledger_info().next_block_epoch());
-            ensure!(
-                x.ledger_info().epoch() == current_epoch,
-                "Gap in epoch history. Trying to put in LedgerInfo in epoch: {}, current epoch: {}",
-                x.ledger_info().epoch(),
-                current_epoch,
-            );
-
             self.ledger_db
                 .metadata_db()
                 .put_ledger_info(x, &ledger_batch)?;
@@ -655,5 +697,43 @@ impl AptosDB {
         }
 
         Ok(())
+    }
+
+    // Update in-memory state of the database and the metrics before reverting.
+    // Note that any failures in persisting the revert should be treated as
+    // non-recoverable.
+    fn pre_revert(
+        &self,
+        latest_version: Version,
+        ledger_info_with_sigs: &LedgerInfoWithSignatures,
+    ) {
+        let target_version = ledger_info_with_sigs.ledger_info().version();
+        let num_txns = latest_version - target_version + 1;
+        if num_txns > 0 {
+            // TODO: also update the COMMITTED_TXNS, but currently it can only go up
+            LATEST_TXN_VERSION.set(target_version as i64);
+
+            // Set back the ledger pruner and state kv pruner.
+            // Note the state merkle pruner is activated when state snapshots are persisted
+            // in their async thread.
+            self.ledger_pruner
+                .maybe_set_pruner_target_db_version(target_version);
+            self.state_store
+                .state_kv_pruner
+                .maybe_set_pruner_target_db_version(target_version);
+        }
+
+        if let Some(_indexer) = &self.indexer {
+            // TODO: prune the reverted write sets from the indexer
+        }
+
+        // Update the metrics
+        LEDGER_VERSION.set(target_version as i64);
+        NEXT_BLOCK_EPOCH.set(ledger_info_with_sigs.ledger_info().next_block_epoch() as i64);
+
+        // Update the latest in-memory ledger info.
+        self.ledger_db
+            .metadata_db()
+            .set_latest_ledger_info(ledger_info_with_sigs.clone());
     }
 }

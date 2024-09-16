@@ -22,7 +22,7 @@
 
 use crate::aptos_framework_path;
 use anyhow::{anyhow, bail, Context, Result};
-use aptos::{
+use movement::{
     common::types::PromptOptions, governance::compile_in_temp_dir, move_tool::FrameworkPackageArgs,
 };
 use aptos_crypto::HashValue;

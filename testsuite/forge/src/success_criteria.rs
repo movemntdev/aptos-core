@@ -9,7 +9,7 @@ use crate::{
     Swarm, SwarmExt, TestReport,
 };
 use anyhow::{bail, Context};
-use aptos::node::analyze::{analyze_validators::AnalyzeValidators, fetch_metadata::FetchMetadata};
+use movement::node::analyze::{analyze_validators::AnalyzeValidators, fetch_metadata::FetchMetadata};
 use aptos_logger::info;
 use aptos_transaction_emitter_lib::{TxnStats, TxnStatsRate};
 use prometheus_http_query::response::Sample;

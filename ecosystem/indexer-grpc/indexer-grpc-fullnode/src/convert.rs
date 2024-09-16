@@ -337,29 +337,32 @@ pub fn convert_write_set_change(change: &WriteSetChange) -> transaction::WriteSe
             )),
         },
         WriteSetChange::DeleteTableItem(delete_table_item) => {
-            let data = delete_table_item.data.as_ref().unwrap_or_else(|| {
-                panic!(
-                    "Could not extract data from DeletedTableItem '{:?}' with handle '{:?}'",
-                    delete_table_item,
-                    delete_table_item.handle.to_string()
-                )
-            });
+            let data = delete_table_item.data.as_ref();
+            // .unwrap_or_else(|| {
+            //     panic!(
+            //         "Could not extract data from DeletedTableItem '{:?}' with handle '{:?}'",
+            //         delete_table_item,
+            //         delete_table_item.handle.to_string()
+            //     )
+            // });
 
             transaction::WriteSetChange {
                 r#type: transaction::write_set_change::Type::DeleteTableItem as i32,
-                change: Some(transaction::write_set_change::Change::DeleteTableItem(
-                    transaction::DeleteTableItem {
-                        state_key_hash: convert_hex_string_to_bytes(
-                            &delete_table_item.state_key_hash,
-                        ),
-                        handle: delete_table_item.handle.to_string(),
-                        key: delete_table_item.key.to_string(),
-                        data: Some(transaction::DeleteTableData {
-                            key: data.key.to_string(),
-                            key_type: data.key_type.clone(),
-                        }),
-                    },
-                )),
+                change: data.map(|data| {
+                    transaction::write_set_change::Change::DeleteTableItem(
+                        transaction::DeleteTableItem {
+                            state_key_hash: convert_hex_string_to_bytes(
+                                &delete_table_item.state_key_hash,
+                            ),
+                            handle: delete_table_item.handle.to_string(),
+                            key: delete_table_item.key.to_string(),
+                            data: Some(transaction::DeleteTableData {
+                                key: data.key.to_string(),
+                                key_type: data.key_type.clone(),
+                            }),
+                        },
+                    )
+                }),
             }
         },
         WriteSetChange::WriteModule(write_module) => transaction::WriteSetChange {
@@ -381,22 +384,25 @@ pub fn convert_write_set_change(change: &WriteSetChange) -> transaction::WriteSe
                     r#type: Some(convert_move_struct_tag(&write_resource.data.typ)),
                     type_str: write_resource.data.typ.to_string(),
                     data: serde_json::to_string(&write_resource.data.data).unwrap_or_else(|_| {
-                        panic!(
-                            "Could not convert move_resource data to json '{:?}'",
-                            write_resource.data
-                        )
+                        "{}".to_string()
+                        // panic!(
+                        //     "Could not convert move_resource data to json '{:?}'",
+                        //     write_resource.data
+                        // )
                     }),
                 },
             )),
         },
         WriteSetChange::WriteTableItem(write_table_item) => {
-            let data = write_table_item.data.as_ref().unwrap_or_else(|| {
-                panic!(
-                    "Could not extract data from DecodedTableData '{:?}' with handle '{:?}'",
-                    write_table_item,
-                    write_table_item.handle.to_string(),
-                )
-            });
+            let data = write_table_item
+                .data
+                .as_ref()
+                .map(|data| transaction::WriteTableData {
+                    key: data.key.to_string(),
+                    key_type: data.key_type.clone(),
+                    value: data.value.to_string(),
+                    value_type: data.value_type.clone(),
+                });
             transaction::WriteSetChange {
                 r#type: transaction::write_set_change::Type::WriteTableItem as i32,
                 change: Some(transaction::write_set_change::Change::WriteTableItem(
@@ -406,12 +412,7 @@ pub fn convert_write_set_change(change: &WriteSetChange) -> transaction::WriteSe
                         ),
                         handle: write_table_item.handle.to_string(),
                         key: write_table_item.key.to_string(),
-                        data: Some(transaction::WriteTableData {
-                            key: data.key.to_string(),
-                            key_type: data.key_type.clone(),
-                            value: data.value.to_string(),
-                            value_type: data.value_type.clone(),
-                        }),
+                        data,
                     },
                 )),
             }

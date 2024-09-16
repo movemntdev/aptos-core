@@ -23,6 +23,7 @@ use crate::{
     state_merkle_db::StateMerkleDb,
     state_restore::{StateSnapshotRestore, StateSnapshotRestoreMode, StateValueWriter},
     state_store::buffered_state::BufferedState,
+    state_store::reset_lock::ResetLock,
     utils::{
         iterators::PrefixedStateValueIterator,
         new_sharded_kv_schema_batch,
@@ -74,6 +75,7 @@ use rayon::prelude::*;
 use std::{collections::HashSet, ops::Deref, sync::Arc};
 
 pub(crate) mod buffered_state;
+pub(crate) mod reset_lock;
 mod state_merkle_batch_committer;
 mod state_snapshot_committer;
 
@@ -104,7 +106,7 @@ pub(crate) struct StateStore {
     // The `base` of buffered_state is the latest snapshot in state_merkle_db while `current`
     // is the latest state sparse merkle tree that is replayed from that snapshot until the latest
     // write set stored in ledger_db.
-    buffered_state: Mutex<BufferedState>,
+    pub(crate) buffered_state: Mutex<BufferedState>,
     buffered_state_target_items: usize,
     smt_ancestors: Mutex<SmtAncestors<StateValue>>,
     internal_indexer_db: Option<InternalIndexerDB>,
@@ -555,15 +557,17 @@ impl StateStore {
     }
 
     pub fn reset(&self) {
-        let (buffered_state, smt_ancestors) = Self::create_buffered_state_from_latest_snapshot(
+        let lock = self.reset_lock();
+        lock.reset();
+    }
+
+    pub fn reset_lock(&self) -> ResetLock<'_> {
+        ResetLock::new(
+            &self.buffered_state,
+            &self.smt_ancestors,
             &self.state_db,
             self.buffered_state_target_items,
-            false,
-            true,
         )
-        .expect("buffered state creation failed.");
-        *self.buffered_state.lock() = buffered_state;
-        *self.smt_ancestors.lock() = smt_ancestors;
     }
 
     pub fn buffered_state(&self) -> &Mutex<BufferedState> {
