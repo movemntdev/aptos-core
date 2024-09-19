@@ -284,7 +284,6 @@ module aptos_framework::atomic_bridge_initiator {
 
         let recipient = valid_eip55();
         let hash_lock = valid_hash_lock();
-        let time_lock = 1000;
         let amount = 1000;
 
         initiate_bridge_transfer(
@@ -307,7 +306,6 @@ module aptos_framework::atomic_bridge_initiator {
 
         let recipient = valid_eip55();
         let hash_lock = valid_hash_lock();
-        let time_lock = 1000;
         let amount = 1000;
 
         let account_balance = amount + 1;
@@ -354,7 +352,6 @@ module aptos_framework::atomic_bridge_initiator {
 
         let recipient = valid_eip55();
         let hash_lock = valid_hash_lock();
-        let time_lock = 1000;
         let amount = 1000;
         let account_balance = amount + 1;
 
@@ -392,7 +389,6 @@ module aptos_framework::atomic_bridge_initiator {
 
         let recipient = valid_eip55();
         let hash_lock = valid_hash_lock();
-        let time_lock = 1000;
         let amount = 1000;
         let account_balance = amount + 1;
 
@@ -497,7 +493,6 @@ module aptos_framework::atomic_bridge_initiator {
 
         let recipient = valid_eip55();
         let hash_lock = valid_hash_lock();
-        let time_lock = 1000;
         let amount = 1000;
 
         let account_balance = amount + 1;
@@ -1291,7 +1286,6 @@ module aptos_framework::atomic_bridge_counterparty {
         let initiator = valid_eip55();
         let bridge_transfer_id = valid_bridge_transfer_id();
         let hash_lock = valid_hash_lock();
-        let time_lock = 1;
         let recipient = @0xcafe;
         let amount = 1;
 
@@ -1326,7 +1320,6 @@ module aptos_framework::atomic_bridge_counterparty {
         let initiator = valid_eip55();
         let bridge_transfer_id = valid_bridge_transfer_id();
         let hash_lock = valid_hash_lock();
-        let time_lock = 1;
         let recipient = @0xcafe;
         let amount = 1;
 
