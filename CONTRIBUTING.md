@@ -11,7 +11,7 @@ Our goal is to make contributing to Aptos Core easy and transparent. See [Aptos 
 
 To contribute to the Aptos Core implementation, first start with the proper development copy.
 You may want to use the GitHub interface to fork [aptos-core](https://github.com/aptos-labs/aptos-core) and check out your fork.
-For development environment setup and first build, see [Building Aptos From Source](https://aptos.dev/guides/building-from-source)
+For development environment setup and first build, see [Building Aptos From Source](https://aptos.dev/guides/building-from-source).
 
 ## Our Development Process
 
@@ -24,7 +24,7 @@ Also, please ensure you follow our [Secure Coding Guidelines](./RUST_SECURE_CODI
 
 ### Documentation
 
-Aptos Core's developer website is also open source (the code can be found in this [repository](https://github.com/aptos-labs/developer-docs).  It is built using [Docusaurus](https://docusaurus.io/):
+Aptos Core's developer website is also open source (the code can be found in this [repository](https://github.com/aptos-labs/developer-docs). It is built using [Docusaurus](https://docusaurus.io/).
 
 If you know Markdown, you can already contribute!
 
