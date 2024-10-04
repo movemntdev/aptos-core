@@ -118,9 +118,8 @@ fn atomic_bridge_feature(harness: &mut MoveHarness) {
 
 #[test]
 // The relayer has received a message from the source chain of a successful lock
-// `lock_bridge_transfer_assets` is called with a timelock
-// Wait for the timelock
-// `complete_bridge_transfer` to mint the tokens on the destination chain
+// Bridge operator calls `lock_bridge_transfer_assets` on the destination chain 
+// `complete_bridge_transfer` can be called by anyone to mint the tokens to the recipient on the destination chain
 fn test_counterparty() {
     let mut harness = MoveHarness::new();
 
@@ -130,9 +129,9 @@ fn test_counterparty() {
     let bridge_operator = harness.aptos_framework_account();
     let initiator = b"32Be343B94f860124dC4fEe278FDCBD38C102D88".to_vec();
     let pre_image = b"my secret";
-    let time_lock = 1;
     let amount = 42;
     let recipient = harness.new_account_at(AccountAddress::from_hex_literal("0xCAFE").unwrap());
+    let completer = harness.new_account_at(AccountAddress::from_hex_literal("0xDADE").unwrap());
     let bridge_transfer_id = keccak256(b"bridge_transfer_id");
     let hash_lock = keccak256(pre_image);
 
@@ -149,9 +148,7 @@ fn test_counterparty() {
                                     MoveValue::U64(amount).simple_serialize().unwrap(),
                                ],));
 
-    harness.fast_forward(time_lock + 1);
-
-    assert_success!(harness.run_entry_function(&bridge_operator,
+    assert_success!(harness.run_entry_function(&completer,
                                str::parse("0x1::atomic_bridge_counterparty::complete_bridge_transfer").unwrap(),
                                vec![],
                                vec![
@@ -161,6 +158,53 @@ fn test_counterparty() {
     let new_balance = harness.read_aptos_balance(recipient.address());
     assert_eq!(original_balance + amount, new_balance);
 }
+
+#[test]
+// The relayer has received a message from the source chain of a successful lock
+// Bridge operator calls `lock_bridge_transfer_assets` on the destination chain 
+// `abort_bridge_transfer` can be called by anyone after th 
+fn test_abort() {
+    let mut harness = MoveHarness::new();
+
+    atomic_bridge_feature(&mut harness);
+    run_mint_burn_caps(&mut harness);
+
+    let bridge_operator = harness.aptos_framework_account();
+    let initiator = b"32Be343B94f860124dC4fEe278FDCBD38C102D88".to_vec();
+    let pre_image = b"my secret";
+    let amount = 42;
+    let recipient = harness.new_account_at(AccountAddress::from_hex_literal("0xCAFE").unwrap());
+    let bridge_transfer_id = keccak256(b"bridge_transfer_id");
+    let hash_lock = keccak256(pre_image);
+
+    assert_success!(harness.run_entry_function(&bridge_operator,
+                               str::parse("0x1::atomic_bridge_counterparty::lock_bridge_transfer_assets").unwrap(),
+                               vec![],
+                               vec![
+                                   MoveValue::vector_u8(initiator).simple_serialize().unwrap(),
+                                   MoveValue::vector_u8(bridge_transfer_id.clone()).simple_serialize().unwrap(),
+                                   MoveValue::vector_u8(hash_lock).simple_serialize().unwrap(),
+                                    MoveValue::Address(*recipient.address()).simple_serialize().unwrap(),
+                                    MoveValue::U64(amount).simple_serialize().unwrap(),
+                               ],));
+
+    let counterparty_timelock_duration = harness.execute_view_function(
+        str::parse("0x1::atomic_bridge_configuration::counterparty_timelock_duration").unwrap(),
+        vec![],
+        vec![]);
+    let bcs = counterparty_timelock_duration.values.unwrap().pop().unwrap();
+    let counterparty_timelock_duration = bcs::from_bytes::<u64>(&bcs).unwrap();
+    harness.fast_forward(counterparty_timelock_duration + 1); 
+    harness.executor.new_block();
+
+    assert_success!(harness.run_entry_function(&bridge_operator,
+                               str::parse("0x1::atomic_bridge_counterparty::abort_bridge_transfer").unwrap(),
+                               vec![],
+                               vec![
+                                   MoveValue::vector_u8(bridge_transfer_id.clone()).simple_serialize().unwrap(),
+                               ],));
+    }
+
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
 struct BridgeTransferInitiatedEvent {
@@ -174,14 +218,13 @@ struct BridgeTransferInitiatedEvent {
 
 #[test]
 // A bridge is initiated with said amount to recipient on the destination chain
-// A relayer confirms that the amount was minted on the destination chain
+// A relayer confirms the BridgeTransferInitiated event
+// Anyone with the bridge transfer ID and pre-image can call `complete_bridge_transfer` on the source chain 
 fn test_initiator() {
     let mut harness = MoveHarness::new();
 
     atomic_bridge_feature(&mut harness);
     run_mint_burn_caps(&mut harness);
-
-    let bridge_operator = harness.aptos_framework_account();
 
     let recipient = b"32Be343B94f860124dC4fEe278FDCBD38C102D88".to_vec();
     let initiator = harness.new_account_at(AccountAddress::from_hex_literal("0xCAFE").unwrap());
@@ -209,12 +252,63 @@ fn test_initiator() {
     let bridge_transfer_initiated_event = bcs::from_bytes::<BridgeTransferInitiatedEvent>(bridge_transfer_initiated_event.event_data()).unwrap();
     let bridge_transfer_id = bridge_transfer_initiated_event.bridge_transfer_id;
 
-    assert_success!(harness.run_entry_function(&bridge_operator,
+    assert_success!(harness.run_entry_function(&initiator,
                                str::parse("0x1::atomic_bridge_initiator::complete_bridge_transfer").unwrap(),
                                vec![],
                                vec![
                                    MoveValue::vector_u8(bridge_transfer_id.clone()).simple_serialize().unwrap(),
                                    MoveValue::vector_u8(pre_image.to_vec()).simple_serialize().unwrap(),
+                               ],));
+}
+
+#[test]
+// A bridge is initiated with said amount to recipient on the destination chain
+// A relayer confirms the BridgeTransferInitiated event
+// Anyone can call `refund_bridge_transfer` on the source chain once timelock has passed
+fn test_refund() {
+    let mut harness = MoveHarness::new();
+
+    atomic_bridge_feature(&mut harness);
+    run_mint_burn_caps(&mut harness);
+    let recipient = b"32Be343B94f860124dC4fEe278FDCBD38C102D88".to_vec();
+    let initiator = harness.new_account_at(AccountAddress::from_hex_literal("0xCAFE").unwrap());
+    let refunder = harness.new_account_at(AccountAddress::from_hex_literal("0xFACE").unwrap());
+    let pre_image = b"my secret";
+    let amount = 1_000_000; // 0.1
+    let hash_lock = keccak256(pre_image);
+    let original_balance = harness.read_aptos_balance(initiator.address());
+    let gas_used = harness.evaluate_entry_function_gas(&initiator,
+                                str::parse("0x1::atomic_bridge_initiator::initiate_bridge_transfer").unwrap(),
+                                vec![],
+                                vec![
+                                    MoveValue::vector_u8(recipient.clone()).simple_serialize().unwrap(),
+                                    MoveValue::vector_u8(hash_lock.clone()).simple_serialize().unwrap(),
+                                    MoveValue::U64(amount).simple_serialize().unwrap(),
+                                ],);
+
+    let gas_used = gas_used * harness.default_gas_unit_price;
+    let new_balance = harness.read_aptos_balance(initiator.address());
+    assert_eq!(original_balance - amount - gas_used, new_balance);
+
+    let events = harness.get_events();
+    let bridge_transfer_initiated_event_tag = TypeTag::from_str("0x1::atomic_bridge_initiator::BridgeTransferInitiatedEvent").unwrap();
+    let bridge_transfer_initiated_event = events.iter().find(|element| element.type_tag() == &bridge_transfer_initiated_event_tag).unwrap().v2().unwrap();
+    let bridge_transfer_initiated_event = bcs::from_bytes::<BridgeTransferInitiatedEvent>(bridge_transfer_initiated_event.event_data()).unwrap();
+    let bridge_transfer_id = bridge_transfer_initiated_event.bridge_transfer_id;
+
+    let initiator_timelock_duration = harness.execute_view_function(
+        str::parse("0x1::atomic_bridge_configuration::initiator_timelock_duration").unwrap(),
+        vec![],
+        vec![]);
+    let bcs = initiator_timelock_duration.values.unwrap().pop().unwrap();
+    let initiator_timelock_duration = bcs::from_bytes::<u64>(&bcs).unwrap();
+    harness.fast_forward(initiator_timelock_duration + 1); 
+    harness.executor.new_block();
+    assert_success!(harness.run_entry_function(&refunder,
+                               str::parse("0x1::atomic_bridge_initiator::refund_bridge_transfer").unwrap(),
+                               vec![],
+                               vec![
+                                   MoveValue::vector_u8(bridge_transfer_id.clone()).simple_serialize().unwrap(),
                                ],));
 }
 

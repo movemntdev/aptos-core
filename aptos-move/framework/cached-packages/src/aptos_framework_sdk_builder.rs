@@ -289,7 +289,7 @@ pub enum EntryFunctionCall {
         bridge_transfer_id: Vec<u8>,
     },
 
-    /// Bridge operator can complete the transfer
+    /// Anyone with the bridge transfer ID and pre-image can complete the transfer on the source chain
     AtomicBridgeInitiatorCompleteBridgeTransfer {
         bridge_transfer_id: Vec<u8>,
         pre_image: Vec<u8>,
@@ -2397,7 +2397,7 @@ pub fn atomic_bridge_counterparty_abort_bridge_transfer(
     ))
 }
 
-/// Bridge operator can complete the transfer
+/// Anyone with the bridge transfer ID and pre-image can complete the transfer on the source chain
 pub fn atomic_bridge_initiator_complete_bridge_transfer(
     bridge_transfer_id: Vec<u8>,
     pre_image: Vec<u8>,

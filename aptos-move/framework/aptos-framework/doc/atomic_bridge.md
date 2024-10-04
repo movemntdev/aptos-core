@@ -2785,10 +2785,10 @@ The amount is burnt from the initiator
 
 ## Function `complete_bridge_transfer`
 
-Bridge operator can complete the transfer
+Anyone with the bridge transfer ID and pre-image can complete the transfer on the source chain
 
 
-<pre><code><b>public</b> entry <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_initiator_complete_bridge_transfer">complete_bridge_transfer</a>(caller: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, bridge_transfer_id: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, pre_image: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
+<pre><code><b>public</b> entry <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_initiator_complete_bridge_transfer">complete_bridge_transfer</a>(_caller: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, bridge_transfer_id: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, pre_image: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
 </code></pre>
 
 
@@ -2798,11 +2798,10 @@ Bridge operator can complete the transfer
 
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_initiator_complete_bridge_transfer">complete_bridge_transfer</a>(
-    caller: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
+    _caller: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
     bridge_transfer_id: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
     pre_image: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
 ) {
-    assert_is_caller_operator(caller);
     <b>let</b> (_, _) = <a href="atomic_bridge.md#0x1_atomic_bridge_store_complete_transfer">atomic_bridge_store::complete_transfer</a>&lt;<b>address</b>, EthereumAddress&gt;(bridge_transfer_id, create_hashlock(pre_image));
 
     <a href="event.md#0x1_event_emit">event::emit</a>(
