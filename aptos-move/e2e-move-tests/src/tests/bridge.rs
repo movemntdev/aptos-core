@@ -162,7 +162,7 @@ fn test_counterparty() {
 #[test]
 // The relayer has received a message from the source chain of a successful lock
 // Bridge operator calls `lock_bridge_transfer_assets` on the destination chain 
-// `abort_bridge_transfer` can be called by anyone after th 
+// After timelock expires, bridge operator calls `abort_bridge_transfer` 
 fn test_abort() {
     let mut harness = MoveHarness::new();
 
