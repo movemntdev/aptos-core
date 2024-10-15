@@ -77,10 +77,6 @@ module aptos_framework::ethereum {
         output
     }
 
-    public fun get_inner(eth_address: &EthereumAddress): vector<u8> {
-        eth_address.inner
-    }
-
     /// Checks if an Ethereum address conforms to the EIP-55 checksum standard.
     ///
     /// @param ethereum_address A reference to a 40-character vector of an Ethereum address in hexadecimal format.
