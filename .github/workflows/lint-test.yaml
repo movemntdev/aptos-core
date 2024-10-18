@@ -1,10 +1,14 @@
 name: "Lint+Test"
 on:
-  pull_request:
-    types: [labeled, opened, synchronize, reopened, auto_merge_enabled]
-  push:
+#  pull_request:
+#    types: [labeled, opened, synchronize, reopened, auto_merge_enabled]
+#  push:
+#    branches:
+#      - movement
+  pull_request_target:
     branches:
       - movement
+    types: [ opened, synchronize, reopened ]
   workflow_dispatch:
 
 env:
