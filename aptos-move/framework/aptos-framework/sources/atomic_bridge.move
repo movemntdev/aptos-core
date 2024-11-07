@@ -526,6 +526,7 @@ module aptos_framework::atomic_bridge_store {
     use aptos_std::aptos_hash::keccak256;
     use aptos_std::smart_table;
     use aptos_std::smart_table::SmartTable;
+    #[test_only]
     use aptos_framework::atomic_bridge_configuration;
     use aptos_framework::ethereum::EthereumAddress;
     use aptos_framework::system_addresses;
