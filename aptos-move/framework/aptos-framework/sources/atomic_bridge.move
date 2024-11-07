@@ -828,24 +828,24 @@ module aptos_framework::atomic_bridge_store {
         keccak256(combined_bytes)
     }
 
+    #[view]
     /// Gets initiator bridge transfer details given a bridge transfer ID
     ///
     /// @param bridge_transfer_id A 32-byte vector of unsigned 8-bit integers.
     /// @return A `BridgeTransferDetails` struct.
     /// @abort If there is no transfer in the atomic bridge store.
-    #[view]
     public fun get_bridge_transfer_details_initiator(
         bridge_transfer_id: vector<u8>
     ): BridgeTransferDetails<address, EthereumAddress> acquires SmartTableWrapper {
         get_bridge_transfer_details(bridge_transfer_id)
     }
 
+    #[view]
     /// Gets counterparty bridge transfer details given a bridge transfer ID
     ///
     /// @param bridge_transfer_id A 32-byte vector of unsigned 8-bit integers.
     /// @return A `BridgeTransferDetails` struct.
     /// @abort If there is no transfer in the atomic bridge store.
-    #[view]
     public fun get_bridge_transfer_details_counterparty(
         bridge_transfer_id: vector<u8>
     ): BridgeTransferDetails<EthereumAddress, address> acquires SmartTableWrapper {
