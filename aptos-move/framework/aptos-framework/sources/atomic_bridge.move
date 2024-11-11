@@ -2,6 +2,12 @@ module aptos_framework::ethereum {
     use std::vector;
     use aptos_std::aptos_hash::keccak256;
 
+    /// Error codes
+    const ENOT_ETH_ADDRESS_LENGTH : u64 = 0x1;
+    
+    /// Length of an Ethereum address in bytes (u8)
+    const ETH_ADDRESS_LENGTH : u64 = 40;
+
     /// Constants for ASCII character codes
     const ASCII_A: u8 = 0x41;
     const ASCII_Z: u8 = 0x5A;
@@ -12,6 +18,13 @@ module aptos_framework::ethereum {
     /// Provides structured handling, storage, and validation of Ethereum addresses.
     struct EthereumAddress has store, copy, drop {
         inner: vector<u8>,
+    }
+
+    /// Length of an Ethereum Address
+    /// @note Unfortunately constants are not visible for friends and
+    /// This function makes the length available to friend modules,
+    public fun ethereum_address_length(): u64 {
+        ETH_ADDRESS_LENGTH
     }
 
     /// Validates an Ethereum address against EIP-55 checksum rules and returns a new `EthereumAddress`.
@@ -56,7 +69,7 @@ module aptos_framework::ethereum {
     /// @abort If the input address does not have exactly 40 characters.
     /// @note Assumes input address is valid and in lowercase hexadecimal format.
     public fun to_eip55_checksumed_address(ethereum_address: &vector<u8>): vector<u8> {
-        assert!(vector::length(ethereum_address) == 40, 0);
+        assert!(vector::length(ethereum_address) == ETH_ADDRESS_LENGTH, ENOT_ETH_ADDRESS_LENGTH);
         let lowercase = to_lowercase(ethereum_address);
         let hash = keccak256(lowercase);
         let output = vector::empty<u8>();
