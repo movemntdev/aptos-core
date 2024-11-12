@@ -20,6 +20,12 @@ spec aptos_framework::ethereum {
         ensures lowercase_congruent(result, input);
     }
 
+    spec to_lowercase_ascii_letter(l: u8): u8 {
+        aborts_if false;
+        ensures same_ascii_letters(l, to_lowercase_ascii_letter(l));
+    }
+
+
     spec to_eip55_checksumed_address(ethereum_address: &vector<u8>): vector<u8> {
         aborts_if len(ethereum_address) != ETH_ADDRESS_LENGTH;
     }

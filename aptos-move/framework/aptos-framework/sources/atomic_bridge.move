@@ -46,6 +46,13 @@ module aptos_framework::ethereum {
         EthereumAddress { inner: ethereum_address }
     }
 
+    /// Converts a letter to its lowercase equivalent if it is an ASCII letter.
+    fun to_lowercase_ascii_letter(l: u8): u8 {
+        if (l >= ASCII_A && l <= ASCII_Z) {
+            l + UPPER_TO_LOWER
+        } else { l }
+    }
+
     /// Converts uppercase ASCII characters in a vector to their lowercase equivalents.
     ///
     /// @param input A reference to a vector of ASCII characters.
