@@ -1028,6 +1028,7 @@ module aptos_framework::atomic_bridge_configuration {
     /// Initializes the bridge configuration with Aptos framework as the bridge operator.
     ///
     /// @param aptos_framework The signer representing the Aptos framework.
+    /// @param refunder The address enabled to refund bridge attempts
     public fun initialize(aptos_framework: &signer, refunder: address) {
         system_addresses::assert_aptos_framework(aptos_framework);
         let bridge_config = BridgeConfig {
