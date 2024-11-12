@@ -222,11 +222,12 @@ module aptos_framework::atomic_bridge_initiator {
         );
     }
 
-    /// Anyone can refund the transfer on the source chain once time lock has passed
+    /// Refund the transfer on the source chain once time lock has passed, permissioned to refunder role.
     public entry fun refund_bridge_transfer(
-        _caller: &signer,
+        caller: &signer,
         bridge_transfer_id: vector<u8>,
     ) {
+        assert_is_caller_refunder(caller);
         let (receiver, amount) = atomic_bridge_store::cancel_transfer<address, EthereumAddress>(bridge_transfer_id);
         atomic_bridge::mint(receiver, amount);
 
@@ -796,8 +797,9 @@ module aptos_framework::atomic_bridge_store {
     /// @param bridge_transfer_id The ID of the bridge transfer to cancel.
     /// @return A tuple containing the initiator of the transfer and the amount to be refunded.
     /// @abort If the bridge transfer details are not found or if the cancellation conditions in `cancel_details` fail.
-    public(friend) fun cancel_transfer<Initiator: store + copy, Recipient: store>(bridge_transfer_id: vector<u8>) : (Initiator, u64) acquires SmartTableWrapper {
+    public(friend) fun cancel_transfer<Initiator: store + copy, Recipient: store>(caller: &signer, bridge_transfer_id: vector<u8>) : (Initiator, u64) acquires SmartTableWrapper {
         assert!(features::abort_atomic_bridge_enabled(), EATOMIC_BRIDGE_NOT_ENABLED);
+        assert_is_caller_refunder(caller);
 
         let table = borrow_global_mut<SmartTableWrapper<vector<u8>, BridgeTransferDetails<Initiator, Recipient>>>(@aptos_framework);
 
@@ -989,6 +991,9 @@ module aptos_framework::atomic_bridge_configuration {
     /// Error code for invalid bridge operator
     const EINVALID_BRIDGE_OPERATOR: u64 = 0x1;
 
+    /// Error code for invalid bridge operator
+    const EINVALID_REFUNDER: u64 = 0x2;
+
     /// Counterparty time lock duration is 24 hours in seconds
     const COUNTERPARTY_TIME_LOCK_DUARTION: u64 = 24 * 60 * 60;
     /// Initiator time lock duration is 48 hours in seconds
@@ -996,6 +1001,7 @@ module aptos_framework::atomic_bridge_configuration {
 
     struct BridgeConfig has key {
         bridge_operator: address,
+        refunder: address,
         initiator_time_lock: u64,
         counterparty_time_lock: u64,
     }
@@ -1022,10 +1028,11 @@ module aptos_framework::atomic_bridge_configuration {
     /// Initializes the bridge configuration with Aptos framework as the bridge operator.
     ///
     /// @param aptos_framework The signer representing the Aptos framework.
-    public fun initialize(aptos_framework: &signer) {
+    public fun initialize(aptos_framework: &signer, refunder: address) {
         system_addresses::assert_aptos_framework(aptos_framework);
         let bridge_config = BridgeConfig {
             bridge_operator: signer::address_of(aptos_framework),
+            refunder,
             initiator_time_lock: INITIATOR_TIME_LOCK_DUARTION,
             counterparty_time_lock: COUNTERPARTY_TIME_LOCK_DUARTION,
         };
@@ -1049,6 +1056,27 @@ module aptos_framework::atomic_bridge_configuration {
             BridgeConfigOperatorUpdated {
                 old_operator,
                 new_operator,
+            },
+        );
+    }
+
+     /// Updates the refunder, requiring governance validation.
+    ///
+    /// @param aptos_framework The signer representing the Aptos framework.
+    /// @param new_refunder The new address to be set as the bridge operator.
+    /// @abort If the current operator is the same as the new operator.
+    public fun update_refunder(aptos_framework: &signer, new_refunder: address) acquires BridgeConfig {
+        system_addresses::assert_aptos_framework(aptos_framework);
+        let bridge_config = borrow_global_mut<BridgeConfig>(@aptos_framework);
+        let old_refunder = bridge_config.refunder;
+        assert!(old_operator != new_refunder, EINVALID_BRIDGE_OPERATOR);
+
+        bridge_config.refunder = new_refunder;
+
+        event::emit(
+            BridgeConfigOperatorUpdated {
+                old_refunder,
+                new_refunder,
             },
         );
     }
@@ -1099,6 +1127,14 @@ module aptos_framework::atomic_bridge_configuration {
     /// @abort If the caller is not the current bridge operator.
     public(friend) fun assert_is_caller_operator(caller: &signer) acquires BridgeConfig {
         assert!(borrow_global<BridgeConfig>(@aptos_framework).bridge_operator == signer::address_of(caller), EINVALID_BRIDGE_OPERATOR);
+    }
+
+    /// Asserts that the caller is the current refunder.
+    ///
+    /// @param caller The signer whose authority is being checked.
+    /// @abort If the caller is not the current refunder.
+    public(friend) fun assert_is_caller_refunder(caller: &signer) acquires BridgeConfig {
+        assert!(borrow_global<BridgeConfig>(@aptos_framework).refunder == signer::address_of(caller), EINVALID_REFUNDER);
     }
 
     #[test(aptos_framework = @aptos_framework)]

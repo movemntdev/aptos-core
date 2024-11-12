@@ -10,6 +10,7 @@
 -  [Function `ethereum_address`](#0x1_ethereum_ethereum_address)
 -  [Function `to_lowercase`](#0x1_ethereum_to_lowercase)
 -  [Function `to_eip55_checksumed_address`](#0x1_ethereum_to_eip55_checksumed_address)
+-  [Function `get_inner`](#0x1_ethereum_get_inner)
 -  [Function `assert_eip55`](#0x1_ethereum_assert_eip55)
 
 
@@ -205,6 +206,30 @@ Converts an Ethereum address to EIP-55 checksummed format.
 
 </details>
 
+<a id="0x1_ethereum_get_inner"></a>
+
+## Function `get_inner`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_ethereum_get_inner">get_inner</a>(eth_address: &<a href="atomic_bridge.md#0x1_ethereum_EthereumAddress">ethereum::EthereumAddress</a>): <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_ethereum_get_inner">get_inner</a>(eth_address: &<a href="atomic_bridge.md#0x1_ethereum_EthereumAddress">EthereumAddress</a>): <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt; {
+    eth_address.inner
+}
+</code></pre>
+
+
+
+</details>
+
 <a id="0x1_ethereum_assert_eip55"></a>
 
 ## Function `assert_eip55`
@@ -271,6 +296,9 @@ Checks if an Ethereum address conforms to the EIP-55 checksum standard.
 -  [Function `cancel_details`](#0x1_atomic_bridge_store_cancel_details)
 -  [Function `cancel_transfer`](#0x1_atomic_bridge_store_cancel_transfer)
 -  [Function `bridge_transfer_id`](#0x1_atomic_bridge_store_bridge_transfer_id)
+-  [Function `get_bridge_transfer_details_initiator`](#0x1_atomic_bridge_store_get_bridge_transfer_details_initiator)
+-  [Function `get_bridge_transfer_details_counterparty`](#0x1_atomic_bridge_store_get_bridge_transfer_details_counterparty)
+-  [Function `get_bridge_transfer_details`](#0x1_atomic_bridge_store_get_bridge_transfer_details)
 -  [Specification](#@Specification_1)
     -  [Function `initialize`](#@Specification_1_initialize)
     -  [Function `create_time_lock`](#@Specification_1_create_time_lock)
@@ -1214,6 +1242,92 @@ Generates a unique bridge transfer ID based on transfer details and nonce.
 
 </details>
 
+<a id="0x1_atomic_bridge_store_get_bridge_transfer_details_initiator"></a>
+
+## Function `get_bridge_transfer_details_initiator`
+
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_store_get_bridge_transfer_details_initiator">get_bridge_transfer_details_initiator</a>(bridge_transfer_id: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="atomic_bridge.md#0x1_atomic_bridge_store_BridgeTransferDetails">atomic_bridge_store::BridgeTransferDetails</a>&lt;<b>address</b>, <a href="atomic_bridge.md#0x1_ethereum_EthereumAddress">ethereum::EthereumAddress</a>&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_store_get_bridge_transfer_details_initiator">get_bridge_transfer_details_initiator</a>(
+    bridge_transfer_id: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+): <a href="atomic_bridge.md#0x1_atomic_bridge_store_BridgeTransferDetails">BridgeTransferDetails</a>&lt;<b>address</b>, EthereumAddress&gt; <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_store_SmartTableWrapper">SmartTableWrapper</a> {
+    <a href="atomic_bridge.md#0x1_atomic_bridge_store_get_bridge_transfer_details">get_bridge_transfer_details</a>(bridge_transfer_id)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_atomic_bridge_store_get_bridge_transfer_details_counterparty"></a>
+
+## Function `get_bridge_transfer_details_counterparty`
+
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_store_get_bridge_transfer_details_counterparty">get_bridge_transfer_details_counterparty</a>(bridge_transfer_id: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="atomic_bridge.md#0x1_atomic_bridge_store_BridgeTransferDetails">atomic_bridge_store::BridgeTransferDetails</a>&lt;<a href="atomic_bridge.md#0x1_ethereum_EthereumAddress">ethereum::EthereumAddress</a>, <b>address</b>&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_store_get_bridge_transfer_details_counterparty">get_bridge_transfer_details_counterparty</a>(
+    bridge_transfer_id: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+): <a href="atomic_bridge.md#0x1_atomic_bridge_store_BridgeTransferDetails">BridgeTransferDetails</a>&lt;EthereumAddress, <b>address</b>&gt; <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_store_SmartTableWrapper">SmartTableWrapper</a> {
+    <a href="atomic_bridge.md#0x1_atomic_bridge_store_get_bridge_transfer_details">get_bridge_transfer_details</a>(bridge_transfer_id)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_atomic_bridge_store_get_bridge_transfer_details"></a>
+
+## Function `get_bridge_transfer_details`
+
+
+
+<pre><code><b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_store_get_bridge_transfer_details">get_bridge_transfer_details</a>&lt;Initiator: <b>copy</b>, store, Recipient: <b>copy</b>, store&gt;(bridge_transfer_id: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="atomic_bridge.md#0x1_atomic_bridge_store_BridgeTransferDetails">atomic_bridge_store::BridgeTransferDetails</a>&lt;Initiator, Recipient&gt;
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_store_get_bridge_transfer_details">get_bridge_transfer_details</a>&lt;Initiator: store + <b>copy</b>, Recipient: store + <b>copy</b>&gt;(bridge_transfer_id: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+): <a href="atomic_bridge.md#0x1_atomic_bridge_store_BridgeTransferDetails">BridgeTransferDetails</a>&lt;Initiator, Recipient&gt; <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_store_SmartTableWrapper">SmartTableWrapper</a> {
+    <b>let</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table">table</a> = <b>borrow_global</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_store_SmartTableWrapper">SmartTableWrapper</a>&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, <a href="atomic_bridge.md#0x1_atomic_bridge_store_BridgeTransferDetails">BridgeTransferDetails</a>&lt;Initiator, Recipient&gt;&gt;&gt;(@aptos_framework);
+
+    <b>let</b> details_ref = <a href="../../aptos-stdlib/doc/smart_table.md#0x1_smart_table_borrow">smart_table::borrow</a>(
+        &<a href="../../aptos-stdlib/doc/table.md#0x1_table">table</a>.inner,
+        bridge_transfer_id
+    );
+
+    *details_ref
+}
+</code></pre>
+
+
+
+</details>
+
 <a id="@Specification_1"></a>
 
 ## Specification
@@ -1313,6 +1427,7 @@ If the sum of <code><a href="atomic_bridge.md#0x1_atomic_bridge_store_now">now</
     <a href="../../aptos-stdlib/doc/table.md#0x1_table">table</a>: SmartTable&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, T&gt;;
     <b>aborts_if</b> len(bridge_transfer_id) != 32;
     <b>aborts_if</b> <a href="../../aptos-stdlib/doc/smart_table.md#0x1_smart_table_spec_contains">smart_table::spec_contains</a>(<a href="../../aptos-stdlib/doc/table.md#0x1_table">table</a>, bridge_transfer_id);
+    <b>aborts_if</b> !<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_spec_is_enabled">features::spec_is_enabled</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_ATOMIC_BRIDGE">features::ATOMIC_BRIDGE</a>);
 }
 </code></pre>
 
@@ -1447,6 +1562,7 @@ If the sum of <code><a href="atomic_bridge.md#0x1_atomic_bridge_store_now">now</
 
 
 <pre><code><b>let</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table">table</a> = <b>global</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_store_SmartTableWrapper">SmartTableWrapper</a>&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, <a href="atomic_bridge.md#0x1_atomic_bridge_store_BridgeTransferDetails">BridgeTransferDetails</a>&lt;Initiator, Recipient&gt;&gt;&gt;(@aptos_framework).inner;
+<b>aborts_if</b> !<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_spec_is_enabled">features::spec_is_enabled</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_ATOMIC_BRIDGE">features::ATOMIC_BRIDGE</a>);
 <b>aborts_if</b> !<b>exists</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_store_SmartTableWrapper">SmartTableWrapper</a>&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, <a href="atomic_bridge.md#0x1_atomic_bridge_store_BridgeTransferDetails">BridgeTransferDetails</a>&lt;Initiator, Recipient&gt;&gt;&gt;(@aptos_framework);
 <b>aborts_if</b> !<a href="../../aptos-stdlib/doc/smart_table.md#0x1_smart_table_spec_contains">smart_table::spec_contains</a>(<a href="../../aptos-stdlib/doc/table.md#0x1_table">table</a>, bridge_transfer_id);
 <b>let</b> details = <a href="../../aptos-stdlib/doc/smart_table.md#0x1_smart_table_spec_get">smart_table::spec_get</a>(<a href="../../aptos-stdlib/doc/table.md#0x1_table">table</a>, bridge_transfer_id);
@@ -2462,8 +2578,7 @@ Locks assets for a bridge transfer by the initiator.
 ) {
     <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_assert_is_caller_operator">atomic_bridge_configuration::assert_is_caller_operator</a>(caller);
     <b>let</b> ethereum_address = <a href="atomic_bridge.md#0x1_ethereum_ethereum_address">ethereum::ethereum_address</a>(initiator);
-    <b>let</b> time_lock = <a href="atomic_bridge.md#0x1_atomic_bridge_store_create_time_lock">atomic_bridge_store::create_time_lock</a>(
-        <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_counterparty_timelock_duration">atomic_bridge_configuration::counterparty_timelock_duration</a>());
+    <b>let</b> time_lock = <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_counterparty_timelock_duration">atomic_bridge_configuration::counterparty_timelock_duration</a>();
     <b>let</b> details = <a href="atomic_bridge.md#0x1_atomic_bridge_store_create_details">atomic_bridge_store::create_details</a>(
         ethereum_address,
         recipient,
@@ -2749,8 +2864,7 @@ The amount is burnt from the initiator
 ) {
     <b>let</b> ethereum_address = <a href="atomic_bridge.md#0x1_ethereum_ethereum_address">ethereum::ethereum_address</a>(recipient);
     <b>let</b> initiator_address = <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(initiator);
-    <b>let</b> time_lock = <a href="atomic_bridge.md#0x1_atomic_bridge_store_create_time_lock">atomic_bridge_store::create_time_lock</a>(
-        <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_initiator_timelock_duration">atomic_bridge_configuration::initiator_timelock_duration</a>());
+    <b>let</b> time_lock = <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_initiator_timelock_duration">atomic_bridge_configuration::initiator_timelock_duration</a>();
 
     <b>let</b> details =
         <a href="atomic_bridge.md#0x1_atomic_bridge_store_create_details">atomic_bridge_store::create_details</a>(
