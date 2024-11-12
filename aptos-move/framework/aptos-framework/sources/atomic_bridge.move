@@ -1,3 +1,7 @@
+/// Provides EIP-55 for Ethereum addresses
+///
+/// [EIP-55](https://eips.ethereum.org/EIPS/eip-55) increases the confidence that
+/// an address is not random.
 module aptos_framework::ethereum {
     use std::vector;
     use aptos_std::aptos_hash::keccak256;
