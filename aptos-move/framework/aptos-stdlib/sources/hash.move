@@ -34,6 +34,10 @@ module aptos_std::aptos_hash {
     /// Returns the Keccak-256 hash of `bytes`.
     native public fun keccak256(bytes: vector<u8>): vector<u8>;
 
+    spec keccak256(bytes: vector<u8>): vector<u8> {
+        ensures len(result) == 64;
+    }
+
     /// Returns the SHA2-512 hash of `bytes`.
     public fun sha2_512(bytes: vector<u8>): vector<u8> {
         if(!features::sha_512_and_ripemd_160_enabled()) {
