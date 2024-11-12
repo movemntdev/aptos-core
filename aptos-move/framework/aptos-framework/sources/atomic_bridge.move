@@ -59,13 +59,23 @@ module aptos_framework::ethereum {
     /// @return A new vector with lowercase equivalents of the input characters.
     /// @note Only affects ASCII letters; non-alphabetic characters are unchanged.
     public fun to_lowercase(input: &vector<u8>): vector<u8> {
+        let i = 0;
         let lowercase_bytes = vector::empty();
-        vector::enumerate_ref(input, |_i, element| {
-            let lower_byte = if (*element >= ASCII_A && *element <= ASCII_Z) {
-                *element + 32
-            } else {
-                *element
+        while ({
+            spec {
+                invariant len(lowercase_bytes) == i;
+                invariant i <= len(input);
+                invariant forall k: u64 where k < i:
+                    !is_uppercase_ascii_letter(input[k]) ==>
+                        lowercase_bytes[k] == input[k];
+                invariant forall k: u64 where k < i:
+                    same_ascii_letters(lowercase_bytes[k], input[k]);
             };
+            i < vector::length(input)
+        }) {
+            let element = *vector::borrow(input, i);
+            let lower_byte = to_lowercase_ascii_letter(element);
+            i = i + 1;
             vector::push_back<u8>(&mut lowercase_bytes, lower_byte);
         });
         lowercase_bytes
