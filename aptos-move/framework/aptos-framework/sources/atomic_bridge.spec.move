@@ -20,9 +20,12 @@ spec aptos_framework::ethereum {
         ensures lowercase_congruent(result, input);
     }
 
+    /// Expected properties:
+    /// 1. never aborts
+    /// 2. preserves length and ascii characters
     spec to_lowercase_ascii_letter(l: u8): u8 {
         aborts_if false;
-        ensures same_ascii_letters(l, to_lowercase_ascii_letter(l));
+        ensures same_ascii_letters(l, result);
     }
 
 
