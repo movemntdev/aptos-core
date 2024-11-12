@@ -79,6 +79,7 @@ module aptos_framework::genesis {
         rewards_rate: u64,
         rewards_rate_denominator: u64,
         voting_power_increase_limit: u64,
+        refunder: address
     ) {
         // Initialize the aptos framework account. This is the account where system resources and modules will be
         // deployed to. This will be entirely managed by on-chain governance and no entities have the key or privileges
@@ -132,7 +133,7 @@ module aptos_framework::genesis {
         block::initialize(&aptos_framework_account, epoch_interval_microsecs);
         state_storage::initialize(&aptos_framework_account);
         timestamp::set_time_has_started(&aptos_framework_account);
-        atomic_bridge::initialize(&aptos_framework_account);
+        atomic_bridge::initialize(&aptos_framework_account, refunder);
     }
 
     /// Genesis step 2: Initialize Aptos coin.
@@ -463,6 +464,7 @@ module aptos_framework::genesis {
             1,
             1,
             30,
+            @0xbeaf
         )
     }
 

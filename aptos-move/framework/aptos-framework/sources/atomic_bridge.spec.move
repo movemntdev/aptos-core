@@ -117,11 +117,14 @@ spec aptos_framework::atomic_bridge_store {
 }
 
 spec aptos_framework::atomic_bridge_configuration {
-    spec initialize(aptos_framework: &signer) {
+    spec initialize(aptos_framework: &signer, refunder: address) {
+
         aborts_if !system_addresses::is_aptos_framework_address(signer::address_of(aptos_framework));
         aborts_if exists<BridgeConfig>(signer::address_of(aptos_framework));
+        aborts_if exists<BridgeConfig>(refunder);
 
         ensures global<BridgeConfig>(signer::address_of(aptos_framework)).bridge_operator == signer::address_of(aptos_framework);
+        ensures global<BridgeConfig>(signer::address_of(aptos_framework)).refunder == refunder;
     }
 
     spec update_bridge_operator(aptos_framework: &signer, new_operator: address) {
