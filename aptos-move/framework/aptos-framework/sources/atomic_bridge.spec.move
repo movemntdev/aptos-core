@@ -7,7 +7,7 @@ spec aptos_framework::ethereum {
         aborts_if false;
     }
 
-    /// Expected properrties:
+    /// Expected properties:
     /// 1. never aborts
     /// 2. preserves length
     /// 3. do not modify non ascii characters
@@ -27,7 +27,6 @@ spec aptos_framework::ethereum {
         aborts_if false;
         ensures same_ascii_letters(l, result);
     }
-
 
     spec to_eip55_checksumed_address(ethereum_address: &vector<u8>): vector<u8> {
         aborts_if len(ethereum_address) != ETH_ADDRESS_LENGTH;
