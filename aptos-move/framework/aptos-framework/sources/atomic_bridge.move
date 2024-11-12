@@ -77,7 +77,11 @@ module aptos_framework::ethereum {
             let lower_byte = to_lowercase_ascii_letter(element);
             i = i + 1;
             vector::push_back<u8>(&mut lowercase_bytes, lower_byte);
-        });
+        };
+        spec {
+            assert len(lowercase_bytes) == len(input);
+            assert lowercase_congruent(lowercase_bytes, input);
+        };
         lowercase_bytes
     }
 
