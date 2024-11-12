@@ -32,7 +32,7 @@ spec aptos_framework::ethereum {
         aborts_if len(ethereum_address) != ETH_ADDRESS_LENGTH;
     }
 
-    /// Helpers specifcations functions
+    /// Helpers specifications functions
     
     /// Whether a character is a lowercase ASCII letter.
     spec fun is_lowercase_ascii_letter(l: u8): bool {
