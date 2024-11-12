@@ -7,16 +7,21 @@ module aptos_framework::ethereum {
     use aptos_std::aptos_hash::keccak256;
 
     /// Error codes
-    const ENOT_ETH_ADDRESS_LENGTH : u64 = 0x1;
-    
+    const ENOT_ETH_ADDRESS_LENGTH: u64 = 0x1;
+
     /// Length of an Ethereum address in bytes (u8)
-    const ETH_ADDRESS_LENGTH : u64 = 40;
+    const ETH_ADDRESS_LENGTH: u64 = 40;
+
+    /// Distance between lowercase and uppercase letter
+    const UPPER_TO_LOWER: u8 = 0x20;
 
     /// Constants for ASCII character codes
     const ASCII_A: u8 = 0x41;
+    const ASCII_F: u8 = 0x46;
     const ASCII_Z: u8 = 0x5A;
     const ASCII_A_LOWERCASE: u8 = 0x61;
     const ASCII_F_LOWERCASE: u8 = 0x66;
+    const ASCII_Z_LOWERCASE: u8 = 0x7A;
 
     /// Represents an Ethereum address within Aptos smart contracts.
     /// Provides structured handling, storage, and validation of Ethereum addresses.
