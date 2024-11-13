@@ -1178,12 +1178,37 @@ module aptos_framework::atomic_bridge_configuration {
         assert!(bridge_operator() == new_operator, 0);
     }
 
+    #[test(aptos_framework = @aptos_framework, new_refunder = @0xcafe)]
+    /// Tests updating the bridge refunder and emitting the corresponding event.
+    fun test_update_refunder(aptos_framework: &signer, new_refunder: address) acquires BridgeConfig {
+        initialize(aptos_framework);
+        update_refunder(aptos_framework, new_refunder);
+
+        assert!(
+            event::was_event_emitted<BridgeConfigRefunderUpdated>(
+                &BridgeConfigRefunderUpdated {
+                    old_refunder: @aptos_framework,
+                    new_refunder,
+                }
+            ), 0);
+
+        assert!(refunder() == new_refunder, 0);
+    }
+
     #[test(aptos_framework = @aptos_framework, bad = @0xbad, new_operator = @0xcafe)]
     #[expected_failure(abort_code = 0x50003, location = 0x1::system_addresses)]
     /// Tests that updating the bridge operator with an invalid signer fails.
     fun test_failing_update_bridge_operator(aptos_framework: &signer, bad: &signer, new_operator: address) acquires BridgeConfig {
         initialize(aptos_framework);
         update_bridge_operator(bad, new_operator);
+    }
+
+    #[test(aptos_framework = @aptos_framework, bad = @0xbad, new_refunder = @0xcafe)]
+    #[expected_failure(abort_code = 0x50003, location = 0x1::system_addresses)]
+    /// Tests that updating the bridge refunder with an invalid signer fails.
+    fun test_failing_update_refunder(aptos_framework: &signer, bad: &signer, new_refunder: address) acquires BridgeConfig {
+        initialize(aptos_framework);
+        update_refunder(bad, new_refunder);
     }
 
     #[test(aptos_framework = @aptos_framework)]
@@ -1193,12 +1218,27 @@ module aptos_framework::atomic_bridge_configuration {
         assert_is_caller_operator(aptos_framework);
     }
 
+    #[test(aptos_framework = @aptos_framework)]
+    /// Tests that the correct refunder is validated successfully.
+    fun test_is_valid_refunder(aptos_framework: &signer) acquires BridgeConfig {
+        initialize(aptos_framework);
+        assert_is_caller_refunder(aptos_framework);
+    }
+
     #[test(aptos_framework = @aptos_framework, bad = @0xbad)]
     #[expected_failure(abort_code = 0x1, location = 0x1::atomic_bridge_configuration)]
     /// Tests that an incorrect operator is not validated and results in an abort.
     fun test_is_not_valid_operator(aptos_framework: &signer, bad: &signer) acquires BridgeConfig {
         initialize(aptos_framework);
         assert_is_caller_operator(bad);
+    }
+
+    #[test(aptos_framework = @aptos_framework, bad = @0xbad)]
+    #[expected_failure(abort_code = 0x2, location = 0x1::atomic_bridge_configuration)]
+    /// Tests that an incorrect refunder is not validated and results in an abort.
+    fun test_is_not_valid_refunder(aptos_framework: &signer, bad: &signer) acquires BridgeConfig {
+        initialize(aptos_framework);
+        assert_is_caller_refunder(bad);
     }
 
     #[test(aptos_framework = @aptos_framework)]
