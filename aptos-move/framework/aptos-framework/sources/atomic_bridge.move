@@ -227,7 +227,6 @@ module aptos_framework::atomic_bridge_initiator {
         caller: &signer,
         bridge_transfer_id: vector<u8>,
     ) {
-        assert_is_caller_refunder(caller);
         let (receiver, amount) = atomic_bridge_store::cancel_transfer<address, EthereumAddress>(caller, bridge_transfer_id);
         atomic_bridge::mint(receiver, amount);
 
@@ -801,7 +800,7 @@ module aptos_framework::atomic_bridge_store {
     /// @abort If the bridge transfer details are not found or if the cancellation conditions in `cancel_details` fail.
     public(friend) fun cancel_transfer<Initiator: store + copy, Recipient: store>(caller: &signer, bridge_transfer_id: vector<u8>) : (Initiator, u64) acquires SmartTableWrapper {
         assert!(features::abort_atomic_bridge_enabled(), EATOMIC_BRIDGE_NOT_ENABLED);
-        assert_is_caller_refunder(caller);
+        atomic_bridge_configuration::assert_is_caller_refunder(caller);
 
         let table = borrow_global_mut<SmartTableWrapper<vector<u8>, BridgeTransferDetails<Initiator, Recipient>>>(@aptos_framework);
 
@@ -884,7 +883,7 @@ module aptos_framework::atomic_bridge_store {
     }
 
 
-    #[test(aptos_framework = @aptos_framework), refunder = @0xbeaf]
+    #[test(aptos_framework = @aptos_framework, refunder = @0xbeaf)]
     public fun test_get_bridge_transfer_details_initiator(aptos_framework: &signer, refunder: &signer) acquires SmartTableWrapper {
         let refunder_address = signer::address_of(refunder);
         timestamp::set_time_has_started_for_testing(aptos_framework);
@@ -990,6 +989,7 @@ module aptos_framework::atomic_bridge_configuration {
 
     friend aptos_framework::atomic_bridge_counterparty;
     friend aptos_framework::atomic_bridge_initiator;
+    friend aptos_framework::atomic_bridge_store;
 
     /// Error code for invalid bridge operator
     const EINVALID_BRIDGE_OPERATOR: u64 = 0x1;
@@ -1148,7 +1148,7 @@ module aptos_framework::atomic_bridge_configuration {
         assert!(borrow_global<BridgeConfig>(@aptos_framework).refunder == signer::address_of(caller), EINVALID_REFUNDER);
     }
 
-    #[test(aptos_framework = @aptos_framework), refunder = @0xbeaf]
+    #[test(aptos_framework = @aptos_framework, refunder = @0xbeaf)]
     /// Tests initialization of the bridge configuration.
     fun test_initialization(aptos_framework: &signer, refunder: &signer) {
         let refunder_address = signer::address_of(refunder);
@@ -1480,8 +1480,6 @@ module aptos_framework::atomic_bridge_counterparty {
         caller: &signer,
         bridge_transfer_id: vector<u8>
     ) {
-        atomic_bridge_configuration::assert_is_caller_operator(caller);
-
         atomic_bridge_store::cancel_transfer<EthereumAddress, address>(caller, bridge_transfer_id);
 
         event::emit(
