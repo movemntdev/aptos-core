@@ -463,8 +463,7 @@ module aptos_framework::genesis {
             true,
             1,
             1,
-            30,
-            @0xbeaf
+            30
         )
     }
 

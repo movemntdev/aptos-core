@@ -438,7 +438,7 @@ module aptos_framework::atomic_bridge_initiator {
         );
     }
 
-    #[test(aptos_framework = @aptos_framework, sender = @0xdaff, refunder = @0xbeaf)]
+    #[test(aptos_framework = @aptos_framework, sender = @0xdaff)]
     fun test_refund_bridge_transfer(
         sender: &signer,
         aptos_framework: &signer,
@@ -484,7 +484,7 @@ module aptos_framework::atomic_bridge_initiator {
             ), 0);
     }
 
-    #[test(aptos_framework = @aptos_framework, sender = @0xdaff, refunder = @0xbeaf)]
+    #[test(aptos_framework = @aptos_framework, sender = @0xdaff)]
     #[expected_failure(abort_code = 0x4, location = 0x1::atomic_bridge_store)] //ENOT_EXPIRED
     fun test_refund_bridge_transfer_before_timelock(
         sender: &signer,
@@ -883,16 +883,16 @@ module aptos_framework::atomic_bridge_store {
     }
 
 
-    #[test(aptos_framework = @aptos_framework, refunder = @0xbeaf)]
+    #[test(aptos_framework = @aptos_framework)]
     public fun test_get_bridge_transfer_details_initiator(aptos_framework: &signer, refunder: &signer) acquires SmartTableWrapper {
-        let refunder_address = signer::address_of(refunder);
+        
         timestamp::set_time_has_started_for_testing(aptos_framework);
         features::change_feature_flags_for_testing(
             aptos_framework,
             vector[features::get_atomic_bridge_feature()],
             vector[]
         );
-        atomic_bridge_configuration::initialize(aptos_framework, refunder_address);
+        atomic_bridge_configuration::initialize(aptos_framework);
         initialize(aptos_framework);
 
         let initiator = signer::address_of(aptos_framework);
@@ -1132,6 +1132,14 @@ module aptos_framework::atomic_bridge_configuration {
         borrow_global_mut<BridgeConfig>(@aptos_framework).bridge_operator
     }
 
+    #[view]
+    /// Retrieves the address of the current refunder.
+    ///
+    /// @return The address of the current bridge operator.
+    public fun refunder(): address acquires BridgeConfig {
+        borrow_global_mut<BridgeConfig>(@aptos_framework).refunder
+    }
+
     /// Asserts that the caller is the current bridge operator.
     ///
     /// @param caller The signer whose authority is being checked.
@@ -1148,19 +1156,17 @@ module aptos_framework::atomic_bridge_configuration {
         assert!(borrow_global<BridgeConfig>(@aptos_framework).refunder == signer::address_of(caller), EINVALID_REFUNDER);
     }
 
-    #[test(aptos_framework = @aptos_framework, refunder = @0xbeaf)]
+    #[test(aptos_framework = @aptos_framework)]
     /// Tests initialization of the bridge configuration.
     fun test_initialization(aptos_framework: &signer, refunder: &signer) {
-        let refunder_address = signer::address_of(refunder);
-        initialize(aptos_framework, refunder_address);
+        initialize(aptos_framework);
         assert!(exists<BridgeConfig>(@aptos_framework), 0);
     }
 
-    #[test(aptos_framework = @aptos_framework, new_operator = @0xcafe, refunder = @0xbeaf)]
+    #[test(aptos_framework = @aptos_framework, new_operator = @0xcafe)]
     /// Tests updating the bridge operator and emitting the corresponding event.
     fun test_update_bridge_operator(aptos_framework: &signer, refunder: &signer, new_operator: address) acquires BridgeConfig {
-        let refunder_address = signer::address_of(refunder);
-        initialize(aptos_framework, refunder_address);
+        initialize(aptos_framework);
         update_bridge_operator(aptos_framework, new_operator);
 
         assert!(
@@ -1174,67 +1180,62 @@ module aptos_framework::atomic_bridge_configuration {
         assert!(bridge_operator() == new_operator, 0);
     }
 
-    #[test(aptos_framework = @aptos_framework, bad = @0xbad, new_operator = @0xcafe, refunder = @0xbeaf)]
+    #[test(aptos_framework = @aptos_framework, bad = @0xbad, new_operator = @0xcafe)]
     #[expected_failure(abort_code = 0x50003, location = 0x1::system_addresses)]
     /// Tests that updating the bridge operator with an invalid signer fails.
     fun test_failing_update_bridge_operator(aptos_framework: &signer, refunder: &signer, bad: &signer, new_operator: address) acquires BridgeConfig {
-        let refunder_address = signer::address_of(refunder);
-        initialize(aptos_framework, refunder_address);
+        initialize(aptos_framework);
         update_bridge_operator(bad, new_operator);
     }
 
-    #[test(aptos_framework = @aptos_framework, refunder = @0xbeaf)]
+    #[test(aptos_framework = @aptos_framework)]
     /// Tests that the correct operator is validated successfully.
     fun test_is_valid_operator(aptos_framework: &signer, refunder: &signer) acquires BridgeConfig {
-        let refunder_address = signer::address_of(refunder);
-        initialize(aptos_framework, refunder_address);
+        initialize(aptos_framework);
         assert_is_caller_operator(aptos_framework);
     }
 
-    #[test(aptos_framework = @aptos_framework, bad = @0xbad, refunder = @0xbeaf)]
+    #[test(aptos_framework = @aptos_framework, bad = @0xbad)]
     #[expected_failure(abort_code = 0x1, location = 0x1::atomic_bridge_configuration)]
     /// Tests that an incorrect operator is not validated and results in an abort.
     fun test_is_not_valid_operator(aptos_framework: &signer, bad: &signer, refunder: &signer) acquires BridgeConfig {
-        let refunder_address = signer::address_of(refunder);
-        initialize(aptos_framework, refunder_address);
+        initialize(aptos_framework);
         assert_is_caller_operator(bad);
     }
 
-    #[test(aptos_framework = @aptos_framework, refunder = @0xbeaf)]
+    #[test(aptos_framework = @aptos_framework)]
     /// Tests we can update the initiator time lock
     fun test_update_initiator_time_lock(aptos_framework: &signer, refunder: &signer) acquires BridgeConfig {
-        let refunder_address = signer::address_of(refunder);
+        
 
-        initialize(aptos_framework, refunder_address);
+        initialize(aptos_framework);
         set_initiator_time_lock_duration(aptos_framework, 1);
         assert!(initiator_timelock_duration() == 1, 0);
     }
 
-    #[test(aptos_framework = @aptos_framework, refunder = @0xbeaf)]
+    #[test(aptos_framework = @aptos_framework)]
     /// Tests we can update the initiator time lock
     fun test_update_counterparty_time_lock(aptos_framework: &signer,  refunder: &signer) acquires BridgeConfig {
-        let refunder_address = signer::address_of(refunder);
-        initialize(aptos_framework, refunder_address);
+        initialize(aptos_framework);
         set_counterparty_time_lock_duration(aptos_framework, 1);
         assert!(counterparty_timelock_duration() == 1, 0);
     }
 
-    #[test(aptos_framework = @aptos_framework, bad = @0xbad, refunder = @0xbeaf)]
+    #[test(aptos_framework = @aptos_framework, bad = @0xbad)]
     #[expected_failure(abort_code = 0x50003, location = 0x1::system_addresses)]
     /// Tests that an incorrect signer cannot update the initiator time lock
     fun test_not_able_to_set_initiator_time_lock(aptos_framework: &signer, bad: &signer, refunder: &signer) acquires BridgeConfig {
-        let refunder_address = signer::address_of(refunder);
+        
 
-        initialize(aptos_framework, refunder_address);
+        initialize(aptos_framework);
         set_initiator_time_lock_duration(bad, 1);
     }
 
-    #[test(aptos_framework = @aptos_framework, bad = @0xbad, refunder = @0xbeaf)]
+    #[test(aptos_framework = @aptos_framework, bad = @0xbad)]
     #[expected_failure(abort_code = 0x50003, location = 0x1::system_addresses)]
     /// Tests that an incorrect signer cannot update the counterparty time lock
     fun test_not_able_to_set_counterparty_time_lock(aptos_framework: &signer, bad: &signer, refunder: &signer) acquires BridgeConfig {
-        let refunder_address = signer::address_of(refunder);
-        initialize(aptos_framework, refunder_address);
+        initialize(aptos_framework);
         set_counterparty_time_lock_duration(bad, 1);
     }
 }
