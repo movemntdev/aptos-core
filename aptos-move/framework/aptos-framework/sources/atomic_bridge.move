@@ -1039,11 +1039,11 @@ module aptos_framework::atomic_bridge_configuration {
     ///
     /// @param aptos_framework The signer representing the Aptos framework.
     /// @param refunder The address enabled to refund bridge attempts
-    public fun initialize(aptos_framework: &signer, refunder: address) {
+    public fun initialize(aptos_framework: &signer) {
         system_addresses::assert_aptos_framework(aptos_framework);
         let bridge_config = BridgeConfig {
             bridge_operator: signer::address_of(aptos_framework),
-            refunder,
+            refunder: signer::address_of(aptos_framework),
             initiator_time_lock: INITIATOR_TIME_LOCK_DUARTION,
             counterparty_time_lock: COUNTERPARTY_TIME_LOCK_DUARTION,
         };
@@ -1080,7 +1080,7 @@ module aptos_framework::atomic_bridge_configuration {
         system_addresses::assert_aptos_framework(aptos_framework);
         let bridge_config = borrow_global_mut<BridgeConfig>(@aptos_framework);
         let old_refunder = bridge_config.refunder;
-        assert!(old_refunder != new_refunder, EINVALID_BRIDGE_OPERATOR);
+        assert!(old_refunder != new_refunder, EINVALID_REFUNDER);
 
         bridge_config.refunder = new_refunder;
 
