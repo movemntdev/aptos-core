@@ -8,6 +8,7 @@ module aptos_framework::ethereum {
 
     /// Error codes
     const ENOT_ETH_ADDRESS_LENGTH: u64 = 0x1;
+    const ENOT_EIP55_ADDRESS: u64 = 0x2;
 
     /// Length of an Ethereum address in bytes (u8)
     const ETH_ADDRESS_LENGTH: u64 = 40;
@@ -153,13 +154,13 @@ module aptos_framework::ethereum {
     }
 
     #[test]
-    #[expected_failure(abort_code = 0, location = Self)]
+    #[expected_failure(abort_code = ENOT_EIP55_ADDRESS, location = Self)]
     fun test_invalid_eip55_checksum() {
         assert_eip55(&invalid_eip55());
     }
 
     #[test]
-    #[expected_failure(abort_code = 0, location = Self)]
+    #[expected_failure(abort_code = ENOT_ETH_ADDRESS_LENGTH, location = Self)]
     fun test_simple_invalid_eip55_checksum() {
         assert_eip55(&b"0");
     }
