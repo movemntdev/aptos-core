@@ -27,7 +27,7 @@ module aptos_framework::ethereum {
     /// Represents an Ethereum address within Aptos smart contracts.
     /// Provides structured handling, storage, and validation of Ethereum addresses.
     struct EthereumAddress has store, copy, drop {
-        inner: vector<u8>,
+        inner: vector<u8>
     }
 
     /// Length of an Ethereum Address
@@ -100,7 +100,9 @@ module aptos_framework::ethereum {
     /// @abort If the input address does not have exactly 40 characters.
     /// @note Assumes input address is valid and in lowercase hexadecimal format.
     public fun to_eip55_checksumed_address(ethereum_address: &vector<u8>): vector<u8> {
-        assert!(vector::length(ethereum_address) == ETH_ADDRESS_LENGTH, ENOT_ETH_ADDRESS_LENGTH);
+        assert!(
+            vector::length(ethereum_address) == ETH_ADDRESS_LENGTH, ENOT_ETH_ADDRESS_LENGTH
+        );
         let lowercase = to_lowercase(ethereum_address);
         let hash = keccak256(lowercase);
         let output = vector::empty<u8>();
