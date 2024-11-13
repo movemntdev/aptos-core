@@ -48,9 +48,20 @@ module aptos_framework::ethereum {
     }
 
     /// Converts a letter to its lowercase equivalent if it is an ASCII letter.
+    /// 
+    /// This is implemented as a shift of +32 in ASCII encoding.
     fun to_lowercase_ascii_letter(l: u8): u8 {
         if (l >= ASCII_A && l <= ASCII_Z) {
             l + UPPER_TO_LOWER
+        } else { l }
+    }
+
+    /// Converts a letter to its uppercase equivalent if it is an ASCII letter.
+    /// 
+    /// This is implemented as a shift of -32 in ASCII encoding.
+    fun to_uppercase_ascii_letter(l: u8): u8 {
+        if (l >= ASCII_A_LOWERCASE && l <= ASCII_Z_LOWERCASE) {
+            l - UPPER_TO_LOWER
         } else { l }
     }
 

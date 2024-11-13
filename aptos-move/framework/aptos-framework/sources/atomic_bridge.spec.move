@@ -28,6 +28,10 @@ spec aptos_framework::ethereum {
         ensures same_ascii_letters(l, result);
     }
 
+    /// Expected properties:
+    /// 1. aborts if not a valid length 
+    /// 2. result has same preserves length
+    /// 3. result is ascii-equivalent to input
     spec to_eip55_checksumed_address(ethereum_address: &vector<u8>): vector<u8> {
         aborts_if len(ethereum_address) != ETH_ADDRESS_LENGTH;
     }
