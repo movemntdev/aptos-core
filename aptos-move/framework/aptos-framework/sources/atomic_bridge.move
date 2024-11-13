@@ -134,7 +134,10 @@ module aptos_framework::ethereum {
         let eip55 = to_eip55_checksumed_address(ethereum_address);
         let len = vector::length(&eip55);
         for (index in 0..len) {
-            assert!(vector::borrow(&eip55, index) == vector::borrow(ethereum_address, index), 0);
+            assert!(
+                vector::borrow(&eip55, index) == vector::borrow(ethereum_address, index),
+                ENOT_EIP55_ADDRESS
+            );
         };
     }
 
