@@ -198,6 +198,14 @@ module aptos_framework::ethereum {
     }
 }
 
+/// Provides and atomic transfer initiator from MOVE chain to Ethereum.
+///
+/// The initiator creates a transfer request with the transfer details
+/// including a secret that should only be known by the initiator and the recipient.
+/// A message is sent to the other chain via an `Event`.
+/// The other chain must ackowledge the trabsfer on the other side and communicate (vaia an `Event`)
+/// to the MOVE chain that the request has been received,
+/// This ackonwledgement must be received within a time bound, otherwise the transfer is  cancelled.
 module aptos_framework::atomic_bridge_initiator {
     use std::signer;
     use aptos_framework::atomic_bridge;
@@ -224,13 +232,20 @@ module aptos_framework::atomic_bridge_initiator {
     use aptos_framework::timestamp;
 
     #[event]
+    /// An event describing a transfer from Move to Ethereum
     struct BridgeTransferInitiatedEvent has store, drop {
+        /// A unique ID identifying the transfer
         bridge_transfer_id: vector<u8>,
+        /// The initiator of the transfer on the MOVE chain
         initiator: address,
+        //  recipient address on Ethereum (160 bits)
         recipient: vector<u8>,
+        /// amount in MOVE
         amount: u64,
+        /// a secret that locks the transfer
         hash_lock: vector<u8>,
-        time_lock: u64,
+        /// the date when the transfer expires
+        time_lock: u64
     }
 
     #[event]
@@ -244,9 +259,14 @@ module aptos_framework::atomic_bridge_initiator {
         bridge_transfer_id: vector<u8>,
     }
 
-    /// Initiate a bridge transfer of ETH from Movement to the base layer
-    /// Anyone can initiate a bridge transfer from the source chain
-    /// The amount is burnt from the initiator
+    /// Initiate a bridge transfer of MOVE from Movement to the base layer (Ethereum)
+    ///
+    /// Anyone can initiate a bridge transfer from the source chain.
+    /// The amount is burnt from the initiator.
+    /// @param initiator    The initiator of the transfer on the MOVE chain
+    /// @param recipient    An Ethereum address (160 bits)
+    /// @param hash_lock    A secret to protect the transfer.
+    /// @param amount       The amout to transfer.
     public entry fun initiate_bridge_transfer(
         initiator: &signer,
         recipient: vector<u8>,
