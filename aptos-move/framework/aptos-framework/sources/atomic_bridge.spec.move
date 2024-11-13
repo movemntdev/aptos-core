@@ -2,6 +2,10 @@
 /// Specification for the Ethereum module
 spec aptos_framework::ethereum {
 
+    spec EthereumAddress {
+        invariant len(inner) == ETH_ADDRESS_LENGTH;
+    }
+
     //  never aborts
     spec ethereum_address_length(): u64 {
         aborts_if false;
@@ -34,10 +38,21 @@ spec aptos_framework::ethereum {
     /// 3. result is ascii-equivalent to input
     spec to_eip55_checksumed_address(ethereum_address: &vector<u8>): vector<u8> {
         aborts_if len(ethereum_address) != ETH_ADDRESS_LENGTH;
+        ensures  lowercase_congruent(ethereum_address, result);
+    }
+
+    spec get_inner(eth_address: &EthereumAddress): vector<u8> {
+        aborts_if false;
+        ensures len(result) == ETH_ADDRESS_LENGTH;
     }
 
     /// Helpers specifications functions
     
+    /// Whether two chars are the same letter, ignoring case.
+    spec fun same_ascii_letters(l: u8, m: u8): bool {
+        to_lowercase_ascii_letter(l) == to_lowercase_ascii_letter(m)
+    }
+
     /// Whether a character is a lowercase ASCII letter.
     spec fun is_lowercase_ascii_letter(l: u8): bool {
         l >= ASCII_A_LOWERCASE && l <= ASCII_Z_LOWERCASE
@@ -51,11 +66,6 @@ spec aptos_framework::ethereum {
     /// Whether a character is an ASCII letter.
     spec fun is_ascii_letter(l: u8): bool {
         is_lowercase_ascii_letter(l) || is_uppercase_ascii_letter(l)
-    }
-
-    /// Whetehr two chars are the same letter, ignoring case.
-    spec fun same_ascii_letters(l: u8, m: u8): bool {
-        to_lowercase_ascii_letter(l) == to_lowercase_ascii_letter(m)
     }
 
     /// Whether two vectors of ASCII characters have the same letters, ignoring case.
