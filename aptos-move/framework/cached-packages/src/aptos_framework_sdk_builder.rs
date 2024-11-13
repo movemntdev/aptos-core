@@ -322,7 +322,7 @@ pub enum EntryFunctionCall {
         amount: u64,
     },
 
-    /// Anyone can refund the transfer on the source chain once time lock has passed
+    /// Refund the transfer on the source chain once time lock has passed, permissioned to refunder role.
     AtomicBridgeInitiatorRefundBridgeTransfer {
         bridge_transfer_id: Vec<u8>,
     },
@@ -2482,7 +2482,7 @@ pub fn atomic_bridge_counterparty_lock_bridge_transfer_assets(
     ))
 }
 
-/// Anyone can refund the transfer on the source chain once time lock has passed
+/// Refund the transfer on the source chain once time lock has passed, permissioned to refunder role.
 pub fn atomic_bridge_initiator_refund_bridge_transfer(
     bridge_transfer_id: Vec<u8>,
 ) -> TransactionPayload {
