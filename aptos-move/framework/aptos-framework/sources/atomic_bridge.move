@@ -117,19 +117,35 @@ module aptos_framework::ethereum {
         let lowercase = to_lowercase(ethereum_address);
         let hash = keccak256(lowercase);
         let output = vector::empty<u8>();
-
-        for (index in 0..40) {
+        let index = 0;
+        while ({
+            spec {
+                invariant len(output) == index;
+                invariant index <= ETH_ADDRESS_LENGTH;
+                invariant forall k: u64 where k < index:
+                    same_ascii_letters(output[k], lowercase[k]);
+            };
+            index < ETH_ADDRESS_LENGTH
+            }) {
+            // character at position index in the ethereum address
             let item = *vector::borrow(ethereum_address, index);
-            if (item >= ASCII_A_LOWERCASE && item <= ASCII_F_LOWERCASE) {
-                let hash_item = *vector::borrow(&hash, index / 2);
-                if ((hash_item >> ((4 * (1 - (index % 2))) as u8)) & 0xF >= 8) {
-                    vector::push_back(&mut output, item - 32);
-                } else {
-                    vector::push_back(&mut output, item);
-                }
+            // The hash is a 64-byte vector, and every byte contributes two letters
+            // The corresponding character in the hash is in the element at position index / 2
+            let hash_item = *vector::borrow(&hash, index / 2);
+            let hash_ascii_char = if ((index % 2) == 0) {
+                // If index is even, we take the leftmost 4 bits of the byte at index / 2
+                hash_item / 16
             } else {
-                vector::push_back(&mut output, item);
-            }
+                // If index is odd, we take the rightmost 4 bits of the byte at index / 2
+                hash_item % 16
+            };
+            // If the hash character is greater or equal to 8, we convert the character to uppercase
+            if (hash_ascii_char >= 8) {
+                    vector::push_back(&mut output, to_uppercase_ascii_letter(item));
+            } else {
+                    vector::push_back(&mut output, item);
+            };
+            index = index + 1;
         };
         output
     }
