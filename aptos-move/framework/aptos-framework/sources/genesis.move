@@ -417,7 +417,8 @@ module aptos_framework::genesis {
         employee_vesting_start: u64,
         employee_vesting_period_duration: u64,
         employees: vector<EmployeeAccountMap>,
-        validators: vector<ValidatorConfigurationWithCommission>
+        validators: vector<ValidatorConfigurationWithCommission>,
+        refunder: address
     ) {
         initialize(
             gas_schedule,
@@ -432,7 +433,8 @@ module aptos_framework::genesis {
             allow_validator_set_change,
             rewards_rate,
             rewards_rate_denominator,
-            voting_power_increase_limit
+            voting_power_increase_limit,
+            refunder
         );
         features::change_feature_flags_for_verification(aptos_framework, vector[1, 2], vector[]);
         initialize_aptos_coin(aptos_framework);
