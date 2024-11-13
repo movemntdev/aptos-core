@@ -994,7 +994,7 @@ module aptos_framework::atomic_bridge_configuration {
     /// Error code for invalid bridge operator
     const EINVALID_BRIDGE_OPERATOR: u64 = 0x1;
 
-    /// Error code for invalid bridge operator
+    /// Error code for invalid bridge refunder
     const EINVALID_REFUNDER: u64 = 0x2;
 
     /// Counterparty time lock duration is 24 hours in seconds
@@ -1520,8 +1520,8 @@ module aptos_framework::atomic_bridge_counterparty {
             ), 0);
     }
 
-    #[test(aptos_framework = @aptos_framework)]
-    fun test_abort_transfer_of_assets(aptos_framework: &signer) {
+    #[test(aptos_framework = @aptos_framework, refunder = @0xbeaf)]
+    fun test_abort_transfer_of_assets(aptos_framework: &signer, refunder: &signer) {
         initialize_for_test(aptos_framework);
 
         let initiator = valid_eip55();
@@ -1538,7 +1538,7 @@ module aptos_framework::atomic_bridge_counterparty {
             amount);
 
         timestamp::fast_forward_seconds(atomic_bridge_configuration::counterparty_timelock_duration() + 1);
-        abort_bridge_transfer(aptos_framework, bridge_transfer_id);
+        abort_bridge_transfer(refunder, bridge_transfer_id);
 
         assert!(
             event::was_event_emitted<BridgeTransferCancelledEvent>(
