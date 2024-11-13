@@ -312,7 +312,7 @@ Genesis step 1: Initialize aptos framework account and core modules on chain.
     allow_validator_set_change: bool,
     rewards_rate: u64,
     rewards_rate_denominator: u64,
-    voting_power_increase_limit: u64,
+    voting_power_increase_limit: u64
 ) {
     // Initialize the aptos framework <a href="account.md#0x1_account">account</a>. This is the <a href="account.md#0x1_account">account</a> <b>where</b> system resources and modules will be
     // deployed <b>to</b>. This will be entirely managed by on-chain governance and no entities have the key or privileges

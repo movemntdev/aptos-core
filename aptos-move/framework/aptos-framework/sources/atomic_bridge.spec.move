@@ -117,14 +117,13 @@ spec aptos_framework::atomic_bridge_store {
 }
 
 spec aptos_framework::atomic_bridge_configuration {
-    spec initialize(aptos_framework: &signer, refunder: address) {
+    spec initialize(aptos_framework: &signer) {
 
         aborts_if !system_addresses::is_aptos_framework_address(signer::address_of(aptos_framework));
         aborts_if exists<BridgeConfig>(signer::address_of(aptos_framework));
-        aborts_if exists<BridgeConfig>(refunder);
 
         ensures global<BridgeConfig>(signer::address_of(aptos_framework)).bridge_operator == signer::address_of(aptos_framework);
-        ensures global<BridgeConfig>(signer::address_of(aptos_framework)).refunder == refunder;
+        ensures global<BridgeConfig>(signer::address_of(aptos_framework)).refunder == signer::address_of(aptos_framework);
     }
 
     spec update_bridge_operator(aptos_framework: &signer, new_operator: address) {
@@ -133,5 +132,13 @@ spec aptos_framework::atomic_bridge_configuration {
         aborts_if global<BridgeConfig>(signer::address_of(aptos_framework)).bridge_operator == new_operator;
 
         ensures global<BridgeConfig>(signer::address_of(aptos_framework)).bridge_operator == new_operator;
+    }
+
+    spec update_refunder(aptos_framework: &signer, new_refunder: address) {
+        aborts_if !system_addresses::is_aptos_framework_address(signer::address_of(aptos_framework));
+        aborts_if !exists<BridgeConfig>(signer::address_of(aptos_framework));
+        aborts_if global<BridgeConfig>(signer::address_of(aptos_framework)).refunder == new_refunder;
+
+        ensures global<BridgeConfig>(signer::address_of(aptos_framework)).refunder == new_refunder;
     }
 }

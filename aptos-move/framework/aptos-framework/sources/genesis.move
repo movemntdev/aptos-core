@@ -78,8 +78,7 @@ module aptos_framework::genesis {
         allow_validator_set_change: bool,
         rewards_rate: u64,
         rewards_rate_denominator: u64,
-        voting_power_increase_limit: u64,
-        refunder: address
+        voting_power_increase_limit: u64
     ) {
         // Initialize the aptos framework account. This is the account where system resources and modules will be
         // deployed to. This will be entirely managed by on-chain governance and no entities have the key or privileges
@@ -133,7 +132,7 @@ module aptos_framework::genesis {
         block::initialize(&aptos_framework_account, epoch_interval_microsecs);
         state_storage::initialize(&aptos_framework_account);
         timestamp::set_time_has_started(&aptos_framework_account);
-        atomic_bridge::initialize(&aptos_framework_account, refunder);
+        atomic_bridge::initialize(&aptos_framework_account);
     }
 
     /// Genesis step 2: Initialize Aptos coin.
@@ -417,8 +416,7 @@ module aptos_framework::genesis {
         employee_vesting_start: u64,
         employee_vesting_period_duration: u64,
         employees: vector<EmployeeAccountMap>,
-        validators: vector<ValidatorConfigurationWithCommission>,
-        refunder: address
+        validators: vector<ValidatorConfigurationWithCommission>
     ) {
         initialize(
             gas_schedule,
@@ -433,8 +431,7 @@ module aptos_framework::genesis {
             allow_validator_set_change,
             rewards_rate,
             rewards_rate_denominator,
-            voting_power_increase_limit,
-            refunder
+            voting_power_increase_limit
         );
         features::change_feature_flags_for_verification(aptos_framework, vector[1, 2], vector[]);
         initialize_aptos_coin(aptos_framework);

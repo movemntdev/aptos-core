@@ -265,6 +265,663 @@ Checks if an Ethereum address conforms to the EIP-55 checksum standard.
 
 
 
+<a id="0x1_atomic_bridge_configuration"></a>
+
+# Module `0x1::atomic_bridge_configuration`
+
+
+
+-  [Resource `BridgeConfig`](#0x1_atomic_bridge_configuration_BridgeConfig)
+-  [Struct `BridgeConfigOperatorUpdated`](#0x1_atomic_bridge_configuration_BridgeConfigOperatorUpdated)
+-  [Struct `BridgeConfigRefunderUpdated`](#0x1_atomic_bridge_configuration_BridgeConfigRefunderUpdated)
+-  [Struct `InitiatorTimeLockUpdated`](#0x1_atomic_bridge_configuration_InitiatorTimeLockUpdated)
+-  [Struct `CounterpartyTimeLockUpdated`](#0x1_atomic_bridge_configuration_CounterpartyTimeLockUpdated)
+-  [Constants](#@Constants_0)
+-  [Function `initialize`](#0x1_atomic_bridge_configuration_initialize)
+-  [Function `update_bridge_operator`](#0x1_atomic_bridge_configuration_update_bridge_operator)
+-  [Function `update_refunder`](#0x1_atomic_bridge_configuration_update_refunder)
+-  [Function `set_initiator_time_lock_duration`](#0x1_atomic_bridge_configuration_set_initiator_time_lock_duration)
+-  [Function `set_counterparty_time_lock_duration`](#0x1_atomic_bridge_configuration_set_counterparty_time_lock_duration)
+-  [Function `initiator_timelock_duration`](#0x1_atomic_bridge_configuration_initiator_timelock_duration)
+-  [Function `counterparty_timelock_duration`](#0x1_atomic_bridge_configuration_counterparty_timelock_duration)
+-  [Function `bridge_operator`](#0x1_atomic_bridge_configuration_bridge_operator)
+-  [Function `refunder`](#0x1_atomic_bridge_configuration_refunder)
+-  [Function `assert_is_caller_operator`](#0x1_atomic_bridge_configuration_assert_is_caller_operator)
+-  [Function `assert_is_caller_refunder`](#0x1_atomic_bridge_configuration_assert_is_caller_refunder)
+-  [Specification](#@Specification_1)
+    -  [Function `initialize`](#@Specification_1_initialize)
+    -  [Function `update_bridge_operator`](#@Specification_1_update_bridge_operator)
+    -  [Function `update_refunder`](#@Specification_1_update_refunder)
+
+
+<pre><code><b>use</b> <a href="event.md#0x1_event">0x1::event</a>;
+<b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">0x1::signer</a>;
+<b>use</b> <a href="system_addresses.md#0x1_system_addresses">0x1::system_addresses</a>;
+</code></pre>
+
+
+
+<a id="0x1_atomic_bridge_configuration_BridgeConfig"></a>
+
+## Resource `BridgeConfig`
+
+
+
+<pre><code><b>struct</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> <b>has</b> key
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code>bridge_operator: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>refunder: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>initiator_time_lock: u64</code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>counterparty_time_lock: u64</code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
+<a id="0x1_atomic_bridge_configuration_BridgeConfigOperatorUpdated"></a>
+
+## Struct `BridgeConfigOperatorUpdated`
+
+Event emitted when the bridge operator is updated.
+
+
+<pre><code>#[<a href="event.md#0x1_event">event</a>]
+<b>struct</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfigOperatorUpdated">BridgeConfigOperatorUpdated</a> <b>has</b> drop, store
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code>old_operator: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>new_operator: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
+<a id="0x1_atomic_bridge_configuration_BridgeConfigRefunderUpdated"></a>
+
+## Struct `BridgeConfigRefunderUpdated`
+
+Event emitted when the bridge operator is updated.
+
+
+<pre><code>#[<a href="event.md#0x1_event">event</a>]
+<b>struct</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfigRefunderUpdated">BridgeConfigRefunderUpdated</a> <b>has</b> drop, store
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code>old_refunder: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+<dt>
+<code>new_refunder: <b>address</b></code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
+<a id="0x1_atomic_bridge_configuration_InitiatorTimeLockUpdated"></a>
+
+## Struct `InitiatorTimeLockUpdated`
+
+Event emitted when the initiator time lock has been updated.
+
+
+<pre><code>#[<a href="event.md#0x1_event">event</a>]
+<b>struct</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_InitiatorTimeLockUpdated">InitiatorTimeLockUpdated</a> <b>has</b> drop, store
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code>time_lock: u64</code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
+<a id="0x1_atomic_bridge_configuration_CounterpartyTimeLockUpdated"></a>
+
+## Struct `CounterpartyTimeLockUpdated`
+
+Event emitted when the initiator time lock has been updated.
+
+
+<pre><code>#[<a href="event.md#0x1_event">event</a>]
+<b>struct</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_CounterpartyTimeLockUpdated">CounterpartyTimeLockUpdated</a> <b>has</b> drop, store
+</code></pre>
+
+
+
+<details>
+<summary>Fields</summary>
+
+
+<dl>
+<dt>
+<code>time_lock: u64</code>
+</dt>
+<dd>
+
+</dd>
+</dl>
+
+
+</details>
+
+<a id="@Constants_0"></a>
+
+## Constants
+
+
+<a id="0x1_atomic_bridge_configuration_COUNTERPARTY_TIME_LOCK_DUARTION"></a>
+
+Counterparty time lock duration is 24 hours in seconds
+
+
+<pre><code><b>const</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_COUNTERPARTY_TIME_LOCK_DUARTION">COUNTERPARTY_TIME_LOCK_DUARTION</a>: u64 = 86400;
+</code></pre>
+
+
+
+<a id="0x1_atomic_bridge_configuration_EINVALID_BRIDGE_OPERATOR"></a>
+
+Error code for invalid bridge operator
+
+
+<pre><code><b>const</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_EINVALID_BRIDGE_OPERATOR">EINVALID_BRIDGE_OPERATOR</a>: u64 = 1;
+</code></pre>
+
+
+
+<a id="0x1_atomic_bridge_configuration_EINVALID_REFUNDER"></a>
+
+Error code for invalid bridge refunder
+
+
+<pre><code><b>const</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_EINVALID_REFUNDER">EINVALID_REFUNDER</a>: u64 = 2;
+</code></pre>
+
+
+
+<a id="0x1_atomic_bridge_configuration_INITIATOR_TIME_LOCK_DUARTION"></a>
+
+Initiator time lock duration is 48 hours in seconds
+
+
+<pre><code><b>const</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_INITIATOR_TIME_LOCK_DUARTION">INITIATOR_TIME_LOCK_DUARTION</a>: u64 = 172800;
+</code></pre>
+
+
+
+<a id="0x1_atomic_bridge_configuration_initialize"></a>
+
+## Function `initialize`
+
+Initializes the bridge configuration with Aptos framework as the bridge operator.
+
+@param aptos_framework The signer representing the Aptos framework.
+@param refunder The address enabled to refund bridge attempts
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_initialize">initialize</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_initialize">initialize</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) {
+    <a href="system_addresses.md#0x1_system_addresses_assert_aptos_framework">system_addresses::assert_aptos_framework</a>(aptos_framework);
+    <b>let</b> bridge_config = <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> {
+        bridge_operator: <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework),
+        refunder: <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework),
+        initiator_time_lock: <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_INITIATOR_TIME_LOCK_DUARTION">INITIATOR_TIME_LOCK_DUARTION</a>,
+        counterparty_time_lock: <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_COUNTERPARTY_TIME_LOCK_DUARTION">COUNTERPARTY_TIME_LOCK_DUARTION</a>,
+    };
+    <b>move_to</b>(aptos_framework, bridge_config);
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_atomic_bridge_configuration_update_bridge_operator"></a>
+
+## Function `update_bridge_operator`
+
+Updates the bridge operator, requiring governance validation.
+
+@param aptos_framework The signer representing the Aptos framework.
+@param new_operator The new address to be set as the bridge operator.
+@abort If the current operator is the same as the new operator.
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_update_bridge_operator">update_bridge_operator</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, new_operator: <b>address</b>)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_update_bridge_operator">update_bridge_operator</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, new_operator: <b>address</b>) <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> {
+    <a href="system_addresses.md#0x1_system_addresses_assert_aptos_framework">system_addresses::assert_aptos_framework</a>(aptos_framework);
+    <b>let</b> bridge_config = <b>borrow_global_mut</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(@aptos_framework);
+    <b>let</b> old_operator = bridge_config.bridge_operator;
+    <b>assert</b>!(old_operator != new_operator, <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_EINVALID_BRIDGE_OPERATOR">EINVALID_BRIDGE_OPERATOR</a>);
+
+    bridge_config.bridge_operator = new_operator;
+
+    <a href="event.md#0x1_event_emit">event::emit</a>(
+        <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfigOperatorUpdated">BridgeConfigOperatorUpdated</a> {
+            old_operator,
+            new_operator,
+        },
+    );
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_atomic_bridge_configuration_update_refunder"></a>
+
+## Function `update_refunder`
+
+Updates the refunder, requiring governance validation.
+
+@param aptos_framework The signer representing the Aptos framework.
+@param new_refunder The new address to be set as the bridge operator.
+@abort If the current operator is the same as the new operator.
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_update_refunder">update_refunder</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, new_refunder: <b>address</b>)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_update_refunder">update_refunder</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, new_refunder: <b>address</b>) <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> {
+    <a href="system_addresses.md#0x1_system_addresses_assert_aptos_framework">system_addresses::assert_aptos_framework</a>(aptos_framework);
+    <b>let</b> bridge_config = <b>borrow_global_mut</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(@aptos_framework);
+    <b>let</b> old_refunder = bridge_config.refunder;
+    <b>assert</b>!(old_refunder != new_refunder, <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_EINVALID_REFUNDER">EINVALID_REFUNDER</a>);
+
+    bridge_config.refunder = new_refunder;
+
+    <a href="event.md#0x1_event_emit">event::emit</a>(
+        <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfigRefunderUpdated">BridgeConfigRefunderUpdated</a> {
+            old_refunder,
+            new_refunder,
+        },
+    );
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_atomic_bridge_configuration_set_initiator_time_lock_duration"></a>
+
+## Function `set_initiator_time_lock_duration`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_set_initiator_time_lock_duration">set_initiator_time_lock_duration</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, time_lock: u64)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_set_initiator_time_lock_duration">set_initiator_time_lock_duration</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, time_lock: u64) <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> {
+    <a href="system_addresses.md#0x1_system_addresses_assert_aptos_framework">system_addresses::assert_aptos_framework</a>(aptos_framework);
+    <b>borrow_global_mut</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(@aptos_framework).initiator_time_lock = time_lock;
+
+    <a href="event.md#0x1_event_emit">event::emit</a>(
+        <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_InitiatorTimeLockUpdated">InitiatorTimeLockUpdated</a> {
+            time_lock
+        },
+    );
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_atomic_bridge_configuration_set_counterparty_time_lock_duration"></a>
+
+## Function `set_counterparty_time_lock_duration`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_set_counterparty_time_lock_duration">set_counterparty_time_lock_duration</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, time_lock: u64)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_set_counterparty_time_lock_duration">set_counterparty_time_lock_duration</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, time_lock: u64) <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> {
+    <a href="system_addresses.md#0x1_system_addresses_assert_aptos_framework">system_addresses::assert_aptos_framework</a>(aptos_framework);
+    <b>borrow_global_mut</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(@aptos_framework).counterparty_time_lock = time_lock;
+
+    <a href="event.md#0x1_event_emit">event::emit</a>(
+        <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_CounterpartyTimeLockUpdated">CounterpartyTimeLockUpdated</a> {
+            time_lock
+        },
+    );
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_atomic_bridge_configuration_initiator_timelock_duration"></a>
+
+## Function `initiator_timelock_duration`
+
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_initiator_timelock_duration">initiator_timelock_duration</a>(): u64
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_initiator_timelock_duration">initiator_timelock_duration</a>() : u64 <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> {
+    <b>borrow_global</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(@aptos_framework).initiator_time_lock
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_atomic_bridge_configuration_counterparty_timelock_duration"></a>
+
+## Function `counterparty_timelock_duration`
+
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_counterparty_timelock_duration">counterparty_timelock_duration</a>(): u64
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_counterparty_timelock_duration">counterparty_timelock_duration</a>() : u64 <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> {
+    <b>borrow_global</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(@aptos_framework).counterparty_time_lock
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_atomic_bridge_configuration_bridge_operator"></a>
+
+## Function `bridge_operator`
+
+Retrieves the address of the current bridge operator.
+
+@return The address of the current bridge operator.
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_bridge_operator">bridge_operator</a>(): <b>address</b>
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_bridge_operator">bridge_operator</a>(): <b>address</b> <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> {
+    <b>borrow_global_mut</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(@aptos_framework).bridge_operator
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_atomic_bridge_configuration_refunder"></a>
+
+## Function `refunder`
+
+Retrieves the address of the current refunder.
+
+@return The address of the current bridge operator.
+
+
+<pre><code>#[view]
+<b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_refunder">refunder</a>(): <b>address</b>
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_refunder">refunder</a>(): <b>address</b> <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> {
+    <b>borrow_global_mut</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(@aptos_framework).refunder
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_atomic_bridge_configuration_assert_is_caller_operator"></a>
+
+## Function `assert_is_caller_operator`
+
+Asserts that the caller is the current bridge operator.
+
+@param caller The signer whose authority is being checked.
+@abort If the caller is not the current bridge operator.
+
+
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_assert_is_caller_operator">assert_is_caller_operator</a>(caller: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_assert_is_caller_operator">assert_is_caller_operator</a>(caller: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> {
+    <b>assert</b>!(<b>borrow_global</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(@aptos_framework).bridge_operator == <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(caller), <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_EINVALID_BRIDGE_OPERATOR">EINVALID_BRIDGE_OPERATOR</a>);
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_atomic_bridge_configuration_assert_is_caller_refunder"></a>
+
+## Function `assert_is_caller_refunder`
+
+Asserts that the caller is the current refunder.
+
+@param caller The signer whose authority is being checked.
+@abort If the caller is not the current refunder.
+
+
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_assert_is_caller_refunder">assert_is_caller_refunder</a>(caller: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_assert_is_caller_refunder">assert_is_caller_refunder</a>(caller: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> {
+    <b>assert</b>!(<b>borrow_global</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(@aptos_framework).refunder == <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(caller), <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_EINVALID_REFUNDER">EINVALID_REFUNDER</a>);
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="@Specification_1"></a>
+
+## Specification
+
+
+<a id="@Specification_1_initialize"></a>
+
+### Function `initialize`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_initialize">initialize</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>)
+</code></pre>
+
+
+
+
+<pre><code><b>aborts_if</b> !<a href="system_addresses.md#0x1_system_addresses_is_aptos_framework_address">system_addresses::is_aptos_framework_address</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework));
+<b>aborts_if</b> <b>exists</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework));
+<b>ensures</b> <b>global</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework)).bridge_operator == <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework);
+<b>ensures</b> <b>global</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework)).refunder == <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework);
+</code></pre>
+
+
+
+<a id="@Specification_1_update_bridge_operator"></a>
+
+### Function `update_bridge_operator`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_update_bridge_operator">update_bridge_operator</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, new_operator: <b>address</b>)
+</code></pre>
+
+
+
+
+<pre><code><b>aborts_if</b> !<a href="system_addresses.md#0x1_system_addresses_is_aptos_framework_address">system_addresses::is_aptos_framework_address</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework));
+<b>aborts_if</b> !<b>exists</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework));
+<b>aborts_if</b> <b>global</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework)).bridge_operator == new_operator;
+<b>ensures</b> <b>global</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework)).bridge_operator == new_operator;
+</code></pre>
+
+
+
+<a id="@Specification_1_update_refunder"></a>
+
+### Function `update_refunder`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_update_refunder">update_refunder</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, new_refunder: <b>address</b>)
+</code></pre>
+
+
+
+
+<pre><code><b>aborts_if</b> !<a href="system_addresses.md#0x1_system_addresses_is_aptos_framework_address">system_addresses::is_aptos_framework_address</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework));
+<b>aborts_if</b> !<b>exists</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework));
+<b>aborts_if</b> <b>global</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework)).refunder == new_refunder;
+<b>ensures</b> <b>global</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework)).refunder == new_refunder;
+</code></pre>
+
+
+
 <a id="0x1_atomic_bridge_store"></a>
 
 # Module `0x1::atomic_bridge_store`
@@ -313,6 +970,7 @@ Checks if an Ethereum address conforms to the EIP-55 checksum standard.
 
 
 <pre><code><b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/hash.md#0x1_aptos_hash">0x1::aptos_hash</a>;
+<b>use</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration">0x1::atomic_bridge_configuration</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/bcs.md#0x1_bcs">0x1::bcs</a>;
 <b>use</b> <a href="atomic_bridge.md#0x1_ethereum">0x1::ethereum</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features">0x1::features</a>;
@@ -1176,7 +1834,7 @@ Cancels a bridge transfer if it is pending and the time lock has expired.
 @abort If the bridge transfer details are not found or if the cancellation conditions in <code>cancel_details</code> fail.
 
 
-<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_store_cancel_transfer">cancel_transfer</a>&lt;Initiator: <b>copy</b>, store, Recipient: store&gt;(bridge_transfer_id: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): (Initiator, u64)
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_store_cancel_transfer">cancel_transfer</a>&lt;Initiator: <b>copy</b>, store, Recipient: store&gt;(caller: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, bridge_transfer_id: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): (Initiator, u64)
 </code></pre>
 
 
@@ -1185,8 +1843,9 @@ Cancels a bridge transfer if it is pending and the time lock has expired.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_store_cancel_transfer">cancel_transfer</a>&lt;Initiator: store + <b>copy</b>, Recipient: store&gt;(bridge_transfer_id: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) : (Initiator, u64) <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_store_SmartTableWrapper">SmartTableWrapper</a> {
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_store_cancel_transfer">cancel_transfer</a>&lt;Initiator: store + <b>copy</b>, Recipient: store&gt;(caller: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, bridge_transfer_id: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) : (Initiator, u64) <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_store_SmartTableWrapper">SmartTableWrapper</a> {
     <b>assert</b>!(<a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features_abort_atomic_bridge_enabled">features::abort_atomic_bridge_enabled</a>(), <a href="atomic_bridge.md#0x1_atomic_bridge_store_EATOMIC_BRIDGE_NOT_ENABLED">EATOMIC_BRIDGE_NOT_ENABLED</a>);
+    <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_assert_is_caller_refunder">atomic_bridge_configuration::assert_is_caller_refunder</a>(caller);
 
     <b>let</b> <a href="../../aptos-stdlib/doc/table.md#0x1_table">table</a> = <b>borrow_global_mut</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_store_SmartTableWrapper">SmartTableWrapper</a>&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, <a href="atomic_bridge.md#0x1_atomic_bridge_store_BridgeTransferDetails">BridgeTransferDetails</a>&lt;Initiator, Recipient&gt;&gt;&gt;(@aptos_framework);
 
@@ -1598,488 +2257,6 @@ If the sum of <code><a href="atomic_bridge.md#0x1_atomic_bridge_store_now">now</
 
 
 <pre><code><b>include</b> <a href="atomic_bridge.md#0x1_atomic_bridge_store_AbortBridgetTransferDetailsAbortsIf">AbortBridgetTransferDetailsAbortsIf</a>&lt;Initiator, Recipient&gt;;
-</code></pre>
-
-
-
-<a id="0x1_atomic_bridge_configuration"></a>
-
-# Module `0x1::atomic_bridge_configuration`
-
-
-
--  [Resource `BridgeConfig`](#0x1_atomic_bridge_configuration_BridgeConfig)
--  [Struct `BridgeConfigOperatorUpdated`](#0x1_atomic_bridge_configuration_BridgeConfigOperatorUpdated)
--  [Struct `InitiatorTimeLockUpdated`](#0x1_atomic_bridge_configuration_InitiatorTimeLockUpdated)
--  [Struct `CounterpartyTimeLockUpdated`](#0x1_atomic_bridge_configuration_CounterpartyTimeLockUpdated)
--  [Constants](#@Constants_0)
--  [Function `initialize`](#0x1_atomic_bridge_configuration_initialize)
--  [Function `update_bridge_operator`](#0x1_atomic_bridge_configuration_update_bridge_operator)
--  [Function `set_initiator_time_lock_duration`](#0x1_atomic_bridge_configuration_set_initiator_time_lock_duration)
--  [Function `set_counterparty_time_lock_duration`](#0x1_atomic_bridge_configuration_set_counterparty_time_lock_duration)
--  [Function `initiator_timelock_duration`](#0x1_atomic_bridge_configuration_initiator_timelock_duration)
--  [Function `counterparty_timelock_duration`](#0x1_atomic_bridge_configuration_counterparty_timelock_duration)
--  [Function `bridge_operator`](#0x1_atomic_bridge_configuration_bridge_operator)
--  [Function `assert_is_caller_operator`](#0x1_atomic_bridge_configuration_assert_is_caller_operator)
--  [Specification](#@Specification_1)
-    -  [Function `initialize`](#@Specification_1_initialize)
-    -  [Function `update_bridge_operator`](#@Specification_1_update_bridge_operator)
-
-
-<pre><code><b>use</b> <a href="event.md#0x1_event">0x1::event</a>;
-<b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">0x1::signer</a>;
-<b>use</b> <a href="system_addresses.md#0x1_system_addresses">0x1::system_addresses</a>;
-</code></pre>
-
-
-
-<a id="0x1_atomic_bridge_configuration_BridgeConfig"></a>
-
-## Resource `BridgeConfig`
-
-
-
-<pre><code><b>struct</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> <b>has</b> key
-</code></pre>
-
-
-
-<details>
-<summary>Fields</summary>
-
-
-<dl>
-<dt>
-<code>bridge_operator: <b>address</b></code>
-</dt>
-<dd>
-
-</dd>
-<dt>
-<code>initiator_time_lock: u64</code>
-</dt>
-<dd>
-
-</dd>
-<dt>
-<code>counterparty_time_lock: u64</code>
-</dt>
-<dd>
-
-</dd>
-</dl>
-
-
-</details>
-
-<a id="0x1_atomic_bridge_configuration_BridgeConfigOperatorUpdated"></a>
-
-## Struct `BridgeConfigOperatorUpdated`
-
-Event emitted when the bridge operator is updated.
-
-
-<pre><code>#[<a href="event.md#0x1_event">event</a>]
-<b>struct</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfigOperatorUpdated">BridgeConfigOperatorUpdated</a> <b>has</b> drop, store
-</code></pre>
-
-
-
-<details>
-<summary>Fields</summary>
-
-
-<dl>
-<dt>
-<code>old_operator: <b>address</b></code>
-</dt>
-<dd>
-
-</dd>
-<dt>
-<code>new_operator: <b>address</b></code>
-</dt>
-<dd>
-
-</dd>
-</dl>
-
-
-</details>
-
-<a id="0x1_atomic_bridge_configuration_InitiatorTimeLockUpdated"></a>
-
-## Struct `InitiatorTimeLockUpdated`
-
-Event emitted when the initiator time lock has been updated.
-
-
-<pre><code>#[<a href="event.md#0x1_event">event</a>]
-<b>struct</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_InitiatorTimeLockUpdated">InitiatorTimeLockUpdated</a> <b>has</b> drop, store
-</code></pre>
-
-
-
-<details>
-<summary>Fields</summary>
-
-
-<dl>
-<dt>
-<code>time_lock: u64</code>
-</dt>
-<dd>
-
-</dd>
-</dl>
-
-
-</details>
-
-<a id="0x1_atomic_bridge_configuration_CounterpartyTimeLockUpdated"></a>
-
-## Struct `CounterpartyTimeLockUpdated`
-
-Event emitted when the initiator time lock has been updated.
-
-
-<pre><code>#[<a href="event.md#0x1_event">event</a>]
-<b>struct</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_CounterpartyTimeLockUpdated">CounterpartyTimeLockUpdated</a> <b>has</b> drop, store
-</code></pre>
-
-
-
-<details>
-<summary>Fields</summary>
-
-
-<dl>
-<dt>
-<code>time_lock: u64</code>
-</dt>
-<dd>
-
-</dd>
-</dl>
-
-
-</details>
-
-<a id="@Constants_0"></a>
-
-## Constants
-
-
-<a id="0x1_atomic_bridge_configuration_COUNTERPARTY_TIME_LOCK_DUARTION"></a>
-
-Counterparty time lock duration is 24 hours in seconds
-
-
-<pre><code><b>const</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_COUNTERPARTY_TIME_LOCK_DUARTION">COUNTERPARTY_TIME_LOCK_DUARTION</a>: u64 = 86400;
-</code></pre>
-
-
-
-<a id="0x1_atomic_bridge_configuration_EINVALID_BRIDGE_OPERATOR"></a>
-
-Error code for invalid bridge operator
-
-
-<pre><code><b>const</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_EINVALID_BRIDGE_OPERATOR">EINVALID_BRIDGE_OPERATOR</a>: u64 = 1;
-</code></pre>
-
-
-
-<a id="0x1_atomic_bridge_configuration_INITIATOR_TIME_LOCK_DUARTION"></a>
-
-Initiator time lock duration is 48 hours in seconds
-
-
-<pre><code><b>const</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_INITIATOR_TIME_LOCK_DUARTION">INITIATOR_TIME_LOCK_DUARTION</a>: u64 = 172800;
-</code></pre>
-
-
-
-<a id="0x1_atomic_bridge_configuration_initialize"></a>
-
-## Function `initialize`
-
-Initializes the bridge configuration with Aptos framework as the bridge operator.
-
-@param aptos_framework The signer representing the Aptos framework.
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_initialize">initialize</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>)
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_initialize">initialize</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) {
-    <a href="system_addresses.md#0x1_system_addresses_assert_aptos_framework">system_addresses::assert_aptos_framework</a>(aptos_framework);
-    <b>let</b> bridge_config = <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> {
-        bridge_operator: <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework),
-        initiator_time_lock: <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_INITIATOR_TIME_LOCK_DUARTION">INITIATOR_TIME_LOCK_DUARTION</a>,
-        counterparty_time_lock: <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_COUNTERPARTY_TIME_LOCK_DUARTION">COUNTERPARTY_TIME_LOCK_DUARTION</a>,
-    };
-    <b>move_to</b>(aptos_framework, bridge_config);
-}
-</code></pre>
-
-
-
-</details>
-
-<a id="0x1_atomic_bridge_configuration_update_bridge_operator"></a>
-
-## Function `update_bridge_operator`
-
-Updates the bridge operator, requiring governance validation.
-
-@param aptos_framework The signer representing the Aptos framework.
-@param new_operator The new address to be set as the bridge operator.
-@abort If the current operator is the same as the new operator.
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_update_bridge_operator">update_bridge_operator</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, new_operator: <b>address</b>)
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_update_bridge_operator">update_bridge_operator</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, new_operator: <b>address</b>) <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> {
-    <a href="system_addresses.md#0x1_system_addresses_assert_aptos_framework">system_addresses::assert_aptos_framework</a>(aptos_framework);
-    <b>let</b> bridge_config = <b>borrow_global_mut</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(@aptos_framework);
-    <b>let</b> old_operator = bridge_config.bridge_operator;
-    <b>assert</b>!(old_operator != new_operator, <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_EINVALID_BRIDGE_OPERATOR">EINVALID_BRIDGE_OPERATOR</a>);
-
-    bridge_config.bridge_operator = new_operator;
-
-    <a href="event.md#0x1_event_emit">event::emit</a>(
-        <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfigOperatorUpdated">BridgeConfigOperatorUpdated</a> {
-            old_operator,
-            new_operator,
-        },
-    );
-}
-</code></pre>
-
-
-
-</details>
-
-<a id="0x1_atomic_bridge_configuration_set_initiator_time_lock_duration"></a>
-
-## Function `set_initiator_time_lock_duration`
-
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_set_initiator_time_lock_duration">set_initiator_time_lock_duration</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, time_lock: u64)
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_set_initiator_time_lock_duration">set_initiator_time_lock_duration</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, time_lock: u64) <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> {
-    <a href="system_addresses.md#0x1_system_addresses_assert_aptos_framework">system_addresses::assert_aptos_framework</a>(aptos_framework);
-    <b>borrow_global_mut</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(@aptos_framework).initiator_time_lock = time_lock;
-
-    <a href="event.md#0x1_event_emit">event::emit</a>(
-        <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_InitiatorTimeLockUpdated">InitiatorTimeLockUpdated</a> {
-            time_lock
-        },
-    );
-}
-</code></pre>
-
-
-
-</details>
-
-<a id="0x1_atomic_bridge_configuration_set_counterparty_time_lock_duration"></a>
-
-## Function `set_counterparty_time_lock_duration`
-
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_set_counterparty_time_lock_duration">set_counterparty_time_lock_duration</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, time_lock: u64)
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_set_counterparty_time_lock_duration">set_counterparty_time_lock_duration</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, time_lock: u64) <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> {
-    <a href="system_addresses.md#0x1_system_addresses_assert_aptos_framework">system_addresses::assert_aptos_framework</a>(aptos_framework);
-    <b>borrow_global_mut</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(@aptos_framework).counterparty_time_lock = time_lock;
-
-    <a href="event.md#0x1_event_emit">event::emit</a>(
-        <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_CounterpartyTimeLockUpdated">CounterpartyTimeLockUpdated</a> {
-            time_lock
-        },
-    );
-}
-</code></pre>
-
-
-
-</details>
-
-<a id="0x1_atomic_bridge_configuration_initiator_timelock_duration"></a>
-
-## Function `initiator_timelock_duration`
-
-
-
-<pre><code>#[view]
-<b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_initiator_timelock_duration">initiator_timelock_duration</a>(): u64
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_initiator_timelock_duration">initiator_timelock_duration</a>() : u64 <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> {
-    <b>borrow_global</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(@aptos_framework).initiator_time_lock
-}
-</code></pre>
-
-
-
-</details>
-
-<a id="0x1_atomic_bridge_configuration_counterparty_timelock_duration"></a>
-
-## Function `counterparty_timelock_duration`
-
-
-
-<pre><code>#[view]
-<b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_counterparty_timelock_duration">counterparty_timelock_duration</a>(): u64
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_counterparty_timelock_duration">counterparty_timelock_duration</a>() : u64 <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> {
-    <b>borrow_global</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(@aptos_framework).counterparty_time_lock
-}
-</code></pre>
-
-
-
-</details>
-
-<a id="0x1_atomic_bridge_configuration_bridge_operator"></a>
-
-## Function `bridge_operator`
-
-Retrieves the address of the current bridge operator.
-
-@return The address of the current bridge operator.
-
-
-<pre><code>#[view]
-<b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_bridge_operator">bridge_operator</a>(): <b>address</b>
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_bridge_operator">bridge_operator</a>(): <b>address</b> <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> {
-    <b>borrow_global_mut</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(@aptos_framework).bridge_operator
-}
-</code></pre>
-
-
-
-</details>
-
-<a id="0x1_atomic_bridge_configuration_assert_is_caller_operator"></a>
-
-## Function `assert_is_caller_operator`
-
-Asserts that the caller is the current bridge operator.
-
-@param caller The signer whose authority is being checked.
-@abort If the caller is not the current bridge operator.
-
-
-<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_assert_is_caller_operator">assert_is_caller_operator</a>(caller: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>)
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_assert_is_caller_operator">assert_is_caller_operator</a>(caller: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) <b>acquires</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a> {
-    <b>assert</b>!(<b>borrow_global</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(@aptos_framework).bridge_operator == <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(caller), <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_EINVALID_BRIDGE_OPERATOR">EINVALID_BRIDGE_OPERATOR</a>);
-}
-</code></pre>
-
-
-
-</details>
-
-<a id="@Specification_1"></a>
-
-## Specification
-
-
-<a id="@Specification_1_initialize"></a>
-
-### Function `initialize`
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_initialize">initialize</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>)
-</code></pre>
-
-
-
-
-<pre><code><b>aborts_if</b> !<a href="system_addresses.md#0x1_system_addresses_is_aptos_framework_address">system_addresses::is_aptos_framework_address</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework));
-<b>aborts_if</b> <b>exists</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework));
-<b>ensures</b> <b>global</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework)).bridge_operator == <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework);
-</code></pre>
-
-
-
-<a id="@Specification_1_update_bridge_operator"></a>
-
-### Function `update_bridge_operator`
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_update_bridge_operator">update_bridge_operator</a>(aptos_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, new_operator: <b>address</b>)
-</code></pre>
-
-
-
-
-<pre><code><b>aborts_if</b> !<a href="system_addresses.md#0x1_system_addresses_is_aptos_framework_address">system_addresses::is_aptos_framework_address</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework));
-<b>aborts_if</b> !<b>exists</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework));
-<b>aborts_if</b> <b>global</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework)).bridge_operator == new_operator;
-<b>ensures</b> <b>global</b>&lt;<a href="atomic_bridge.md#0x1_atomic_bridge_configuration_BridgeConfig">BridgeConfig</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework)).bridge_operator == new_operator;
 </code></pre>
 
 
@@ -2676,9 +2853,7 @@ Aborts a bridge transfer if the time lock has expired.
     caller: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
     bridge_transfer_id: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
 ) {
-    <a href="atomic_bridge.md#0x1_atomic_bridge_configuration_assert_is_caller_operator">atomic_bridge_configuration::assert_is_caller_operator</a>(caller);
-
-    <a href="atomic_bridge.md#0x1_atomic_bridge_store_cancel_transfer">atomic_bridge_store::cancel_transfer</a>&lt;EthereumAddress, <b>address</b>&gt;(bridge_transfer_id);
+    <a href="atomic_bridge.md#0x1_atomic_bridge_store_cancel_transfer">atomic_bridge_store::cancel_transfer</a>&lt;EthereumAddress, <b>address</b>&gt;(caller, bridge_transfer_id);
 
     <a href="event.md#0x1_event_emit">event::emit</a>(
         <a href="atomic_bridge.md#0x1_atomic_bridge_counterparty_BridgeTransferCancelledEvent">BridgeTransferCancelledEvent</a> {
@@ -2936,10 +3111,10 @@ Bridge operator can complete the transfer
 
 ## Function `refund_bridge_transfer`
 
-Anyone can refund the transfer on the source chain once time lock has passed
+Refund the transfer on the source chain once time lock has passed, permissioned to refunder role.
 
 
-<pre><code><b>public</b> entry <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_initiator_refund_bridge_transfer">refund_bridge_transfer</a>(_caller: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, bridge_transfer_id: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
+<pre><code><b>public</b> entry <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_initiator_refund_bridge_transfer">refund_bridge_transfer</a>(caller: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, bridge_transfer_id: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
 </code></pre>
 
 
@@ -2949,10 +3124,10 @@ Anyone can refund the transfer on the source chain once time lock has passed
 
 
 <pre><code><b>public</b> entry <b>fun</b> <a href="atomic_bridge.md#0x1_atomic_bridge_initiator_refund_bridge_transfer">refund_bridge_transfer</a>(
-    _caller: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
+    caller: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>,
     bridge_transfer_id: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;,
 ) {
-    <b>let</b> (receiver, amount) = <a href="atomic_bridge.md#0x1_atomic_bridge_store_cancel_transfer">atomic_bridge_store::cancel_transfer</a>&lt;<b>address</b>, EthereumAddress&gt;(bridge_transfer_id);
+    <b>let</b> (receiver, amount) = <a href="atomic_bridge.md#0x1_atomic_bridge_store_cancel_transfer">atomic_bridge_store::cancel_transfer</a>&lt;<b>address</b>, EthereumAddress&gt;(caller, bridge_transfer_id);
     <a href="atomic_bridge.md#0x1_atomic_bridge_mint">atomic_bridge::mint</a>(receiver, amount);
 
     <a href="event.md#0x1_event_emit">event::emit</a>(

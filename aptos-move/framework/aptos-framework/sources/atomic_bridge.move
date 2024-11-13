@@ -441,8 +441,7 @@ module aptos_framework::atomic_bridge_initiator {
     #[test(aptos_framework = @aptos_framework, sender = @0xdaff)]
     fun test_refund_bridge_transfer(
         sender: &signer,
-        aptos_framework: &signer,
-        refunder: &signer
+        aptos_framework: &signer
     ) {
         let sender_address = signer::address_of(sender);
         // Create an account for our recipient
@@ -472,7 +471,7 @@ module aptos_framework::atomic_bridge_initiator {
 
         timestamp::fast_forward_seconds(atomic_bridge_configuration::initiator_timelock_duration() + 1);
 
-        refund_bridge_transfer(refunder, bridge_transfer_id);
+        refund_bridge_transfer(aptos_framework, bridge_transfer_id);
 
         assert!(coin::balance<AptosCoin>(sender_address) == account_balance, 0);
 
@@ -488,8 +487,7 @@ module aptos_framework::atomic_bridge_initiator {
     #[expected_failure(abort_code = 0x4, location = 0x1::atomic_bridge_store)] //ENOT_EXPIRED
     fun test_refund_bridge_transfer_before_timelock(
         sender: &signer,
-        aptos_framework: &signer,
-        refunder: &signer
+        aptos_framework: &signer
     ) {
         let sender_address = signer::address_of(sender);
         // Create an account for our recipient
@@ -517,7 +515,7 @@ module aptos_framework::atomic_bridge_initiator {
 
         let bridge_transfer_id = vector::borrow(&event::emitted_events<BridgeTransferInitiatedEvent>(), 0).bridge_transfer_id;
 
-        refund_bridge_transfer(refunder, bridge_transfer_id);
+        refund_bridge_transfer(aptos_framework, bridge_transfer_id);
     }
 }
 
@@ -884,7 +882,7 @@ module aptos_framework::atomic_bridge_store {
 
 
     #[test(aptos_framework = @aptos_framework)]
-    public fun test_get_bridge_transfer_details_initiator(aptos_framework: &signer, refunder: &signer) acquires SmartTableWrapper {
+    public fun test_get_bridge_transfer_details_initiator(aptos_framework: &signer) acquires SmartTableWrapper {
         
         timestamp::set_time_has_started_for_testing(aptos_framework);
         features::change_feature_flags_for_testing(
@@ -1158,14 +1156,14 @@ module aptos_framework::atomic_bridge_configuration {
 
     #[test(aptos_framework = @aptos_framework)]
     /// Tests initialization of the bridge configuration.
-    fun test_initialization(aptos_framework: &signer, refunder: &signer) {
+    fun test_initialization(aptos_framework: &signer) {
         initialize(aptos_framework);
         assert!(exists<BridgeConfig>(@aptos_framework), 0);
     }
 
     #[test(aptos_framework = @aptos_framework, new_operator = @0xcafe)]
     /// Tests updating the bridge operator and emitting the corresponding event.
-    fun test_update_bridge_operator(aptos_framework: &signer, refunder: &signer, new_operator: address) acquires BridgeConfig {
+    fun test_update_bridge_operator(aptos_framework: &signer, new_operator: address) acquires BridgeConfig {
         initialize(aptos_framework);
         update_bridge_operator(aptos_framework, new_operator);
 
@@ -1183,14 +1181,14 @@ module aptos_framework::atomic_bridge_configuration {
     #[test(aptos_framework = @aptos_framework, bad = @0xbad, new_operator = @0xcafe)]
     #[expected_failure(abort_code = 0x50003, location = 0x1::system_addresses)]
     /// Tests that updating the bridge operator with an invalid signer fails.
-    fun test_failing_update_bridge_operator(aptos_framework: &signer, refunder: &signer, bad: &signer, new_operator: address) acquires BridgeConfig {
+    fun test_failing_update_bridge_operator(aptos_framework: &signer, bad: &signer, new_operator: address) acquires BridgeConfig {
         initialize(aptos_framework);
         update_bridge_operator(bad, new_operator);
     }
 
     #[test(aptos_framework = @aptos_framework)]
     /// Tests that the correct operator is validated successfully.
-    fun test_is_valid_operator(aptos_framework: &signer, refunder: &signer) acquires BridgeConfig {
+    fun test_is_valid_operator(aptos_framework: &signer) acquires BridgeConfig {
         initialize(aptos_framework);
         assert_is_caller_operator(aptos_framework);
     }
@@ -1198,14 +1196,14 @@ module aptos_framework::atomic_bridge_configuration {
     #[test(aptos_framework = @aptos_framework, bad = @0xbad)]
     #[expected_failure(abort_code = 0x1, location = 0x1::atomic_bridge_configuration)]
     /// Tests that an incorrect operator is not validated and results in an abort.
-    fun test_is_not_valid_operator(aptos_framework: &signer, bad: &signer, refunder: &signer) acquires BridgeConfig {
+    fun test_is_not_valid_operator(aptos_framework: &signer, bad: &signer) acquires BridgeConfig {
         initialize(aptos_framework);
         assert_is_caller_operator(bad);
     }
 
     #[test(aptos_framework = @aptos_framework)]
     /// Tests we can update the initiator time lock
-    fun test_update_initiator_time_lock(aptos_framework: &signer, refunder: &signer) acquires BridgeConfig {
+    fun test_update_initiator_time_lock(aptos_framework: &signer) acquires BridgeConfig {
         
 
         initialize(aptos_framework);
@@ -1215,7 +1213,7 @@ module aptos_framework::atomic_bridge_configuration {
 
     #[test(aptos_framework = @aptos_framework)]
     /// Tests we can update the initiator time lock
-    fun test_update_counterparty_time_lock(aptos_framework: &signer,  refunder: &signer) acquires BridgeConfig {
+    fun test_update_counterparty_time_lock(aptos_framework: &signer) acquires BridgeConfig {
         initialize(aptos_framework);
         set_counterparty_time_lock_duration(aptos_framework, 1);
         assert!(counterparty_timelock_duration() == 1, 0);
@@ -1224,7 +1222,7 @@ module aptos_framework::atomic_bridge_configuration {
     #[test(aptos_framework = @aptos_framework, bad = @0xbad)]
     #[expected_failure(abort_code = 0x50003, location = 0x1::system_addresses)]
     /// Tests that an incorrect signer cannot update the initiator time lock
-    fun test_not_able_to_set_initiator_time_lock(aptos_framework: &signer, bad: &signer, refunder: &signer) acquires BridgeConfig {
+    fun test_not_able_to_set_initiator_time_lock(aptos_framework: &signer, bad: &signer) acquires BridgeConfig {
         
 
         initialize(aptos_framework);
@@ -1234,7 +1232,7 @@ module aptos_framework::atomic_bridge_configuration {
     #[test(aptos_framework = @aptos_framework, bad = @0xbad)]
     #[expected_failure(abort_code = 0x50003, location = 0x1::system_addresses)]
     /// Tests that an incorrect signer cannot update the counterparty time lock
-    fun test_not_able_to_set_counterparty_time_lock(aptos_framework: &signer, bad: &signer, refunder: &signer) acquires BridgeConfig {
+    fun test_not_able_to_set_counterparty_time_lock(aptos_framework: &signer, bad: &signer) acquires BridgeConfig {
         initialize(aptos_framework);
         set_counterparty_time_lock_duration(bad, 1);
     }
@@ -1281,8 +1279,8 @@ module aptos_framework::atomic_bridge {
     /// Initializes the atomic bridge by setting up necessary configurations.
     ///
     /// @param aptos_framework The signer representing the Aptos framework.
-    public fun initialize(aptos_framework: &signer, refunder: address) {
-        atomic_bridge_configuration::initialize(aptos_framework, refunder);
+    public fun initialize(aptos_framework: &signer) {
+        atomic_bridge_configuration::initialize(aptos_framework);
         atomic_bridge_store::initialize(aptos_framework);
     }
 
@@ -1298,7 +1296,7 @@ module aptos_framework::atomic_bridge {
             vector[features::get_atomic_bridge_feature()],
             vector[]
         );
-        initialize(aptos_framework, @0xbeaf);
+        initialize(aptos_framework);
 
         let (burn_cap, mint_cap) = aptos_coin::initialize_for_test(aptos_framework);
 
@@ -1520,8 +1518,8 @@ module aptos_framework::atomic_bridge_counterparty {
             ), 0);
     }
 
-    #[test(aptos_framework = @aptos_framework, refunder = @0xbeaf)]
-    fun test_abort_transfer_of_assets(aptos_framework: &signer, refunder: &signer) {
+    #[test(aptos_framework = @aptos_framework)]
+    fun test_abort_transfer_of_assets(aptos_framework: &signer) {
         initialize_for_test(aptos_framework);
 
         let initiator = valid_eip55();
@@ -1538,7 +1536,7 @@ module aptos_framework::atomic_bridge_counterparty {
             amount);
 
         timestamp::fast_forward_seconds(atomic_bridge_configuration::counterparty_timelock_duration() + 1);
-        abort_bridge_transfer(refunder, bridge_transfer_id);
+        abort_bridge_transfer(aptos_framework, bridge_transfer_id);
 
         assert!(
             event::was_event_emitted<BridgeTransferCancelledEvent>(
