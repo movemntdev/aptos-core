@@ -45,4 +45,4 @@ This Code of Conduct is adapted from the [Contributor Covenant][https://www.cont
 For answers to common questions about this code of conduct, see https://www.contributor-covenant.org/faq
 
 [homepage](https://www.contributor-covenant.org)
-[original_coc](https://www.contributor-covenant.org/version/1/4/code-of-conduct.html)
+[original_doc](https://www.contributor-covenant.org/version/1/4/code-of-conduct.html) .
