@@ -6,7 +6,7 @@ Secure coding guidance is provided in the [Aptos Rust Secure Coding Guidelines](
 ## Code formatting & Code analysis
 
 All code formatting is enforced with [rustfmt](https://github.com/rust-lang/rustfmt) with a project-specific configuration. A wrapper script is provided to run rustfmt and Clippy with the correct configuration.
-The `--check` flag can be used to check if the code is formatted correctly.
+The `--check` flag can be used to check if the code is formatted correctly:
 
 ```
 ./scripts/rust_lint.sh
@@ -18,7 +18,7 @@ The `--check` flag can be used to check if the code is formatted correctly.
 
 Any public fields, functions, and methods should be documented with [Rustdoc](https://doc.rust-lang.org/book/ch14-02-publishing-to-crates-io.html#making-useful-documentation-comments).
 
-Please follow the conventions as detailed below for modules, structs, enums, and functions. The _single line_ is used as a preview when navigating Rustdoc. As an example, see the 'Structs' and 'Enums' sections in the [collections](https://doc.rust-lang.org/std/collections/index.html) Rustdoc.
+Please follow the conventions as detailed below for modules, structs, enums, and functions. The _single line_ is used as a preview when navigating Rustdoc. As an example, see the 'Structs' and 'Enums' sections in the [collections](https://doc.rust-lang.org/std/collections/index.html) Rustdoc:
 
 ```
 /// [Single line] One line summary description
@@ -44,12 +44,12 @@ struct Point {
 
 ### Terminology
 
-The Aptos codebase uses inclusive terminology (similar to other projects such as [the Linux kernel](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=49decddd39e5f6132ccd7d9fdc3d7c470b0061bb)). The terms below are recommended when appropriate.
+The Aptos codebase uses inclusive terminology (similar to other projects such as [the Linux kernel](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=49decddd39e5f6132ccd7d9fdc3d7c470b0061bb)). The terms below are recommended when appropriate:
 
-- allowlist - a set of entities allowed access
-- blocklist - a set of entities that are blocked from access
-- primary/leader/main - a primary entity
-- secondary/replica/follower - a secondary entity
+- allowlist - a set of entities allowed acces.
+- blocklist - a set of entities that are blocked from access.
+- primary/leader/main - a primary entity.
+- secondary/replica/follower - a secondary entity.
 
 ### Constants and fields
 
@@ -62,16 +62,16 @@ Document the following for each function:
 - The action the method performs - “This method _adds_ a new transaction to the mempool.” Use _active voice_ and _present tense_ (i.e. adds/creates/checks/updates/deletes).
 - Describe how and why to use this method.
 - Any condition that must be met _before_ calling the method.
-- State conditions under which the function will `panic!()` or returns an `Error`
+- State conditions under which the function will `panic!()` or returns an `Error`.
 - Brief description of return values.
-- Any special behavior that is not obvious
+- Any special behavior that is not obvious.
 
 ### README.md for top-level directories and other major components
 
 Each major component of Aptos Core needs to have a `README.md` file. Major components are:
 
-- top-level directories (e.g. `aptos-core/network`, `aptos-core/language`)
-- the most important crates in the system (e.g. `vm-runtime`)
+- top-level directories (e.g. `aptos-core/network`, `aptos-core/language`).
+- the most important crates in the system (e.g. `vm-runtime`).
 
 This file should contain:
 
@@ -172,12 +172,12 @@ Listed below are high-level suggestions based on experience:
 
 Error handling suggestions follow the [Rust book guidance](https://doc.rust-lang.org/book/ch09-00-error-handling.html). Rust groups errors into two major categories: recoverable and unrecoverable errors. Recoverable errors should be handled with [Result](https://doc.rust-lang.org/std/result/). Our suggestions on unrecoverable errors are listed below:
 
-_Fallible functions_
+_Fallible functions_:
 
 - `duration_since_epoch()` - to obtain the Unix time, call the function provided by `aptos-infallible`.
 - `RwLock` and `Mutex` - Instead of calling `unwrap()` on the standard library implementations of these functions, use the infallible equivalent types that we provide in `aptos-infallible`.
 
-_Panic_
+_Panic_:
 
 - `unwrap()` - Unwrap should only be used for test code. For all other use cases, prefer `expect()`. The only exception is if the error message is custom-generated, in which case use `.unwrap_or_else(|| panic!("error: {}", foo))`.
 - `expect()` - Expect should be invoked when a system invariant is expected to be preserved. `expect()` is preferred over `unwrap()` and should contain a detailed error message on failure in most cases.
@@ -231,7 +231,7 @@ This is a brief and simplified mini guide of the different functions that exist 
 
 ### Logging
 
-We currently use [log](https://docs.rs/log/) for logging.
+We currently use [log](https://docs.rs/log/) for logging:
 
 - [error!](https://docs.rs/log/latest/log/macro.error.html) - Error-level messages have the highest urgency in [log](https://docs.rs/log/). An unexpected error has occurred (e.g. exceeded the maximum number of retries to complete an RPC or inability to store data to local storage).
 - [warn!](https://docs.rs/log/latest/log/macro.warn.html) - Warn-level messages help notify admins about automatically handled issues (e.g. retrying a failed network connection or receiving the same message multiple times, etc.).
@@ -275,9 +275,9 @@ A tutorial for `proptest` can be found in the [`proptest` book](https://altsysrq
 
 References:
 
-- [What is Property Based Testing?](https://hypothesis.works/articles/what-is-property-based-testing/) (includes a comparison with fuzzing)
-- [An introduction to property-based testing](https://fsharpforfunandprofit.com/posts/property-based-testing/)
-- [Choosing properties for property-based testing](https://fsharpforfunandprofit.com/posts/property-based-testing-2/)
+- [What is Property Based Testing?](https://hypothesis.works/articles/what-is-property-based-testing/) (includes a comparison with fuzzing).
+- [An introduction to property-based testing](https://fsharpforfunandprofit.com/posts/property-based-testing/).
+- [Choosing properties for property-based testing](https://fsharpforfunandprofit.com/posts/property-based-testing-2/).
 
 ### Conditional compilation of tests
 
