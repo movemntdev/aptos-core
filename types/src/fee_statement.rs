@@ -49,6 +49,33 @@ impl FeeStatement {
         }
     }
 
+    pub fn validation_only() -> Self {
+        Self {
+            // todo: ideally this would be set by governance, which means adjusting `unwrap_or_discard` to accept some kind of reference and provide it here.
+            // this is currently based on base gas: https://aptos.dev/en/network/blockchain/base-gas
+            total_charge_gas_units: std::env::var("APTOS_BASE_GAS_UNITS")
+                .unwrap_or("2_100_000".to_string())
+                .parse()
+                .unwrap_or(2_000_000),
+            execution_gas_units: std::env::var("APTOS_EXECUTION_GAS_UNITS")
+                .unwrap_or("2_000_000".to_string())
+                .parse()
+                .unwrap_or(2_000_000),
+            io_gas_units: std::env::var("APTOS_IO_GAS_UNITS")
+                .unwrap_or("100_000".to_string())
+                .parse()
+                .unwrap_or(100_000),
+            storage_fee_octas: std::env::var("APTOS_STORAGE_FEE_OCTAS")
+                .unwrap_or("0".to_string())
+                .parse()
+                .unwrap_or(0),
+            storage_fee_refund_octas: std::env::var("APTOS_STORAGE_FEE_REFUND_OCTAS")
+                .unwrap_or("0".to_string())
+                .parse()
+                .unwrap_or(0),
+        }
+    }
+
     pub fn new(
         total_charge_gas_units: u64,
         execution_gas_units: u64,
