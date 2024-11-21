@@ -249,7 +249,7 @@ module aptos_framework::native_bridge {
     }
 
 #[test(aptos_framework = @aptos_framework, sender = @0xdaff)]
-fun test_get_bridge_transfer_details(
+fun test_get_bridge_transfer_details_from_id(
     sender: &signer,
     aptos_framework: &signer,
 ) acquires BridgeEvents, Nonce {
@@ -274,7 +274,7 @@ fun test_get_bridge_transfer_details(
     ); 
 
     let (bridge_transfer_id, initiator, recipient_address, amount) =
-        native_bridge_store::get_details_from_bridge_transfer_id(expected_bridge_transfer_id);
+        native_bridge_store::get_bridge_transfer_details_from_id(expected_bridge_transfer_id);
 
     assert!(bridge_transfer_id == expected_bridge_transfer_id, 0);
     assert!(initiator == sender_address, 0);
@@ -553,7 +553,7 @@ module aptos_framework::native_bridge_store {
     /// @param bridge_transfer_id The bridge transfer ID.
     /// @return The `OutboundTransfer` details.
     /// @abort If the bridge transfer ID is not found in the table.
-    public fun get_details_from_bridge_transfer_id(bridge_transfer_id: vector<u8>): (vector<u8>, address, EthereumAddress, u64) acquires SmartTableWrapper {
+    public fun get_bridge_transfer_details_from_id(bridge_transfer_id: vector<u8>): (vector<u8>, address, EthereumAddress, u64) acquires SmartTableWrapper {
         // Borrow the SmartTableWrapper at the aptos_framework address
         let table = borrow_global<SmartTableWrapper<vector<u8>, OutboundTransfer>>(@aptos_framework);
 
