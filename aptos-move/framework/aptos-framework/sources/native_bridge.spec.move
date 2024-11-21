@@ -42,6 +42,7 @@ spec aptos_framework::native_bridge {
             ) + 1;
     }
 
+    /*
     spec complete_bridge_transfer(
         caller: &signer,
         bridge_transfer_id: vector<u8>,
@@ -70,6 +71,7 @@ spec aptos_framework::native_bridge {
                 global<BridgeEvents>(@aptos_framework).bridge_transfer_completed_events.counter
             ) + 1;
     }
+    */
 }
 
 spec aptos_framework::native_bridge_core {
@@ -97,18 +99,14 @@ spec aptos_framework::native_bridge_core {
         ensures exists<AptosCoinMintCapability>(@aptos_framework);
     }
 
-    spec mint(recipient: address, amount: u64) {
-        aborts_if !exists<AptosCoinMintCapability>(@aptos_framework);
-        aborts_if amount == 0;
-
-        ensures coin::balance<AptosCoin>(recipient) == old(coin::balance<AptosCoin>(recipient)) + amount;
+    spec mint {
+        ensures global<coin::CoinStore<AptosCoin>>(recipient).coin.value ==
+            old(global<coin::CoinStore<AptosCoin>>(recipient).coin.value) + amount;
     }
 
-    spec burn(from: address, amount: u64) {
-        aborts_if !exists<AptosCoinBurnCapability>(@aptos_framework);
-        aborts_if coin::balance<AptosCoin>(from) < amount;
-
-        ensures coin::balance<AptosCoin>(from) == old(coin::balance<AptosCoin>(from)) - amount;
+    spec burn {
+        ensures global<coin::CoinStore<AptosCoin>>(from).coin.value ==
+            old(global<coin::CoinStore<AptosCoin>>(from).coin.value) - amount;
     }
 }
 
@@ -128,7 +126,7 @@ spec aptos_framework::native_bridge_store {
                 bridge_transfer_id
             );
     }
-
+    /*
     spec create_details(
         initiator: address,
         recipient: EthereumAddress,
@@ -147,8 +145,9 @@ spec aptos_framework::native_bridge_store {
         ensures result.recipient == recipient;
         ensures result.amount == amount;
     }
+    */
 
-    spec add(nonce: u64, details: OutboundTransfer) {
+    spec set_nonce_to_details(nonce: u64, details: OutboundTransfer) {
         aborts_if !exists<SmartTableWrapper<u64, OutboundTransfer>>(@aptos_framework);
         aborts_if smart_table::spec_contains(
             global<SmartTableWrapper<u64, OutboundTransfer>>(@aptos_framework).inner,

@@ -51,10 +51,16 @@ module aptos_framework::native_bridge {
         value: u64
     }
 
-    /// Increment and get the current nonce  
+    /// Increment and get the current initiator-side nonce  
     fun increment_and_get_nonce(): u64 acquires Nonce {  
         let nonce_ref = borrow_global_mut<Nonce>(@aptos_framework);  
         nonce_ref.value = nonce_ref.value + 1;  
+        nonce_ref.value  
+    }  
+
+    /// Get the current initiator-side nonce without incrementing
+    fun get_nonce(): u64 acquires Nonce {  
+        let nonce_ref = borrow_global_mut<Nonce>(@aptos_framework);   
         nonce_ref.value  
     }  
 
@@ -94,7 +100,7 @@ module aptos_framework::native_bridge {
         let recipient_address = ethereum::ethereum_address_no_eip55(recipient);  
     
         // Increment and retrieve the nonce  
-        let nonce = increment_and_get_nonce();  
+        let nonce = increment_and_get_nonce(); 
     
         // Create bridge transfer details  
         let details = native_bridge_store::create_details(  
@@ -110,9 +116,12 @@ module aptos_framework::native_bridge {
             amount, 
             nonce
         ); 
+
+        // Add the transfer details to storage  
+        native_bridge_store::set_bid_to_details(bridge_transfer_id, details);
     
         // Add the transfer details to storage  
-        native_bridge_store::add(nonce, details);
+        native_bridge_store::set_nonce_to_details(nonce, details);
 
         // Burn the amount from the initiator  
         native_bridge_core::burn(initiator_address, amount);  
@@ -238,6 +247,40 @@ module aptos_framework::native_bridge {
             amount
         );
     }
+
+#[test(aptos_framework = @aptos_framework, sender = @0xdaff)]
+fun test_get_bridge_transfer_details(
+    sender: &signer,
+    aptos_framework: &signer,
+) acquires BridgeEvents, Nonce {
+    let sender_address = signer::address_of(sender);
+    native_bridge_core::initialize_for_test(aptos_framework);
+    initialize(aptos_framework);
+    aptos_account::create_account(sender_address);
+
+    let transfer_amount = 1000;
+    let sender_balance = transfer_amount + 100;
+    native_bridge_core::mint(sender_address, sender_balance);
+
+    let recipient = valid_eip55();
+    let nonce = get_nonce() + 1;
+    initiate_bridge_transfer(sender, recipient, transfer_amount);
+
+    let expected_bridge_transfer_id = native_bridge_store::bridge_transfer_id(
+        sender_address, 
+        ethereum::ethereum_address_no_eip55(recipient), 
+        transfer_amount, 
+        nonce
+    ); 
+
+    let (bridge_transfer_id, initiator, recipient_address, amount) =
+        native_bridge_store::get_details_from_bridge_transfer_id(expected_bridge_transfer_id);
+
+    assert!(bridge_transfer_id == expected_bridge_transfer_id, 0);
+    assert!(initiator == sender_address, 0);
+    assert!(recipient_address == ethereum::ethereum_address_no_eip55(recipient), 0);
+    assert!(amount == transfer_amount, 0);
+}
 
     #[test(aptos_framework = @aptos_framework)]
     fun test_complete_bridge_transfer(aptos_framework: &signer) acquires BridgeEvents {
@@ -374,6 +417,12 @@ module aptos_framework::native_bridge_store {
     public fun initialize(aptos_framework: &signer) {
         system_addresses::assert_aptos_framework(aptos_framework);
 
+        let ids_to_details = SmartTableWrapper<vector<u8>, OutboundTransfer> {
+            inner: smart_table::new(),
+        };
+
+        move_to(aptos_framework, ids_to_details);
+
         let nonces_to_details = SmartTableWrapper<u64, OutboundTransfer> {
             inner: smart_table::new(),
         };
@@ -423,11 +472,42 @@ module aptos_framework::native_bridge_store {
         }
     }
 
+    /// Accessor for the `amount` field of `OutboundTransfer`.
+    public(friend) fun get_amount(details: &OutboundTransfer): u64 {
+        details.amount
+    }
+
+    /// Accessor for the `initiator` field of `OutboundTransfer`.
+    public(friend) fun get_initiator(details: &OutboundTransfer): address {
+        details.initiator
+    }
+
+    /// Accessor for the `recipient` field of `OutboundTransfer`.
+    public(friend) fun get_recipient(details: &OutboundTransfer): EthereumAddress {
+        details.recipient
+    }
+
+    /// Accessor for the `bridge_transfer_id` field of `OutboundTransfer`.
+    public(friend) fun get_bridge_transfer_id(details: &OutboundTransfer): vector<u8> {
+        details.bridge_transfer_id
+    }
+
     /// Record details of an initiated transfer for quick lookup of details, mapping bridge transfer ID to transfer details 
     ///
     /// @param bridge_transfer_id Bridge transfer ID.
     /// @param details The bridge transfer details
-    public(friend) fun add(nonce: u64, details: OutboundTransfer) acquires SmartTableWrapper {
+    public(friend) fun set_bid_to_details(bridge_transfer_id: vector<u8>, details: OutboundTransfer) acquires SmartTableWrapper {
+        assert!(features::abort_native_bridge_enabled(), ENATIVE_BRIDGE_NOT_ENABLED);
+
+        let table = borrow_global_mut<SmartTableWrapper<vector<u8>, OutboundTransfer>>(@aptos_framework);
+        smart_table::add(&mut table.inner, bridge_transfer_id, details);
+    }
+
+    /// Record details of an initiated transfer for quick lookup of details, mapping nonce to transfer details 
+    ///
+    /// @param bridge_transfer_id Bridge transfer ID.
+    /// @param details The bridge transfer details
+    public(friend) fun set_nonce_to_details(nonce: u64, details: OutboundTransfer) acquires SmartTableWrapper {
         assert!(features::abort_native_bridge_enabled(), ENATIVE_BRIDGE_NOT_ENABLED);
 
         let table = borrow_global_mut<SmartTableWrapper<u64, OutboundTransfer>>(@aptos_framework);
@@ -467,6 +547,30 @@ module aptos_framework::native_bridge_store {
         keccak256(combined_bytes)
     }
     
+    #[view]
+    /// Retrieves the `OutboundTransfer` details for a given bridge transfer ID.
+    /// 
+    /// @param bridge_transfer_id The bridge transfer ID.
+    /// @return The `OutboundTransfer` details.
+    /// @abort If the bridge transfer ID is not found in the table.
+    public fun get_details_from_bridge_transfer_id(bridge_transfer_id: vector<u8>): (vector<u8>, address, EthereumAddress, u64) acquires SmartTableWrapper {
+        // Borrow the SmartTableWrapper at the aptos_framework address
+        let table = borrow_global<SmartTableWrapper<vector<u8>, OutboundTransfer>>(@aptos_framework);
+
+        // Check if the bridge transfer ID exists in the table
+        assert!(smart_table::contains(&table.inner, bridge_transfer_id), EID_NOT_FOUND);
+
+        // Return the associated OutboundTransfer details
+        let bridge_transfer_ref = smart_table::borrow(&table.inner, bridge_transfer_id);
+
+                (
+            bridge_transfer_ref.bridge_transfer_id,
+            bridge_transfer_ref.initiator,
+            bridge_transfer_ref.recipient,
+            bridge_transfer_ref.amount,
+        )
+    }
+
     #[view]
     /// Gets the bridge transfer details (`OutboundTransfer`) from the given nonce.
     /// @param nonce The nonce of the bridge transfer.

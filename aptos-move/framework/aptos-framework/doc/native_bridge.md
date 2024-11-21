@@ -20,7 +20,6 @@
 -  [Specification](#@Specification_1)
     -  [Function `initialize`](#@Specification_1_initialize)
     -  [Function `is_inbound_nonce_set`](#@Specification_1_is_inbound_nonce_set)
-    -  [Function `create_details`](#@Specification_1_create_details)
     -  [Function `add`](#@Specification_1_add)
     -  [Function `set_bridge_transfer_id_to_inbound_nonce`](#@Specification_1_set_bridge_transfer_id_to_inbound_nonce)
 
@@ -527,31 +526,6 @@ Gets inbound <code>nonce</code> from <code>bridge_transfer_id</code>
         <b>global</b>&lt;<a href="native_bridge.md#0x1_native_bridge_store_SmartTableWrapper">SmartTableWrapper</a>&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, u64&gt;&gt;(@aptos_framework).inner,
         bridge_transfer_id
     );
-</code></pre>
-
-
-
-<a id="@Specification_1_create_details"></a>
-
-### Function `create_details`
-
-
-<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="native_bridge.md#0x1_native_bridge_store_create_details">create_details</a>(initiator: <b>address</b>, recipient: <a href="atomic_bridge.md#0x1_ethereum_EthereumAddress">ethereum::EthereumAddress</a>, amount: u64, nonce: u64): <a href="native_bridge.md#0x1_native_bridge_store_OutboundTransfer">native_bridge_store::OutboundTransfer</a>
-</code></pre>
-
-
-
-
-<pre><code><b>aborts_if</b> amount == 0;
-<b>ensures</b> result.bridge_transfer_id == <a href="native_bridge.md#0x1_native_bridge_store_bridge_transfer_id">bridge_transfer_id</a>(
-    initiator,
-    recipient,
-    amount,
-    nonce
-);
-<b>ensures</b> result.initiator == initiator;
-<b>ensures</b> result.recipient == recipient;
-<b>ensures</b> result.amount == amount;
 </code></pre>
 
 
@@ -1306,9 +1280,8 @@ Burns a specified amount of AptosCoin from an address.
 
 
 
-<pre><code><b>aborts_if</b> !<b>exists</b>&lt;<a href="native_bridge.md#0x1_native_bridge_core_AptosCoinMintCapability">AptosCoinMintCapability</a>&gt;(@aptos_framework);
-<b>aborts_if</b> amount == 0;
-<b>ensures</b> <a href="coin.md#0x1_coin_balance">coin::balance</a>&lt;AptosCoin&gt;(recipient) == <b>old</b>(<a href="coin.md#0x1_coin_balance">coin::balance</a>&lt;AptosCoin&gt;(recipient)) + amount;
+<pre><code><b>ensures</b> <b>global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;AptosCoin&gt;&gt;(recipient).<a href="coin.md#0x1_coin">coin</a>.value ==
+    <b>old</b>(<b>global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;AptosCoin&gt;&gt;(recipient).<a href="coin.md#0x1_coin">coin</a>.value) + amount;
 </code></pre>
 
 
@@ -1324,9 +1297,8 @@ Burns a specified amount of AptosCoin from an address.
 
 
 
-<pre><code><b>aborts_if</b> !<b>exists</b>&lt;<a href="native_bridge.md#0x1_native_bridge_core_AptosCoinBurnCapability">AptosCoinBurnCapability</a>&gt;(@aptos_framework);
-<b>aborts_if</b> <a href="coin.md#0x1_coin_balance">coin::balance</a>&lt;AptosCoin&gt;(from) &lt; amount;
-<b>ensures</b> <a href="coin.md#0x1_coin_balance">coin::balance</a>&lt;AptosCoin&gt;(from) == <b>old</b>(<a href="coin.md#0x1_coin_balance">coin::balance</a>&lt;AptosCoin&gt;(from)) - amount;
+<pre><code><b>ensures</b> <b>global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;AptosCoin&gt;&gt;(from).<a href="coin.md#0x1_coin">coin</a>.value ==
+    <b>old</b>(<b>global</b>&lt;<a href="coin.md#0x1_coin_CoinStore">coin::CoinStore</a>&lt;AptosCoin&gt;&gt;(from).<a href="coin.md#0x1_coin">coin</a>.value) - amount;
 </code></pre>
 
 
@@ -1350,7 +1322,6 @@ Burns a specified amount of AptosCoin from an address.
     -  [Function `increment_and_get_nonce`](#@Specification_1_increment_and_get_nonce)
     -  [Function `initialize`](#@Specification_1_initialize)
     -  [Function `initiate_bridge_transfer`](#@Specification_1_initiate_bridge_transfer)
-    -  [Function `complete_bridge_transfer`](#@Specification_1_complete_bridge_transfer)
 
 
 <pre><code><b>use</b> <a href="account.md#0x1_account">0x1::account</a>;
@@ -1859,31 +1830,6 @@ Completes a bridge transfer by the initiator.
     <b>global</b>&lt;<a href="native_bridge.md#0x1_native_bridge_BridgeEvents">BridgeEvents</a>&gt;(@aptos_framework).bridge_transfer_initiated_events.counter ==
     <b>old</b>(
         <b>global</b>&lt;<a href="native_bridge.md#0x1_native_bridge_BridgeEvents">BridgeEvents</a>&gt;(@aptos_framework).bridge_transfer_initiated_events.counter
-    ) + 1;
-</code></pre>
-
-
-
-<a id="@Specification_1_complete_bridge_transfer"></a>
-
-### Function `complete_bridge_transfer`
-
-
-<pre><code><b>public</b> entry <b>fun</b> <a href="native_bridge.md#0x1_native_bridge_complete_bridge_transfer">complete_bridge_transfer</a>(caller: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>, bridge_transfer_id: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, initiator: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, recipient: <b>address</b>, amount: u64, nonce: u64)
-</code></pre>
-
-
-
-
-<pre><code><b>aborts_if</b> !<b>exists</b>&lt;<a href="native_bridge.md#0x1_native_bridge_configuration_BridgeConfig">native_bridge_configuration::BridgeConfig</a>&gt;(@aptos_framework);
-<b>aborts_if</b> <b>global</b>&lt;<a href="native_bridge.md#0x1_native_bridge_configuration_BridgeConfig">native_bridge_configuration::BridgeConfig</a>&gt;(@aptos_framework).bridge_relayer != <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(caller);
-<b>aborts_if</b> <a href="native_bridge.md#0x1_native_bridge_store_is_inbound_nonce_set">native_bridge_store::is_inbound_nonce_set</a>(bridge_transfer_id);
-<b>aborts_if</b> !<b>exists</b>&lt;<a href="native_bridge.md#0x1_native_bridge_BridgeEvents">BridgeEvents</a>&gt;(@aptos_framework);
-<b>ensures</b> <a href="native_bridge.md#0x1_native_bridge_store_is_inbound_nonce_set">native_bridge_store::is_inbound_nonce_set</a>(bridge_transfer_id);
-<b>ensures</b>
-    <b>global</b>&lt;<a href="native_bridge.md#0x1_native_bridge_BridgeEvents">BridgeEvents</a>&gt;(@aptos_framework).bridge_transfer_completed_events.counter ==
-    <b>old</b>(
-        <b>global</b>&lt;<a href="native_bridge.md#0x1_native_bridge_BridgeEvents">BridgeEvents</a>&gt;(@aptos_framework).bridge_transfer_completed_events.counter
     ) + 1;
 </code></pre>
 
