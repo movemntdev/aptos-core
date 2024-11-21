@@ -353,6 +353,57 @@ Returns the BLAKE2B-256 hash of <code>bytes</code>.
 ## Specification
 
 
+<a id="@Specification_1_sip_hash"></a>
+
+### Function `sip_hash`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="hash.md#0x1_aptos_hash_sip_hash">sip_hash</a>(bytes: <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): u64
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>aborts_if</b> [abstract] <b>false</b>;
+<b>ensures</b> [abstract] result == <a href="hash.md#0x1_aptos_hash_spec_sip_hash">spec_sip_hash</a>(bytes);
+</code></pre>
+
+
+
+<a id="@Specification_1_sip_hash_from_value"></a>
+
+### Function `sip_hash_from_value`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="hash.md#0x1_aptos_hash_sip_hash_from_value">sip_hash_from_value</a>&lt;MoveValue&gt;(v: &MoveValue): u64
+</code></pre>
+
+
+
+
+<pre><code><b>pragma</b> opaque;
+<b>ensures</b> result == <a href="hash.md#0x1_aptos_hash_spec_sip_hash">spec_sip_hash</a>(<a href="../../move-stdlib/doc/bcs.md#0x1_bcs_serialize">bcs::serialize</a>(v));
+</code></pre>
+
+
+
+<a id="@Specification_1_keccak256"></a>
+
+### Function `keccak256`
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="hash.md#0x1_aptos_hash_keccak256">keccak256</a>(bytes: <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+</code></pre>
+
+
+
+
+<pre><code><b>ensures</b> len(result) == 64;
+</code></pre>
+
+
+
 <code>spec_sip_hash</code> is not assumed to be injective.
 
 
@@ -420,51 +471,6 @@ Returns the BLAKE2B-256 hash of <code>bytes</code>.
 <pre><code><b>fun</b> <a href="hash.md#0x1_aptos_hash_spec_blake2b_256_internal">spec_blake2b_256_internal</a>(bytes: <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;;
 <b>axiom</b> <b>forall</b> b1: <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, b2: <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;:
     (<a href="hash.md#0x1_aptos_hash_spec_blake2b_256_internal">spec_blake2b_256_internal</a>(b1) == <a href="hash.md#0x1_aptos_hash_spec_blake2b_256_internal">spec_blake2b_256_internal</a>(b2) ==&gt; b1 == b2);
-</code></pre>
-
-
-
-<a id="@Specification_1_sip_hash"></a>
-
-### Function `sip_hash`
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="hash.md#0x1_aptos_hash_sip_hash">sip_hash</a>(bytes: <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): u64
-</code></pre>
-
-
-
-
-<pre><code><b>pragma</b> opaque;
-<b>aborts_if</b> [abstract] <b>false</b>;
-<b>ensures</b> [abstract] result == <a href="hash.md#0x1_aptos_hash_spec_sip_hash">spec_sip_hash</a>(bytes);
-</code></pre>
-
-
-
-<a id="@Specification_1_sip_hash_from_value"></a>
-
-### Function `sip_hash_from_value`
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="hash.md#0x1_aptos_hash_sip_hash_from_value">sip_hash_from_value</a>&lt;MoveValue&gt;(v: &MoveValue): u64
-</code></pre>
-
-
-
-
-<pre><code><b>pragma</b> opaque;
-<b>ensures</b> result == <a href="hash.md#0x1_aptos_hash_spec_sip_hash">spec_sip_hash</a>(<a href="../../move-stdlib/doc/bcs.md#0x1_bcs_serialize">bcs::serialize</a>(v));
-</code></pre>
-
-
-
-<a id="@Specification_1_keccak256"></a>
-
-### Function `keccak256`
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="hash.md#0x1_aptos_hash_keccak256">keccak256</a>(bytes: <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;): <a href="../../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
 </code></pre>
 
 
