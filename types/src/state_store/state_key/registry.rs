@@ -152,22 +152,21 @@ where
     fn maybe_remove(&self, key1: &Key1, key2: &Key2) {
         // If the entry is removed, it must be dropped outside of the lock
         // to prevent lock reentrancy
-        let mut maybe_entry = None;
+        let mut removed_entry = None;
         {
             let mut locked = self.inner.write();
             if let Some(map2) = locked.get_mut(key1) {
                 if let Some(entry) = map2.get(key2) {
-                    maybe_entry = entry.upgrade();
-                    if maybe_entry.is_none() {
-                        map2.remove(key2);
+                    if entry.strong_count() == 0 {
+                        removed_entry = map2.remove(key2);
+                        if map2.is_empty() {
+                            locked.remove(key1);
+                        }
                     }
-                }
-                if map2.is_empty() {
-                    locked.remove(key1);
                 }
             }
         }
-        mem::drop(maybe_entry);
+        mem::drop(removed_entry);
     }
 
     pub fn get_or_add<Ref1, Ref2, Gen>(
