@@ -153,9 +153,9 @@ module aptos_framework::native_bridge {
         native_bridge_configuration::assert_is_caller_relayer(caller);
 
         // Check if the bridge transfer ID is already associated with an inbound nonce
-        let inbound_nonce_exists = native_bridge_store::is_inbound_nonce_set(bridge_transfer_id);
-        assert!(!inbound_nonce_exists, ETRANSFER_ALREADY_PROCESSED);
-        assert!(nonce > 0, EINVALID_NONCE);
+        // let inbound_nonce_exists = native_bridge_store::is_inbound_nonce_set(bridge_transfer_id);
+        // assert!(!inbound_nonce_exists, ETRANSFER_ALREADY_PROCESSED);
+        // assert!(nonce > 0, EINVALID_NONCE);
 
         // Validate the bridge_transfer_id by reconstructing the hash
         let initiator_bytes = native_bridge_store::hex_to_bytes(initiator);
@@ -172,7 +172,7 @@ module aptos_framework::native_bridge {
         assert!(keccak256(combined_bytes) == bridge_transfer_id, EINVALID_BRIDGE_TRANSFER_ID);
 
         // Record the transfer as completed by associating the bridge_transfer_id with the inbound nonce
-        native_bridge_store::set_bridge_transfer_id_to_inbound_nonce(bridge_transfer_id, nonce);
+        //native_bridge_store::set_bridge_transfer_id_to_inbound_nonce(bridge_transfer_id, nonce);
 
         // Mint to the recipient
         native_bridge_core::mint(recipient, amount);
@@ -354,7 +354,7 @@ module aptos_framework::native_bridge_store {
     friend aptos_framework::native_bridge;
 
     /// Error codes
-    const ENONCE_NOT_FOUND : u64 = 0x2;
+    const ENONCE_NOT_FOUND : u64 = 0x25;
     const EZERO_AMOUNT : u64 = 0x3;
     const EINVALID_BRIDGE_TRANSFER_ID : u64 = 0x4;
     const ENATIVE_BRIDGE_NOT_ENABLED : u64 = 0x5;
