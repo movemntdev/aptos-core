@@ -17,7 +17,7 @@ module aptos_framework::native_bridge {
     use aptos_std::aptos_hash::keccak256;
 
     const ETRANSFER_ALREADY_PROCESSED: u64 = 1;
-    const EINVALID_BRIDGE_TRANSFER_ID: u64 = 2;
+    const EINVALID_BRIDGE_TRANSFER_ID: u64 = 55;
     const EEVENT_NOT_FOUND : u64 = 3;
     const EINVALID_NONCE : u64 = 4;
 
@@ -424,7 +424,7 @@ module aptos_framework::native_bridge_store {
         } else if (ch >= 0x61 && ch <= 0x66) { // 'a'-'f'
             ch - 0x61 + 10
         } else {
-            assert!(false, 2); // Abort with error code 2
+            assert!(false, 44); // Abort with error code 2
             0 // This is unreachable, but ensures type consistency
         }
     }
