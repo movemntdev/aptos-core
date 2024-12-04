@@ -228,31 +228,6 @@ struct NativeBridgeTransferCompletedEvent {
     nonce: u64,
 }
 
-fn hex_to_bytes(input: Vec<u8>) -> Vec<u8> {
-    let mut result = Vec::new();
-    assert!(input.len() % 2 == 0, "Input length must be even for valid hex");
-
-    let mut i = 0;
-    while i < input.len() {
-        let high_nibble = ascii_hex_to_u8(input[i]);
-        let low_nibble = ascii_hex_to_u8(input[i + 1]);
-        let byte = (high_nibble << 4) | low_nibble;
-        result.push(byte);
-        i += 2;
-    }
-
-    result
-}
-
-fn ascii_hex_to_u8(ch: u8) -> u8 {
-    match ch {
-        b'0'..=b'9' => ch - b'0',
-        b'A'..=b'F' => ch - b'A' + 10,
-        b'a'..=b'f' => ch - b'a' + 10,
-        _ => panic!("Invalid hex character: {}", ch),
-    }
-}
-
 fn normalize_to_32_bytes(value: Vec<u8>) -> Vec<u8> {
     let mut meaningful = Vec::new();
     let mut i = 0;

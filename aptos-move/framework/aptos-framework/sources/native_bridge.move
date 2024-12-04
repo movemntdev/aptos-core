@@ -18,8 +18,10 @@ module aptos_framework::native_bridge {
 
     const ETRANSFER_ALREADY_PROCESSED: u64 = 1;
     const EINVALID_BRIDGE_TRANSFER_ID: u64 = 2;
-    const EEVENT_NOT_FOUND : u64 = 3;
-    const EINVALID_NONCE : u64 = 4;
+    const EEVENT_NOT_FOUND: u64 = 3;
+    const EINVALID_NONCE: u64 = 4;
+    const ENONCE_ALREADY_INITIALIZED: u64 = 5;
+
 
     #[event]
     /// An event triggered upon initiating a bridge transfer
@@ -63,10 +65,7 @@ module aptos_framework::native_bridge {
         system_addresses::assert_aptos_framework(aptos_framework);
 
         // Ensure the nonce is not already initialized
-        assert!(
-            !exists<Nonce>(signer::address_of(aptos_framework)),
-            2
-        );
+        assert!(!exists<Nonce>(signer::address_of(aptos_framework)), ENONCE_ALREADY_INITIALIZED);
 
         // Create the Nonce resource with an initial value of 0
         move_to<Nonce>(aptos_framework, Nonce { 
@@ -354,14 +353,18 @@ module aptos_framework::native_bridge_store {
     friend aptos_framework::native_bridge;
 
     /// Error codes
-    const ENONCE_NOT_FOUND : u64 = 0x2;
-    const EZERO_AMOUNT : u64 = 0x3;
-    const EINVALID_BRIDGE_TRANSFER_ID : u64 = 0x4;
-    const ENATIVE_BRIDGE_NOT_ENABLED : u64 = 0x5;
-    const EINCORRECT_NONCE : u64 = 0x6;
-    const EID_NOT_FOUND : u64 = 0x7;
+    const ENONCE_NOT_FOUND: u64 = 1;
+    const EZERO_AMOUNT: u64 = 2;
+    const EINVALID_BRIDGE_TRANSFER_ID: u64 = 3;
+    const ENATIVE_BRIDGE_NOT_ENABLED: u64 = 4;
+    const EINCORRECT_NONCE: u64 = 5;
+    const EID_NOT_FOUND: u64 = 6;
+    const ENOT_HEX_CHAR: u64 = 7;
+    const EINCORRECT_LENGTH: u64 = 8;
+    const ENO_CONFIG: u64 = 9;
+    
 
-    const MAX_U64 : u64 = 0xFFFFFFFFFFFFFFFF;
+    const MAX_U64: u64 = 0xFFFFFFFFFFFFFFFF;
 
     /// A smart table wrapper
     struct SmartTableWrapper<K, V> has key, store {
@@ -403,7 +406,7 @@ module aptos_framework::native_bridge_store {
         let i = 0;
 
         // Ensure the input length is valid (2 characters per byte)
-        assert!(vector::length(&input) % 2 == 0, 1); 
+        assert!(vector::length(&input) % 2 == 0, EINCORRECT_LENGTH); 
 
         while (i < vector::length(&input)) {
             let high_nibble = ascii_hex_to_u8(*vector::borrow(&input, i));
@@ -424,8 +427,8 @@ module aptos_framework::native_bridge_store {
         } else if (ch >= 0x61 && ch <= 0x66) { // 'a'-'f'
             ch - 0x61 + 10
         } else {
-            assert!(false, 2); // Abort with error code 2
-            0 // This is unreachable, but ensures type consistency
+            assert!(false, ENOT_HEX_CHAR); 
+            0 // unreachable but ensures type consistency
         }
     }
 
@@ -585,7 +588,7 @@ module aptos_framework::native_bridge_configuration {
     friend aptos_framework::native_bridge;
 
     /// Error code for invalid bridge relayer
-    const EINVALID_BRIDGE_RELAYER: u64 = 0x1;
+    const EINVALID_BRIDGE_RELAYER: u64 = 1;
 
     struct BridgeConfig has key {
         bridge_relayer: address,
@@ -652,7 +655,7 @@ module aptos_framework::native_bridge_configuration {
     /// Tests initialization of the bridge configuration.
     fun test_initialization(aptos_framework: &signer) {
         initialize(aptos_framework);
-        assert!(exists<BridgeConfig>(@aptos_framework), 0);
+        assert!(exists<BridgeConfig>(@aptos_framework), ENO_CONFIG);
     }
 
     #[test(aptos_framework = @aptos_framework, new_relayer = @0xcafe)]
@@ -717,7 +720,7 @@ module aptos_framework::native_bridge_core {
     friend aptos_framework::native_bridge;
     friend aptos_framework::genesis;
 
-    const ENATIVE_BRIDGE_NOT_ENABLED : u64 = 0x1;
+    const ENATIVE_BRIDGE_NOT_ENABLED: u64 = 1;
 
     struct AptosCoinBurnCapability has key {
         burn_cap: BurnCapability<AptosCoin>,

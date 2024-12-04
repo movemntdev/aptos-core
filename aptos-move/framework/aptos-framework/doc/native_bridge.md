@@ -30,7 +30,7 @@
 
 <pre><code><b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/hash.md#0x1_aptos_hash">0x1::aptos_hash</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/bcs.md#0x1_bcs">0x1::bcs</a>;
-<b>use</b> <a href="atomic_bridge.md#0x1_ethereum">0x1::ethereum</a>;
+<b>use</b> <a href="ethereum.md#0x1_ethereum">0x1::ethereum</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/features.md#0x1_features">0x1::features</a>;
 <b>use</b> <a href="../../aptos-stdlib/doc/smart_table.md#0x1_smart_table">0x1::smart_table</a>;
 <b>use</b> <a href="system_addresses.md#0x1_system_addresses">0x1::system_addresses</a>;
@@ -97,7 +97,7 @@ Details on the outbound transfer
 
 </dd>
 <dt>
-<code>recipient: <a href="atomic_bridge.md#0x1_ethereum_EthereumAddress">ethereum::EthereumAddress</a></code>
+<code>recipient: <a href="ethereum.md#0x1_ethereum_EthereumAddress">ethereum::EthereumAddress</a></code>
 </dt>
 <dd>
 
@@ -131,7 +131,7 @@ Details on the outbound transfer
 
 
 
-<pre><code><b>const</b> <a href="native_bridge.md#0x1_native_bridge_store_ENATIVE_BRIDGE_NOT_ENABLED">ENATIVE_BRIDGE_NOT_ENABLED</a>: u64 = 5;
+<pre><code><b>const</b> <a href="native_bridge.md#0x1_native_bridge_store_ENATIVE_BRIDGE_NOT_ENABLED">ENATIVE_BRIDGE_NOT_ENABLED</a>: u64 = 4;
 </code></pre>
 
 
@@ -140,7 +140,7 @@ Details on the outbound transfer
 
 
 
-<pre><code><b>const</b> <a href="native_bridge.md#0x1_native_bridge_store_EINVALID_BRIDGE_TRANSFER_ID">EINVALID_BRIDGE_TRANSFER_ID</a>: u64 = 4;
+<pre><code><b>const</b> <a href="native_bridge.md#0x1_native_bridge_store_EINVALID_BRIDGE_TRANSFER_ID">EINVALID_BRIDGE_TRANSFER_ID</a>: u64 = 3;
 </code></pre>
 
 
@@ -149,7 +149,7 @@ Details on the outbound transfer
 
 
 
-<pre><code><b>const</b> <a href="native_bridge.md#0x1_native_bridge_store_EZERO_AMOUNT">EZERO_AMOUNT</a>: u64 = 3;
+<pre><code><b>const</b> <a href="native_bridge.md#0x1_native_bridge_store_EZERO_AMOUNT">EZERO_AMOUNT</a>: u64 = 2;
 </code></pre>
 
 
@@ -158,7 +158,16 @@ Details on the outbound transfer
 
 
 
-<pre><code><b>const</b> <a href="native_bridge.md#0x1_native_bridge_store_EID_NOT_FOUND">EID_NOT_FOUND</a>: u64 = 7;
+<pre><code><b>const</b> <a href="native_bridge.md#0x1_native_bridge_store_EID_NOT_FOUND">EID_NOT_FOUND</a>: u64 = 6;
+</code></pre>
+
+
+
+<a id="0x1_native_bridge_store_EINCORRECT_LENGTH"></a>
+
+
+
+<pre><code><b>const</b> <a href="native_bridge.md#0x1_native_bridge_store_EINCORRECT_LENGTH">EINCORRECT_LENGTH</a>: u64 = 8;
 </code></pre>
 
 
@@ -167,7 +176,7 @@ Details on the outbound transfer
 
 
 
-<pre><code><b>const</b> <a href="native_bridge.md#0x1_native_bridge_store_EINCORRECT_NONCE">EINCORRECT_NONCE</a>: u64 = 6;
+<pre><code><b>const</b> <a href="native_bridge.md#0x1_native_bridge_store_EINCORRECT_NONCE">EINCORRECT_NONCE</a>: u64 = 5;
 </code></pre>
 
 
@@ -177,7 +186,25 @@ Details on the outbound transfer
 Error codes
 
 
-<pre><code><b>const</b> <a href="native_bridge.md#0x1_native_bridge_store_ENONCE_NOT_FOUND">ENONCE_NOT_FOUND</a>: u64 = 2;
+<pre><code><b>const</b> <a href="native_bridge.md#0x1_native_bridge_store_ENONCE_NOT_FOUND">ENONCE_NOT_FOUND</a>: u64 = 1;
+</code></pre>
+
+
+
+<a id="0x1_native_bridge_store_ENOT_HEX_CHAR"></a>
+
+
+
+<pre><code><b>const</b> <a href="native_bridge.md#0x1_native_bridge_store_ENOT_HEX_CHAR">ENOT_HEX_CHAR</a>: u64 = 7;
+</code></pre>
+
+
+
+<a id="0x1_native_bridge_store_ENO_CONFIG"></a>
+
+
+
+<pre><code><b>const</b> <a href="native_bridge.md#0x1_native_bridge_store_ENO_CONFIG">ENO_CONFIG</a>: u64 = 9;
 </code></pre>
 
 
@@ -244,7 +271,7 @@ Takes an Ethereum address in ASCII hex, and converts to u8 (the raw Ethereum add
     <b>let</b> i = 0;
 
     // Ensure the input length is valid (2 characters per byte)
-    <b>assert</b>!(<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_length">vector::length</a>(&input) % 2 == 0, 1);
+    <b>assert</b>!(<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_length">vector::length</a>(&input) % 2 == 0, <a href="native_bridge.md#0x1_native_bridge_store_EINCORRECT_LENGTH">EINCORRECT_LENGTH</a>);
 
     <b>while</b> (i &lt; <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_length">vector::length</a>(&input)) {
         <b>let</b> high_nibble = <a href="native_bridge.md#0x1_native_bridge_store_ascii_hex_to_u8">ascii_hex_to_u8</a>(*<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_borrow">vector::borrow</a>(&input, i));
@@ -285,8 +312,8 @@ Takes an Ethereum address in ASCII hex, and converts to u8 (the raw Ethereum add
     } <b>else</b> <b>if</b> (ch &gt;= 0x61 && ch &lt;= 0x66) { // 'a'-'f'
         ch - 0x61 + 10
     } <b>else</b> {
-        <b>assert</b>!(<b>false</b>, 2); // Abort <b>with</b> <a href="../../aptos-stdlib/../move-stdlib/doc/error.md#0x1_error">error</a> <a href="code.md#0x1_code">code</a> 2
-        0 // This is unreachable, but <b>ensures</b> type consistency
+        <b>assert</b>!(<b>false</b>, <a href="native_bridge.md#0x1_native_bridge_store_ENOT_HEX_CHAR">ENOT_HEX_CHAR</a>);
+        0 // unreachable but <b>ensures</b> type consistency
     }
 }
 </code></pre>
@@ -388,7 +415,7 @@ Creates bridge transfer details with validation.
 @abort If the amount is zero or locks are invalid.
 
 
-<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="native_bridge.md#0x1_native_bridge_store_create_details">create_details</a>(initiator: <b>address</b>, recipient: <a href="atomic_bridge.md#0x1_ethereum_EthereumAddress">ethereum::EthereumAddress</a>, amount: u64, nonce: u64): <a href="native_bridge.md#0x1_native_bridge_store_OutboundTransfer">native_bridge_store::OutboundTransfer</a>
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="native_bridge.md#0x1_native_bridge_store_create_details">create_details</a>(initiator: <b>address</b>, recipient: <a href="ethereum.md#0x1_ethereum_EthereumAddress">ethereum::EthereumAddress</a>, amount: u64, nonce: u64): <a href="native_bridge.md#0x1_native_bridge_store_OutboundTransfer">native_bridge_store::OutboundTransfer</a>
 </code></pre>
 
 
@@ -523,7 +550,7 @@ Generates a unique outbound bridge transfer ID based on transfer details and non
 @return The generated bridge transfer ID.
 
 
-<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="native_bridge.md#0x1_native_bridge_store_bridge_transfer_id">bridge_transfer_id</a>(initiator: <b>address</b>, recipient: <a href="atomic_bridge.md#0x1_ethereum_EthereumAddress">ethereum::EthereumAddress</a>, amount: u64, nonce: u64): <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="native_bridge.md#0x1_native_bridge_store_bridge_transfer_id">bridge_transfer_id</a>(initiator: <b>address</b>, recipient: <a href="ethereum.md#0x1_ethereum_EthereumAddress">ethereum::EthereumAddress</a>, amount: u64, nonce: u64): <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;
 </code></pre>
 
 
@@ -535,7 +562,7 @@ Generates a unique outbound bridge transfer ID based on transfer details and non
 <pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="native_bridge.md#0x1_native_bridge_store_bridge_transfer_id">bridge_transfer_id</a>(initiator: <b>address</b>, recipient: EthereumAddress, amount: u64, nonce: u64) : <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt; {
     // Serialize each param
     <b>let</b> initiator_bytes = <a href="../../aptos-stdlib/../move-stdlib/doc/bcs.md#0x1_bcs_to_bytes">bcs::to_bytes</a>&lt;<b>address</b>&gt;(&initiator);
-    <b>let</b> recipient_bytes = <a href="native_bridge.md#0x1_native_bridge_store_hex_to_bytes">hex_to_bytes</a>(<a href="atomic_bridge.md#0x1_ethereum_get_inner_ethereum_address">ethereum::get_inner_ethereum_address</a>(recipient));
+    <b>let</b> recipient_bytes = <a href="native_bridge.md#0x1_native_bridge_store_hex_to_bytes">hex_to_bytes</a>(<a href="ethereum.md#0x1_ethereum_get_inner_ethereum_address">ethereum::get_inner_ethereum_address</a>(recipient));
     <b>let</b> amount_bytes = <a href="native_bridge.md#0x1_native_bridge_store_normalize_to_32_bytes">normalize_to_32_bytes</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/bcs.md#0x1_bcs_to_bytes">bcs::to_bytes</a>&lt;u64&gt;(&amount));
     <b>let</b> nonce_bytes = <a href="native_bridge.md#0x1_native_bridge_store_normalize_to_32_bytes">normalize_to_32_bytes</a>(<a href="../../aptos-stdlib/../move-stdlib/doc/bcs.md#0x1_bcs_to_bytes">bcs::to_bytes</a>&lt;u64&gt;(&nonce));
     //Contatenate then <a href="../../aptos-stdlib/../move-stdlib/doc/hash.md#0x1_hash">hash</a> and <b>return</b> bridge transfer ID
@@ -670,7 +697,7 @@ Gets inbound <code>nonce</code> from <code>bridge_transfer_id</code>
 ### Function `create_details`
 
 
-<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="native_bridge.md#0x1_native_bridge_store_create_details">create_details</a>(initiator: <b>address</b>, recipient: <a href="atomic_bridge.md#0x1_ethereum_EthereumAddress">ethereum::EthereumAddress</a>, amount: u64, nonce: u64): <a href="native_bridge.md#0x1_native_bridge_store_OutboundTransfer">native_bridge_store::OutboundTransfer</a>
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="native_bridge.md#0x1_native_bridge_store_create_details">create_details</a>(initiator: <b>address</b>, recipient: <a href="ethereum.md#0x1_ethereum_EthereumAddress">ethereum::EthereumAddress</a>, amount: u64, nonce: u64): <a href="native_bridge.md#0x1_native_bridge_store_OutboundTransfer">native_bridge_store::OutboundTransfer</a>
 </code></pre>
 
 
@@ -1490,7 +1517,7 @@ Burns a specified amount of AptosCoin from an address.
 <pre><code><b>use</b> <a href="account.md#0x1_account">0x1::account</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/hash.md#0x1_aptos_hash">0x1::aptos_hash</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/bcs.md#0x1_bcs">0x1::bcs</a>;
-<b>use</b> <a href="atomic_bridge.md#0x1_ethereum">0x1::ethereum</a>;
+<b>use</b> <a href="ethereum.md#0x1_ethereum">0x1::ethereum</a>;
 <b>use</b> <a href="event.md#0x1_event">0x1::event</a>;
 <b>use</b> <a href="native_bridge.md#0x1_native_bridge_configuration">0x1::native_bridge_configuration</a>;
 <b>use</b> <a href="native_bridge.md#0x1_native_bridge_core">0x1::native_bridge_core</a>;
@@ -1701,6 +1728,15 @@ This struct will store the event handles for bridge events.
 
 
 
+<a id="0x1_native_bridge_ENONCE_ALREADY_INITIALIZED"></a>
+
+
+
+<pre><code><b>const</b> <a href="native_bridge.md#0x1_native_bridge_ENONCE_ALREADY_INITIALIZED">ENONCE_ALREADY_INITIALIZED</a>: u64 = 5;
+</code></pre>
+
+
+
 <a id="0x1_native_bridge_ETRANSFER_ALREADY_PROCESSED"></a>
 
 
@@ -1757,10 +1793,7 @@ Initializes the module and stores the <code>EventHandle</code>s in the resource.
     <a href="system_addresses.md#0x1_system_addresses_assert_aptos_framework">system_addresses::assert_aptos_framework</a>(aptos_framework);
 
     // Ensure the nonce is not already initialized
-    <b>assert</b>!(
-        !<b>exists</b>&lt;<a href="native_bridge.md#0x1_native_bridge_Nonce">Nonce</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework)),
-        2
-    );
+    <b>assert</b>!(!<b>exists</b>&lt;<a href="native_bridge.md#0x1_native_bridge_Nonce">Nonce</a>&gt;(<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(aptos_framework)), <a href="native_bridge.md#0x1_native_bridge_ENONCE_ALREADY_INITIALIZED">ENONCE_ALREADY_INITIALIZED</a>);
 
     // Create the <a href="native_bridge.md#0x1_native_bridge_Nonce">Nonce</a> resource <b>with</b> an initial value of 0
     <b>move_to</b>&lt;<a href="native_bridge.md#0x1_native_bridge_Nonce">Nonce</a>&gt;(aptos_framework, <a href="native_bridge.md#0x1_native_bridge_Nonce">Nonce</a> {
@@ -1805,7 +1838,7 @@ The amount is burnt from the initiator and the module-level nonce is incremented
     amount: u64
 ) <b>acquires</b> <a href="native_bridge.md#0x1_native_bridge_BridgeEvents">BridgeEvents</a>, <a href="native_bridge.md#0x1_native_bridge_Nonce">Nonce</a> {
     <b>let</b> initiator_address = <a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer_address_of">signer::address_of</a>(initiator);
-    <b>let</b> recipient_address = <a href="atomic_bridge.md#0x1_ethereum_ethereum_address_no_eip55">ethereum::ethereum_address_no_eip55</a>(recipient);
+    <b>let</b> recipient_address = <a href="ethereum.md#0x1_ethereum_ethereum_address_no_eip55">ethereum::ethereum_address_no_eip55</a>(recipient);
 
     // Increment and retrieve the nonce
     <b>let</b> nonce = <a href="native_bridge.md#0x1_native_bridge_increment_and_get_nonce">increment_and_get_nonce</a>();
