@@ -76,7 +76,7 @@ module aptos_framework::ethereum {
                 //     assert exists k: u64 where k <= i:
                 //         !is_hex_digit(xs[k]);
                 // };
-                return false;
+                return false
             };
             i = i + 1;
         };
@@ -710,7 +710,7 @@ module aptos_framework::atomic_bridge_store {
     #[test_only]
     use std::signer;
     #[test_only]
-    use aptos_framework::timestamp::CurrentTimeMicroseconds;
+    // use aptos_framework::timestamp::CurrentTimeMicroseconds;
 
     friend aptos_framework::atomic_bridge_counterparty;
     friend aptos_framework::atomic_bridge_initiator;
