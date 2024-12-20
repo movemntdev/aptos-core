@@ -31,6 +31,7 @@ module aptos_framework::native_bridge {
     const EINCORRECT_NONCE: u64 = 9;
     const EID_NOT_FOUND: u64 = 10;
     const EINVALID_BRIDGE_RELAYER: u64 = 11;
+    const ENONCE_ALREADY_EXISTS_IN_INIT: u64 = 12;
     const ESAME_FEE: u64 = 0x2;
 
     friend aptos_framework::genesis;
@@ -266,7 +267,7 @@ module aptos_framework::native_bridge {
         // Ensure the nonce is not already initialized
         assert!(
             !exists<Nonce>(signer::address_of(aptos_framework)),
-            2
+            ENONCE_ALREADY_EXISTS_IN_INIT
         );
 
         // Create the Nonce resource with an initial value of 0
