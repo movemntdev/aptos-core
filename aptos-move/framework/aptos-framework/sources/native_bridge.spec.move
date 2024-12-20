@@ -1,4 +1,3 @@
-
 /// Specification for the native bridge module.
 spec aptos_framework::native_bridge {
 
