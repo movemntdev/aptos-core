@@ -45,6 +45,8 @@ module aptos_framework::native_bridge {
         new_relayer: address,
     }
 
+    
+
     #[event]
     /// An event triggered upon change of bridgefee
     struct BridgeFeeChangedEvent has store, drop {
