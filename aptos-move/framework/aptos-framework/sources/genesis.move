@@ -148,10 +148,10 @@ module aptos_framework::genesis {
         transaction_fee::store_aptos_coin_burn_cap(aptos_framework, burn_cap);
         // Give transaction_fee module MintCapability<AptosCoin> so it can mint refunds.
         transaction_fee::store_aptos_coin_mint_cap(aptos_framework, mint_cap);
-        // Give native_bridge module MintCapability<AptosCoin> so it can mint refunds.
+        // Give native_bridge module BurnCapability<AptosCoin> so it can burn coins.
+        native_bridge::store_aptos_coin_burn_cap(aptos_framework, burn_cap);
+        // Give native_bridge module MintCapability<AptosCoin> so it can mint coins.
         native_bridge::store_aptos_coin_mint_cap(aptos_framework, mint_cap);
-        // Create bridge relayer account.
-        create_account(aptos_framework, native_bridge::bridge_relayer(), 100_000_000_000_000_000);
     }
 
     /// Only called for testnets and e2e tests.
