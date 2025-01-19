@@ -98,7 +98,7 @@ module aptos_framework::governed_gas_pool {
     /// Deposits some coin from an account to the governed gas pool.
     /// @param account The account from which the coin is to be deposited.
     /// @param amount The amount of coin to be deposited.
-    fun deposit_from<CoinType>(account: address, amount: u64) acquires GovernedGasPool {
+    public fun deposit_from<CoinType>(account: address, amount: u64) acquires GovernedGasPool {
        deposit(coin::withdraw_from<CoinType>(account, amount));
     }
 
@@ -106,7 +106,7 @@ module aptos_framework::governed_gas_pool {
     /// @param aptos_framework The signer of the aptos_framework module.
     /// @param account The account from which the FA is to be deposited.
     /// @param amount The amount of FA to be deposited.
-    fun deposit_from_fungible_store(account: address, amount: u64) acquires GovernedGasPool {
+    public fun deposit_from_fungible_store(account: address, amount: u64) acquires GovernedGasPool {
         if (amount > 0){
             // compute the governed gas pool store address
             let governed_gas_pool_address = governed_gas_pool_address();
