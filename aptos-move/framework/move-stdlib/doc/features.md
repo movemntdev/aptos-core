@@ -129,10 +129,10 @@ return true.
 -  [Function `default_to_concurrent_fungible_balance_enabled`](#0x1_features_default_to_concurrent_fungible_balance_enabled)
 -  [Function `get_abort_if_multisig_payload_mismatch_feature`](#0x1_features_get_abort_if_multisig_payload_mismatch_feature)
 -  [Function `abort_if_multisig_payload_mismatch_enabled`](#0x1_features_abort_if_multisig_payload_mismatch_enabled)
--  [Function `get_native_bridge_feature`](#0x1_features_get_native_bridge_feature)
--  [Function `abort_native_bridge_enabled`](#0x1_features_abort_native_bridge_enabled)
 -  [Function `get_atomic_bridge_feature`](#0x1_features_get_atomic_bridge_feature)
 -  [Function `abort_atomic_bridge_enabled`](#0x1_features_abort_atomic_bridge_enabled)
+-  [Function `get_native_bridge_feature`](#0x1_features_get_native_bridge_feature)
+-  [Function `abort_native_bridge_enabled`](#0x1_features_abort_native_bridge_enabled)
 -  [Function `change_feature_flags`](#0x1_features_change_feature_flags)
 -  [Function `change_feature_flags_internal`](#0x1_features_change_feature_flags_internal)
 -  [Function `change_feature_flags_for_next_epoch`](#0x1_features_change_feature_flags_for_next_epoch)
@@ -3180,52 +3180,6 @@ Lifetime: transient
 
 </details>
 
-<a id="0x1_features_get_native_bridge_feature"></a>
-
-## Function `get_native_bridge_feature`
-
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_native_bridge_feature">get_native_bridge_feature</a>(): u64
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_native_bridge_feature">get_native_bridge_feature</a>(): u64 { <a href="features.md#0x1_features_NATIVE_BRIDGE">NATIVE_BRIDGE</a> }
-</code></pre>
-
-
-
-</details>
-
-<a id="0x1_features_abort_native_bridge_enabled"></a>
-
-## Function `abort_native_bridge_enabled`
-
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_abort_native_bridge_enabled">abort_native_bridge_enabled</a>(): bool
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_abort_native_bridge_enabled">abort_native_bridge_enabled</a>(): bool <b>acquires</b> <a href="features.md#0x1_features_Features">Features</a> {
-    <a href="features.md#0x1_features_is_enabled">is_enabled</a>(<a href="features.md#0x1_features_NATIVE_BRIDGE">NATIVE_BRIDGE</a>)
-}
-</code></pre>
-
-
-
-</details>
-
 <a id="0x1_features_get_atomic_bridge_feature"></a>
 
 ## Function `get_atomic_bridge_feature`
@@ -3265,6 +3219,52 @@ Lifetime: transient
 
 <pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_abort_atomic_bridge_enabled">abort_atomic_bridge_enabled</a>(): bool <b>acquires</b> <a href="features.md#0x1_features_Features">Features</a> {
     <a href="features.md#0x1_features_is_enabled">is_enabled</a>(<a href="features.md#0x1_features_ATOMIC_BRIDGE">ATOMIC_BRIDGE</a>)
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_features_get_native_bridge_feature"></a>
+
+## Function `get_native_bridge_feature`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_native_bridge_feature">get_native_bridge_feature</a>(): u64
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_get_native_bridge_feature">get_native_bridge_feature</a>(): u64 { <a href="features.md#0x1_features_NATIVE_BRIDGE">NATIVE_BRIDGE</a> }
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_features_abort_native_bridge_enabled"></a>
+
+## Function `abort_native_bridge_enabled`
+
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_abort_native_bridge_enabled">abort_native_bridge_enabled</a>(): bool
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="features.md#0x1_features_abort_native_bridge_enabled">abort_native_bridge_enabled</a>(): bool <b>acquires</b> <a href="features.md#0x1_features_Features">Features</a> {
+    <a href="features.md#0x1_features_is_enabled">is_enabled</a>(<a href="features.md#0x1_features_NATIVE_BRIDGE">NATIVE_BRIDGE</a>)
 }
 </code></pre>
 
