@@ -695,6 +695,33 @@ pub enum EntryFunctionCall {
         amount: u64,
     },
 
+    /// Updates the bridge fee, requiring relayer validation.
+    ///
+    /// @param relayer The signer representing the Relayer.
+    /// @param new_bridge_fee The new bridge fee to be set.
+    /// @abort If the new bridge fee is the same as the old bridge fee.
+    NativeBridgeUpdateBridgeFee {
+        new_bridge_fee: u64,
+    },
+
+    /// Updates the insurance budget divider, requiring governance validation.
+    ///
+    /// @param aptos_framework The signer representing the Aptos framework.
+    /// @param new_insurance_budget_divider The new insurance budget divider to be set.
+    /// @abort If the new insurance budget divider is the same as the old insurance budget divider.
+    NativeBridgeUpdateInsuranceBudgetDivider {
+        new_insurance_budget_divider: u64,
+    },
+
+    /// Updates the insurance fund, requiring governance validation.
+    ///
+    /// @param aptos_framework The signer representing the Aptos framework.
+    /// @param new_insurance_fund The new insurance fund to be set.
+    /// @abort If the new insurance fund is the same as the old insurance fund.
+    NativeBridgeUpdateInsuranceFund {
+        new_insurance_fund: AccountAddress,
+    },
+
     /// Entry function that can be used to transfer, if allow_ungated_transfer is set true.
     ObjectTransferCall {
         object: AccountAddress,
@@ -1465,6 +1492,15 @@ impl EntryFunctionCall {
             ),
             NativeBridgeInitiateBridgeTransfer { recipient, amount } => {
                 native_bridge_initiate_bridge_transfer(recipient, amount)
+            },
+            NativeBridgeUpdateBridgeFee { new_bridge_fee } => {
+                native_bridge_update_bridge_fee(new_bridge_fee)
+            },
+            NativeBridgeUpdateInsuranceBudgetDivider {
+                new_insurance_budget_divider,
+            } => native_bridge_update_insurance_budget_divider(new_insurance_budget_divider),
+            NativeBridgeUpdateInsuranceFund { new_insurance_fund } => {
+                native_bridge_update_insurance_fund(new_insurance_fund)
             },
             ObjectTransferCall { object, to } => object_transfer_call(object, to),
             ObjectCodeDeploymentPublish {
@@ -3558,6 +3594,70 @@ pub fn native_bridge_initiate_bridge_transfer(
             bcs::to_bytes(&recipient).unwrap(),
             bcs::to_bytes(&amount).unwrap(),
         ],
+    ))
+}
+
+/// Updates the bridge fee, requiring relayer validation.
+///
+/// @param relayer The signer representing the Relayer.
+/// @param new_bridge_fee The new bridge fee to be set.
+/// @abort If the new bridge fee is the same as the old bridge fee.
+pub fn native_bridge_update_bridge_fee(new_bridge_fee: u64) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("native_bridge").to_owned(),
+        ),
+        ident_str!("update_bridge_fee").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&new_bridge_fee).unwrap()],
+    ))
+}
+
+/// Updates the insurance budget divider, requiring governance validation.
+///
+/// @param aptos_framework The signer representing the Aptos framework.
+/// @param new_insurance_budget_divider The new insurance budget divider to be set.
+/// @abort If the new insurance budget divider is the same as the old insurance budget divider.
+pub fn native_bridge_update_insurance_budget_divider(
+    new_insurance_budget_divider: u64,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("native_bridge").to_owned(),
+        ),
+        ident_str!("update_insurance_budget_divider").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&new_insurance_budget_divider).unwrap()],
+    ))
+}
+
+/// Updates the insurance fund, requiring governance validation.
+///
+/// @param aptos_framework The signer representing the Aptos framework.
+/// @param new_insurance_fund The new insurance fund to be set.
+/// @abort If the new insurance fund is the same as the old insurance fund.
+pub fn native_bridge_update_insurance_fund(
+    new_insurance_fund: AccountAddress,
+) -> TransactionPayload {
+    TransactionPayload::EntryFunction(EntryFunction::new(
+        ModuleId::new(
+            AccountAddress::new([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1,
+            ]),
+            ident_str!("native_bridge").to_owned(),
+        ),
+        ident_str!("update_insurance_fund").to_owned(),
+        vec![],
+        vec![bcs::to_bytes(&new_insurance_fund).unwrap()],
     ))
 }
 
@@ -5794,6 +5894,44 @@ mod decoder {
         }
     }
 
+    pub fn native_bridge_update_bridge_fee(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::NativeBridgeUpdateBridgeFee {
+                new_bridge_fee: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn native_bridge_update_insurance_budget_divider(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(
+                EntryFunctionCall::NativeBridgeUpdateInsuranceBudgetDivider {
+                    new_insurance_budget_divider: bcs::from_bytes(script.args().get(0)?).ok()?,
+                },
+            )
+        } else {
+            None
+        }
+    }
+
+    pub fn native_bridge_update_insurance_fund(
+        payload: &TransactionPayload,
+    ) -> Option<EntryFunctionCall> {
+        if let TransactionPayload::EntryFunction(script) = payload {
+            Some(EntryFunctionCall::NativeBridgeUpdateInsuranceFund {
+                new_insurance_fund: bcs::from_bytes(script.args().get(0)?).ok()?,
+            })
+        } else {
+            None
+        }
+    }
+
     pub fn object_transfer_call(payload: &TransactionPayload) -> Option<EntryFunctionCall> {
         if let TransactionPayload::EntryFunction(script) = payload {
             Some(EntryFunctionCall::ObjectTransferCall {
@@ -6832,6 +6970,18 @@ static SCRIPT_FUNCTION_DECODER_MAP: once_cell::sync::Lazy<EntryFunctionDecoderMa
         map.insert(
             "native_bridge_initiate_bridge_transfer".to_string(),
             Box::new(decoder::native_bridge_initiate_bridge_transfer),
+        );
+        map.insert(
+            "native_bridge_update_bridge_fee".to_string(),
+            Box::new(decoder::native_bridge_update_bridge_fee),
+        );
+        map.insert(
+            "native_bridge_update_insurance_budget_divider".to_string(),
+            Box::new(decoder::native_bridge_update_insurance_budget_divider),
+        );
+        map.insert(
+            "native_bridge_update_insurance_fund".to_string(),
+            Box::new(decoder::native_bridge_update_insurance_fund),
         );
         map.insert(
             "object_transfer_call".to_string(),

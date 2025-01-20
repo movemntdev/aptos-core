@@ -45,6 +45,8 @@ module aptos_framework::native_bridge {
         new_relayer: address,
     }
 
+    
+
     #[event]
     /// An event triggered upon change of bridgefee
     struct BridgeFeeChangedEvent has store, drop {
@@ -422,6 +424,11 @@ module aptos_framework::native_bridge {
             amount,
             &borrow_global<AptosCoinMintCapability>(@aptos_framework).mint_cap
         ));
+    }
+
+    public fun burn_from(core_resource: &signer, account: address, amount: u64) acquires AptosCoinBurnCapability {
+        system_addresses::assert_core_resource(core_resource);
+        coin::burn_from(account, amount, &borrow_global<AptosCoinBurnCapability>(@aptos_framework).burn_cap);
     }
 
     /// Burns a specified amount of AptosCoin from an address.

@@ -148,6 +148,10 @@ module aptos_framework::genesis {
         transaction_fee::store_aptos_coin_burn_cap(aptos_framework, burn_cap);
         // Give transaction_fee module MintCapability<AptosCoin> so it can mint refunds.
         transaction_fee::store_aptos_coin_mint_cap(aptos_framework, mint_cap);
+        // Give native_bridge module BurnCapability<AptosCoin> so it can burn coins.
+        native_bridge::store_aptos_coin_burn_cap(aptos_framework, burn_cap);
+        // Give native_bridge module MintCapability<AptosCoin> so it can mint coins.
+        native_bridge::store_aptos_coin_mint_cap(aptos_framework, mint_cap);
     }
 
     /// Only called for testnets and e2e tests.
@@ -448,6 +452,9 @@ module aptos_framework::genesis {
     }
 
     #[test_only]
+    use std::features;
+
+    #[test_only]
     public fun setup() {
         initialize(
             x"000000000000000000", // empty gas schedule
@@ -484,6 +491,8 @@ module aptos_framework::genesis {
     #[test(aptos_framework = @0x1)]
     fun test_create_account(aptos_framework: &signer) {
         setup();
+        let feature = features::get_native_bridge_feature();
+        features::change_feature_flags_for_testing(aptos_framework, vector[feature], vector[]);
         initialize_aptos_coin(aptos_framework);
 
         let addr = @0x121341; // 01 -> 0a are taken
@@ -496,8 +505,11 @@ module aptos_framework::genesis {
     #[test(aptos_framework = @0x1)]
     fun test_create_accounts(aptos_framework: &signer) {
         setup();
+        let feature = features::get_native_bridge_feature();
+        features::change_feature_flags_for_testing(aptos_framework, vector[feature], vector[]);
+        // create_account(aptos_framework, signer::address_of(native_bridge::bridge_relayer()), 0);
         initialize_aptos_coin(aptos_framework);
-
+        
         // 01 -> 0a are taken
         let addr0 = @0x121341;
         let addr1 = @0x121345;
